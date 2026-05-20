@@ -1,0 +1,166 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Card, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input, Select, Textarea, Field } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
+import { createUnitAction, updateUnitAction } from "@/lib/actions/units";
+import type { Driver, JenisUnit, Unit, UnitStatus } from "@/lib/types";
+
+interface UnitFormProps {
+  mode: "new" | "edit";
+  initial?: Unit;
+  jenisUnitList: JenisUnit[];
+  drivers: Driver[];
+}
+
+export function UnitForm({ mode, initial, jenisUnitList, drivers }: UnitFormProps) {
+  const router = useRouter();
+  const toast = useToast();
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    kode_unit: initial?.kode_unit ?? "",
+    jenis_unit_id: initial?.jenis_unit_id ?? jenisUnitList[0]?.id ?? "",
+    no_polisi: initial?.no_polisi ?? "",
+    tahun: initial?.tahun?.toString() ?? "",
+    status: (initial?.status ?? "standby") as UnitStatus,
+    default_driver_id: initial?.default_driver_id ?? "",
+    catatan: initial?.catatan ?? ""
+  });
+  const [error, setError] = useState<Record<string, string>>({});
+
+  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const errs: Record<string, string> = {};
+    if (!form.kode_unit.trim()) errs.kode_unit = "Kode unit wajib diisi";
+    if (!form.no_polisi.trim()) errs.no_polisi = "No polisi wajib diisi";
+    setError(errs);
+    if (Object.keys(errs).length > 0) return;
+    setLoading(true);
+
+    const payload = {
+      kode_unit: form.kode_unit,
+      jenis_unit_id: form.jenis_unit_id,
+      no_polisi: form.no_polisi,
+      tahun: form.tahun ? Number(form.tahun) : null,
+      default_driver_id: form.default_driver_id || null,
+      catatan: form.catatan
+    };
+
+    const res =
+      mode === "new"
+        ? await createUnitAction({ ...payload, status: form.status })
+        : await updateUnitAction(initial!.id, payload);
+    setLoading(false);
+    if (res.ok) {
+      toast.success(
+        mode === "new" ? "Unit berhasil ditambahkan" : "Perubahan disimpan"
+      );
+      router.push("/units");
+      router.refresh();
+    } else {
+      toast.error(res.error);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-[640px]">
+      <Card>
+        <CardHeader
+          title={mode === "new" ? "Tambah unit baru" : "Edit unit"}
+          description="Data dasar armada"
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Kode unit" required hint="Contoh: SL29, TH67">
+            <Input
+              placeholder="Kode unit"
+              value={form.kode_unit}
+              onChange={(e) => set("kode_unit", e.target.value.toUpperCase())}
+              error={error.kode_unit}
+            />
+          </Field>
+          <Field label="Jenis unit" required>
+            <Select
+              value={form.jenis_unit_id}
+              onChange={(e) => set("jenis_unit_id", e.target.value)}
+            >
+              {jenisUnitList.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.nama}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="No polisi" required>
+            <Input
+              placeholder="B 9123 ABC"
+              value={form.no_polisi}
+              onChange={(e) => set("no_polisi", e.target.value)}
+              error={error.no_polisi}
+            />
+          </Field>
+          <Field label="Tahun">
+            <Input
+              type="number"
+              placeholder="2020"
+              value={form.tahun}
+              onChange={(e) => set("tahun", e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Driver tetap"
+            hint="Otomatis terpilih saat buat job baru untuk unit ini. Masih bisa di-override per-job."
+            className="sm:col-span-2"
+          >
+            <Select
+              value={form.default_driver_id ?? ""}
+              onChange={(e) => set("default_driver_id", e.target.value)}
+            >
+              <option value="">— Belum ditugaskan —</option>
+              {drivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nama} — {d.no_hp}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {mode === "new" && (
+            <Field label="Status awal">
+              <Select
+                value={form.status}
+                onChange={(e) => set("status", e.target.value as UnitStatus)}
+              >
+                <option value="standby">Standby</option>
+                <option value="perbaikan">Perbaikan</option>
+              </Select>
+            </Field>
+          )}
+          <Field label="Catatan" className="sm:col-span-2">
+            <Textarea
+              placeholder="Catatan tambahan (opsional)"
+              value={form.catatan ?? ""}
+              onChange={(e) => set("catatan", e.target.value)}
+            />
+          </Field>
+        </div>
+      </Card>
+      <div className="flex items-center justify-end gap-2">
+        <Link href="/units">
+          <Button variant="secondary" type="button">
+            Batal
+          </Button>
+        </Link>
+        <Button type="submit" loading={loading}>
+          {mode === "new" ? "Simpan unit" : "Simpan perubahan"}
+        </Button>
+      </div>
+    </form>
+  );
+}
