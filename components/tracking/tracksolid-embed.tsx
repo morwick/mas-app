@@ -25,7 +25,13 @@ import type { JobStatus } from "@/lib/types";
  */
 
 const POLL_INTERVAL_MS = 30_000;
-const MAX_CONSECUTIVE_ERRORS = 3;
+// Setelah berapa kali gagal berturut baru tampilkan error UI. Tidak terlalu
+// agresif (1× gagal langsung error terasa rapuh), tapi juga tidak harus
+// menunggu 60+ detik untuk feedback pertama.
+const MAX_CONSECUTIVE_ERRORS = 2;
+// Maks waktu di state "loading" sebelum paksa tampilkan error state (kalau
+// fetch pertama hang / lama). Mencegah user stuck di spinner tanpa info.
+const LOADING_TIMEOUT_MS = 12_000;
 
 interface Props {
   jobToken: string;
@@ -111,14 +117,30 @@ export function TrackSolidEmbed({ jobToken, externalLink, jobStatus }: Props) {
 
     fetchOnce();
     const id = setInterval(fetchOnce, POLL_INTERVAL_MS);
+    // Safety net: kalau masih loading setelah 12s, paksa tampilkan error.
+    // Polling tetap jalan di background — kalau berhasil nanti, state akan
+    // recover ke "ok".
+    const loadingTimeout = setTimeout(() => {
+      if (cancelled) return;
+      setState((s) =>
+        s.kind === "loading"
+          ? {
+              kind: "error",
+              message:
+                "Lokasi GPS belum bisa dimuat. Sistem masih mencoba di background."
+            }
+          : s
+      );
+    }, LOADING_TIMEOUT_MS);
     return () => {
       cancelled = true;
       clearInterval(id);
+      clearTimeout(loadingTimeout);
     };
   }, [jobToken, jobEnded]);
 
   if (state.kind === "loading") {
-    return <MapPlaceholder text="Memuat peta TrackSolid…" spinner />;
+    return <MapPlaceholder text="Memuat lokasi GPS truk…" spinner />;
   }
 
   if (state.kind === "ok") {
