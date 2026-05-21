@@ -44,6 +44,7 @@ interface MonitorInfoResponse {
 interface SessionState {
   token: string;
   userId: string;
+  cookies: string;
 }
 
 let cached: SessionState | null = null;
@@ -51,6 +52,44 @@ let inflightLogin: Promise<SessionState> | null = null;
 
 function md5(input: string): string {
   return createHash("md5").update(input).digest("hex");
+}
+
+/**
+ * Header browser-like supaya TrackSolid tidak treat request kita sebagai bot.
+ * Penting untuk environment serverless (Vercel/Cloudflare) — server origin
+ * mungkin di-filter, sedangkan request dari browser native lolos.
+ */
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  "Accept-Language": "id,en-US;q=0.9,en;q=0.8",
+  Origin: BASE_URL,
+  Referer: `${BASE_URL}/resource/dev/index.html`,
+  "Sec-Fetch-Dest": "empty",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Site": "same-origin"
+};
+
+/**
+ * Parse Set-Cookie headers dari response. Node 20+ punya getSetCookie(),
+ * fallback ke single header untuk runtime lain.
+ */
+function extractCookies(res: Response): string {
+  const setCookieHeaders: string[] = [];
+  const headers = res.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  if (typeof headers.getSetCookie === "function") {
+    setCookieHeaders.push(...headers.getSetCookie());
+  } else {
+    const single = res.headers.get("set-cookie");
+    if (single) setCookieHeaders.push(single);
+  }
+  // Ambil bagian name=value (sebelum ;), gabungkan
+  return setCookieHeaders
+    .map((c) => c.split(";")[0]?.trim())
+    .filter(Boolean)
+    .join("; ");
 }
 
 /**
@@ -81,8 +120,9 @@ async function loginToTrackSolid(): Promise<SessionState> {
   const res = await fetch(`${BASE_URL}/v3/new/homepage/login`, {
     method: "POST",
     headers: {
+      ...BROWSER_HEADERS,
       "Content-Type": "application/json",
-      Accept: "application/json"
+      Accept: "application/json, text/plain, */*"
     },
     body: JSON.stringify({
       account,
@@ -98,6 +138,7 @@ async function loginToTrackSolid(): Promise<SessionState> {
     throw new Error(`TrackSolid login HTTP ${res.status}`);
   }
 
+  const cookies = extractCookies(res);
   const body = (await res.json()) as LoginResponse;
   if (!body.ok || !body.data?.token) {
     throw new Error(
@@ -111,7 +152,7 @@ async function loginToTrackSolid(): Promise<SessionState> {
     throw new Error("Token TrackSolid tidak mengandung accountId");
   }
 
-  return { token: body.data.token, userId };
+  return { token: body.data.token, userId, cookies };
 }
 
 async function getSession(forceRefresh = false): Promise<SessionState> {
@@ -175,13 +216,17 @@ async function callMonitorInfo(
   imei: string,
   session: SessionState
 ): Promise<{ status: number; body: MonitorInfoResponse }> {
+  const headers: Record<string, string> = {
+    ...BROWSER_HEADERS,
+    "Content-Type": "application/json",
+    Accept: "application/json, text/plain, */*",
+    Authorization: session.token
+  };
+  if (session.cookies) headers["Cookie"] = session.cookies;
+
   const res = await fetch(`${BASE_URL}/v3/new/newMonitor/getMonitorInfo`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: session.token
-    },
+    headers,
     body: JSON.stringify({ imei, userId: session.userId, isAllFlag: 1 }),
     cache: "no-store"
   });
