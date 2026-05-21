@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import { ChevronRight, MapPin, User } from "lucide-react";
+import { PackageCheck } from "lucide-react";
 import type { Unit } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/badge";
 
@@ -14,54 +16,94 @@ interface UnitCardProps {
   driverNama?: string;
 }
 
-export function UnitCard({ unit, job, driverNama }: UnitCardProps) {
+export function UnitCard({ unit, job }: UnitCardProps) {
   return (
     <Link
       href={`/units/${unit.id}`}
-      className="block bg-card rounded-lg border border-border p-3 sm:p-4 hover:border-border-hover transition-colors"
+      style={{
+        display: "block",
+        background: "var(--bg-muted)",
+        border: "0.5px solid var(--border-default)",
+        borderRadius: 10,
+        padding: 12,
+        textDecoration: "none",
+        color: "var(--text-primary)",
+        transition: "all 120ms ease"
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "rgba(0,0,0,0.25)";
+        e.currentTarget.style.background = "white";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "var(--border-default)";
+        e.currentTarget.style.background = "var(--bg-muted)";
+      }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-[15px] font-semibold text-text">{unit.kode_unit}</p>
-            <StatusBadge status={unit.status} />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 6
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              letterSpacing: "-0.005em"
+            }}
+          >
+            {unit.kode_unit}
           </div>
-          <p className="text-[12px] text-text-muted mt-0.5">
-            {unit.jenis_unit_nama} &middot; {unit.no_polisi}
-          </p>
+          <div
+            style={{
+              fontSize: 11.5,
+              color: "var(--text-tertiary)"
+            }}
+          >
+            {unit.jenis_unit_nama} · {unit.no_polisi}
+          </div>
         </div>
-        <ChevronRight className="w-5 h-5 text-text-subtle shrink-0" />
+        <StatusBadge status={unit.status} />
       </div>
-
-      {job && unit.status === "bertugas" ? (
-        <div className="mt-3 pt-3 border-t border-border/70">
-          <div className="flex items-center gap-1.5 text-[12px] text-text-muted">
-            <MapPin className="w-3.5 h-3.5" />
-            <p className="truncate">
-              {job.asal} <span className="text-text-subtle">→</span> {job.tujuan}
-            </p>
-          </div>
-          {driverNama && (
-            <div className="flex items-center gap-1.5 text-[12px] text-text-muted mt-1">
-              <User className="w-3.5 h-3.5" />
-              <span>{driverNama}</span>
-              <span className="text-text-subtle">·</span>
-              <span className="text-text font-medium">{job.job_number}</span>
-            </div>
-          )}
+      {job ? (
+        <div
+          style={{
+            fontSize: 11.5,
+            color: "var(--text-secondary)",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginTop: 8
+          }}
+        >
+          <PackageCheck style={{ width: 12, height: 12, flexShrink: 0 }} />
+          <span
+            className="mono"
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {job.job_number}
+          </span>
         </div>
       ) : (
-        <div className="mt-2 flex items-center gap-1.5 text-[12px]">
-          <User className="w-3.5 h-3.5 text-text-subtle" />
-          {unit.default_driver_nama ? (
-            <span className="text-text-muted">{unit.default_driver_nama}</span>
-          ) : (
-            <span className="text-text-subtle italic">Driver belum ditugaskan</span>
-          )}
+        <div
+          style={{
+            fontSize: 11.5,
+            color: "var(--text-tertiary)",
+            marginTop: 8
+          }}
+        >
+          {unit.status === "perbaikan"
+            ? unit.catatan || "Sedang diperbaiki"
+            : "Tidak ada job aktif"}
         </div>
-      )}
-      {unit.status === "perbaikan" && unit.catatan && (
-        <p className="mt-2 text-[12px] text-status-perbaikan-fg">{unit.catatan}</p>
       )}
     </Link>
   );

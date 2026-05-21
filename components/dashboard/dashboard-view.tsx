@@ -2,15 +2,20 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CircleDot, CheckCircle2, Wrench, Plus, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { FilterChips } from "@/components/ui/filter-chips";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CircleDot,
+  PackageCheck,
+  Plus,
+  Truck
+} from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { UnitCard } from "@/components/dashboard/unit-card";
 import { Fab } from "@/components/layout/fab";
 import type { Unit } from "@/lib/types";
 
-type Filter = "all" | "standby" | "bertugas" | "perbaikan";
+type Filter = "semua" | "standby" | "bertugas" | "perbaikan";
 
 interface ActiveJobSummary {
   unitId: string;
@@ -30,10 +35,11 @@ interface Props {
 }
 
 export function DashboardView({ units, counts, activeJobs }: Props) {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("semua");
+  const total = counts.standby + counts.bertugas + counts.perbaikan;
 
   const filtered = useMemo(() => {
-    if (filter === "all") return units;
+    if (filter === "semua") return units;
     return units.filter((u) => u.status === filter);
   }, [units, filter]);
 
@@ -43,93 +49,330 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
   );
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="hidden lg:flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-h1">Dashboard</h1>
-          <p className="text-[13px] text-text-muted mt-0.5">
-            Ringkasan status armada hari ini
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/jobs">
-            <Button variant="secondary" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Semua job
-            </Button>
-          </Link>
-          <Link href="/jobs/new">
-            <Button leftIcon={<Plus className="w-4 h-4" />}>Job baru</Button>
-          </Link>
-        </div>
-      </div>
-
-      <section className="grid grid-cols-3 gap-2.5 sm:gap-3">
+    <div className="flex flex-col" style={{ gap: 20 }}>
+      {/* Stat cards */}
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        <StatCard
+          label="Total armada"
+          value={total}
+          sublabel={`${units.filter((u) => u.is_active).length} aktif`}
+          icon={Truck}
+          tone="neutral"
+        />
         <StatCard
           label="Standby"
           value={counts.standby}
+          sublabel="Siap di-assign"
           icon={CircleDot}
           tone="standby"
           active={filter === "standby"}
-          onClick={() => setFilter(filter === "standby" ? "all" : "standby")}
+          onClick={() =>
+            setFilter(filter === "standby" ? "semua" : "standby")
+          }
         />
         <StatCard
           label="Bertugas"
           value={counts.bertugas}
-          icon={CheckCircle2}
+          sublabel={`${activeJobs.length} job aktif`}
+          icon={PackageCheck}
           tone="bertugas"
           active={filter === "bertugas"}
-          onClick={() => setFilter(filter === "bertugas" ? "all" : "bertugas")}
+          onClick={() =>
+            setFilter(filter === "bertugas" ? "semua" : "bertugas")
+          }
         />
         <StatCard
           label="Perbaikan"
           value={counts.perbaikan}
-          icon={Wrench}
+          sublabel="Perlu attention"
+          icon={AlertTriangle}
           tone="perbaikan"
           active={filter === "perbaikan"}
-          onClick={() => setFilter(filter === "perbaikan" ? "all" : "perbaikan")}
+          onClick={() =>
+            setFilter(filter === "perbaikan" ? "semua" : "perbaikan")
+          }
         />
-      </section>
+      </div>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-h2">Status armada</h2>
-          <span className="text-[12px] text-text-muted">
-            {filtered.length} dari {units.length} unit
-          </span>
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "1.4fr 1fr" }}
+      >
+        {/* Left — unit status */}
+        <div className="card">
+          <div
+            style={{
+              padding: "14px 16px",
+              borderBottom: "0.5px solid var(--border-default)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap"
+            }}
+          >
+            <div>
+              <div className="h3" style={{ marginBottom: 2 }}>
+                Status armada
+              </div>
+              <div className="caption">
+                {filtered.length} dari {total} unit
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(
+                [
+                  { k: "semua", l: "Semua", c: total },
+                  { k: "standby", l: "Standby", c: counts.standby },
+                  { k: "bertugas", l: "Bertugas", c: counts.bertugas },
+                  { k: "perbaikan", l: "Perbaikan", c: counts.perbaikan }
+                ] as { k: Filter; l: string; c: number }[]
+              ).map((f) => (
+                <button
+                  key={f.k}
+                  type="button"
+                  className={`chip ${filter === f.k ? "active" : ""}`}
+                  onClick={() => setFilter(f.k)}
+                >
+                  {f.l}
+                  <span className="chip-count">{f.c}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div
+            style={{
+              padding: 12,
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 10
+            }}
+          >
+            {filtered.map((u) => {
+              const job = jobByUnit.get(u.id);
+              return (
+                <UnitCard
+                  key={u.id}
+                  unit={u}
+                  job={
+                    job
+                      ? {
+                          id: job.id,
+                          job_number: job.job_number,
+                          asal: job.asal,
+                          tujuan: job.tujuan
+                        }
+                      : undefined
+                  }
+                  driverNama={job?.driver_nama}
+                />
+              );
+            })}
+            {filtered.length === 0 && (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  padding: 24,
+                  textAlign: "center",
+                  color: "var(--text-tertiary)",
+                  fontSize: 12.5
+                }}
+              >
+                Tidak ada unit pada filter ini.
+              </div>
+            )}
+          </div>
         </div>
-        <FilterChips
-          value={filter}
-          onChange={(k) => setFilter(k as Filter)}
-          items={[
-            { key: "all", label: "Semua", count: units.length },
-            { key: "standby", label: "Standby", count: counts.standby },
-            { key: "bertugas", label: "Bertugas", count: counts.bertugas },
-            { key: "perbaikan", label: "Perbaikan", count: counts.perbaikan }
-          ]}
-        />
-        <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((u) => {
-            const job = jobByUnit.get(u.id);
-            return (
-              <UnitCard
-                key={u.id}
-                unit={u}
-                job={
-                  job
-                    ? {
-                        id: job.id,
-                        job_number: job.job_number,
-                        asal: job.asal,
-                        tujuan: job.tujuan
-                      }
-                    : undefined
-                }
-                driverNama={job?.driver_nama}
-              />
-            );
-          })}
+
+        {/* Right column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="card">
+            <div
+              style={{
+                padding: "14px 16px",
+                borderBottom: "0.5px solid var(--border-default)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}
+            >
+              <div>
+                <div className="h3" style={{ marginBottom: 2 }}>
+                  Job aktif hari ini
+                </div>
+                <div className="caption">{activeJobs.length} dalam progress</div>
+              </div>
+              <Link href="/jobs" className="btn-link" style={{ fontSize: 12 }}>
+                Lihat semua <ArrowRight style={{ width: 12, height: 12 }} />
+              </Link>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {activeJobs.slice(0, 4).map((a) => {
+                const unit = units.find((u) => u.id === a.unitId);
+                return (
+                  <Link
+                    key={a.job.id}
+                    href={`/jobs/${a.job.id}`}
+                    style={{
+                      padding: "12px 16px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      borderBottom: "0.5px solid var(--border-default)",
+                      textDecoration: "none",
+                      color: "var(--text-primary)",
+                      cursor: "pointer",
+                      transition: "background 120ms ease"
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "var(--bg-muted)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          marginBottom: 4
+                        }}
+                      >
+                        <span
+                          className="mono"
+                          style={{
+                            fontSize: 11,
+                            color: "var(--text-tertiary)",
+                            fontWeight: 500
+                          }}
+                        >
+                          {a.job.job_number}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          lineHeight: 1.35,
+                          marginBottom: 2,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {a.job.tujuan.split(",")[0]}
+                      </div>
+                      <div
+                        className="caption"
+                        style={{
+                          fontSize: 11.5,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6
+                        }}
+                      >
+                        <span>{unit?.kode_unit}</span>
+                        <span>·</span>
+                        <span>{a.job.driver_nama.split(" ")[0]}</span>
+                      </div>
+                    </div>
+                    <ArrowRight
+                      style={{
+                        width: 16,
+                        height: 16,
+                        color: "var(--text-tertiary)"
+                      }}
+                    />
+                  </Link>
+                );
+              })}
+              {activeJobs.length === 0 && (
+                <div
+                  style={{
+                    padding: 24,
+                    textAlign: "center",
+                    color: "var(--text-tertiary)",
+                    fontSize: 12.5
+                  }}
+                >
+                  Belum ada job aktif.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Brand CTA */}
+          <div
+            className="card"
+            style={{
+              background: "linear-gradient(135deg, #145B00 0%, #1C9600 100%)",
+              color: "white",
+              border: "none",
+              padding: 20
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+              >
+                <Plus style={{ width: 20, height: 20 }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 600,
+                    marginBottom: 4
+                  }}
+                >
+                  Buat job pengiriman baru
+                </div>
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    opacity: 0.85,
+                    marginBottom: 14,
+                    lineHeight: 1.5
+                  }}
+                >
+                  Generate share link otomatis untuk customer. Unit terassign
+                  langsung berubah ke status Bertugas.
+                </div>
+                <Link
+                  href="/jobs/new"
+                  style={{
+                    background: "white",
+                    color: "var(--brand-primary-dark)",
+                    border: "none",
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    textDecoration: "none"
+                  }}
+                >
+                  Job baru
+                  <ArrowRight style={{ width: 14, height: 14 }} />
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
-      </section>
+      </div>
 
       <Fab href="/jobs/new" label="Job baru" />
     </div>

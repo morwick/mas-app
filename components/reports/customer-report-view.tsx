@@ -2,13 +2,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download } from "lucide-react";
-import { Card, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Select, Field } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { exportToXlsx } from "@/lib/export";
-import { formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Customer, Job } from "@/lib/types";
 
 interface Props {
@@ -65,29 +63,21 @@ export function CustomerReportView({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-h1">Riwayat customer</h1>
-          <p className="text-[13px] text-text-muted mt-0.5">
-            Riwayat pengiriman per customer untuk evaluasi kerjasama.
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          leftIcon={<Download className="w-4 h-4" />}
-          onClick={onExport}
-        >
-          Export Excel
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader title="Filter" />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Customer">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap"
+        }}
+      >
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <Field>
             <Select
               value={customerId}
               onChange={(e) => updateParam("customer", e.target.value)}
+              style={{ width: 260, height: 36 }}
             >
               <option value="">Semua customer</option>
               {customers
@@ -99,10 +89,11 @@ export function CustomerReportView({
                 ))}
             </Select>
           </Field>
-          <Field label="Periode">
+          <Field>
             <Select
               value={period}
               onChange={(e) => updateParam("period", e.target.value)}
+              style={{ width: 160, height: 36 }}
             >
               <option value="all">Semua waktu</option>
               <option value="month_now">Bulan ini</option>
@@ -110,58 +101,99 @@ export function CustomerReportView({
             </Select>
           </Field>
         </div>
-      </Card>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={onExport}
+        >
+          <Download style={{ width: 14, height: 14 }} />
+          Export Excel
+        </button>
+      </div>
 
-      <Card>
-        <CardHeader
-          title={`${jobs.length} job`}
-          description={
-            customerId
+      <div className="card">
+        <div
+          style={{
+            padding: "14px 16px",
+            borderBottom: "0.5px solid var(--border-default)"
+          }}
+        >
+          <div className="h3">
+            {jobs.length} job
+          </div>
+          <div className="caption">
+            {customerId
               ? customers.find((c) => c.id === customerId)?.nama_perusahaan
-              : "Semua customer"
-          }
-        />
-        <div className="overflow-x-auto -mx-4 px-4">
-          <table className="w-full min-w-[720px] text-[13px]">
-            <thead className="text-left text-[11px] uppercase tracking-wider text-text-subtle border-b border-border">
+              : "Semua customer"}
+          </div>
+        </div>
+        {jobs.length === 0 ? (
+          <div
+            style={{
+              padding: 24,
+              textAlign: "center",
+              color: "var(--text-tertiary)",
+              fontSize: 13
+            }}
+          >
+            Tidak ada data untuk filter yang dipilih.
+          </div>
+        ) : (
+          <table className="table">
+            <thead>
               <tr>
-                <th className="py-2 pr-3 font-medium">Tanggal</th>
-                <th className="py-2 pr-3 font-medium">Job</th>
-                <th className="py-2 pr-3 font-medium">Customer</th>
-                <th className="py-2 pr-3 font-medium">Alat</th>
-                <th className="py-2 pr-3 font-medium">Unit</th>
-                <th className="py-2 pr-3 font-medium">Driver</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
+                <th>Tanggal</th>
+                <th>Job ID</th>
+                <th>Customer</th>
+                <th>Alat</th>
+                <th>Unit / Driver</th>
+                <th>Rute</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {jobs.map((j) => (
-                <tr
-                  key={j.id}
-                  className="border-b border-border last:border-0 align-top"
-                >
-                  <td className="py-3 pr-3 text-text-muted whitespace-nowrap">
-                    {formatDateTime(j.etd)}
-                  </td>
-                  <td className="py-3 pr-3 font-medium">{j.job_number}</td>
-                  <td className="py-3 pr-3">{j.customer_nama}</td>
-                  <td className="py-3 pr-3">{j.alat_diangkut}</td>
-                  <td className="py-3 pr-3">
-                    {unitMap[j.unit_id]?.kode_unit ?? "-"}{" "}
-                    <span className="text-text-muted">
-                      ({unitMap[j.unit_id]?.jenis ?? "-"})
-                    </span>
-                  </td>
-                  <td className="py-3 pr-3">{driverMap[j.driver_id] ?? "-"}</td>
-                  <td className="py-3 pr-3">
-                    <StatusBadge status={j.status} />
-                  </td>
-                </tr>
-              ))}
+              {jobs.map((j) => {
+                const u = unitMap[j.unit_id];
+                const d = driverMap[j.driver_id];
+                return (
+                  <tr key={j.id}>
+                    <td className="mono" style={{ fontSize: 11.5 }}>
+                      {formatDate(j.etd)}
+                    </td>
+                    <td
+                      className="mono"
+                      style={{ fontSize: 12, fontWeight: 600 }}
+                    >
+                      {j.job_number}
+                    </td>
+                    <td>{j.customer_nama}</td>
+                    <td className="muted" style={{ fontSize: 12.5 }}>
+                      {j.alat_diangkut}
+                    </td>
+                    <td style={{ fontSize: 12 }}>
+                      <div style={{ fontWeight: 600 }}>
+                        {u?.kode_unit ?? "—"}
+                      </div>
+                      <div className="muted" style={{ fontSize: 11 }}>
+                        {d ? d.split(" ").slice(0, 2).join(" ") : "—"}
+                      </div>
+                    </td>
+                    <td
+                      className="muted"
+                      style={{ fontSize: 11.5, maxWidth: 220 }}
+                    >
+                      {j.asal.split(",")[0]} → {j.tujuan.split(",")[0]}
+                    </td>
+                    <td>
+                      <StatusBadge status={j.status} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-        </div>
-      </Card>
+        )}
+      </div>
     </div>
   );
 }

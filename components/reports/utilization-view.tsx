@@ -1,14 +1,17 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download } from "lucide-react";
-import { Card, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import {
+  BarChart3,
+  Calendar,
+  Download,
+  Sparkles,
+  Truck
+} from "lucide-react";
 import { Select, Field } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import type { UtilizationRow } from "@/lib/queries/reports";
 import { exportToXlsx } from "@/lib/export";
-import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
 
 interface Props {
@@ -41,8 +44,23 @@ export function UtilizationView({
 
   const avg =
     rows.length > 0
-      ? rows.reduce((sum, r) => sum + Number(r.persentase_utilisasi), 0) / rows.length
+      ? rows.reduce((sum, r) => sum + Number(r.persentase_utilisasi), 0) /
+        rows.length
       : 0;
+
+  const totalBertugas = rows.reduce(
+    (s, r) => s + Number(r.hari_bertugas),
+    0
+  );
+
+  const best = rows.reduce<UtilizationRow | null>(
+    (b, r) =>
+      !b ||
+      Number(r.persentase_utilisasi) > Number(b.persentase_utilisasi)
+        ? r
+        : b,
+    null
+  );
 
   function onExport() {
     if (rows.length === 0) {
@@ -66,147 +84,361 @@ export function UtilizationView({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-h1">Utilisasi armada</h1>
-          <p className="text-[13px] text-text-muted mt-0.5">
-            Periode {formatDate(rangeStart)} sampai {formatDate(rangeEnd)}.
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          leftIcon={<Download className="w-4 h-4" />}
-          onClick={onExport}
-        >
-          Export Excel
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader title="Filter periode" />
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Periode">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap"
+        }}
+      >
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Field>
             <Select
               value={period}
               onChange={(e) => updateParam("period", e.target.value)}
+              style={{ width: 180, height: 36 }}
             >
               <option value="month_now">Bulan ini</option>
               <option value="month_prev">Bulan lalu</option>
-              <option value="custom">Custom</option>
+              <option value="custom">Custom range</option>
             </Select>
           </Field>
           {period === "custom" && (
             <>
-              <Field label="Dari">
-                <input
-                  type="date"
-                  defaultValue={from}
-                  onBlur={(e) => updateParam("from", e.target.value)}
-                  className="w-full rounded-md bg-white border border-border h-10 px-3 text-[14px] outline-none focus:border-brand focus:ring-[3px] focus:ring-brand/20"
-                />
-              </Field>
-              <Field label="Sampai">
-                <input
-                  type="date"
-                  defaultValue={to}
-                  onBlur={(e) => updateParam("to", e.target.value)}
-                  className="w-full rounded-md bg-white border border-border h-10 px-3 text-[14px] outline-none focus:border-brand focus:ring-[3px] focus:ring-brand/20"
-                />
-              </Field>
+              <input
+                type="date"
+                defaultValue={from}
+                onBlur={(e) => updateParam("from", e.target.value)}
+                className="input"
+                style={{ width: 160, height: 36 }}
+              />
+              <input
+                type="date"
+                defaultValue={to}
+                onBlur={(e) => updateParam("to", e.target.value)}
+                className="input"
+                style={{ width: 160, height: 36 }}
+              />
             </>
           )}
         </div>
-      </Card>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={onExport}
+        >
+          <Download style={{ width: 14, height: 14 }} />
+          Export Excel
+        </button>
+      </div>
 
-      <Card>
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-wider text-text-subtle">
-              Rata-rata utilisasi
-            </p>
-            <p className="text-[28px] font-semibold text-text leading-none mt-1">
-              {avg.toFixed(1)}%
-            </p>
-          </div>
-          <p className="text-[12px] text-text-muted">
-            {rows.length} unit aktif
-          </p>
-        </div>
-        {rows.length === 0 ? (
-          <p className="text-[13px] text-text-muted">
-            Belum ada data unit aktif untuk periode ini.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {rows.map((r) => {
-              const pct = Number(r.persentase_utilisasi);
-              const totalDays =
-                Number(r.hari_bertugas) +
-                Number(r.hari_standby) +
-                Number(r.hari_perbaikan);
-              const pctStandby = totalDays > 0 ? (Number(r.hari_standby) / totalDays) * 100 : 0;
-              const pctPerbaikan = totalDays > 0 ? (Number(r.hari_perbaikan) / totalDays) * 100 : 0;
-              const pctBertugas = totalDays > 0 ? (Number(r.hari_bertugas) / totalDays) * 100 : 0;
-              return (
-                <div key={r.unit_id} className="border border-border rounded-md p-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div>
-                      <p className="text-[14px] font-medium">{r.kode_unit}</p>
-                      <p className="text-[11px] text-text-muted">{r.jenis}</p>
-                    </div>
-                    <p
-                      className={cn(
-                        "text-[15px] font-semibold",
-                        pct > 60
-                          ? "text-brand-dark"
-                          : pct > 30
-                          ? "text-status-perbaikan-fg"
-                          : "text-text-muted"
-                      )}
-                    >
-                      {pct.toFixed(0)}%
-                    </p>
-                  </div>
-                  <div className="h-2 rounded-full bg-page overflow-hidden flex">
-                    <div className="bg-brand h-full" style={{ width: `${pctBertugas}%` }} />
-                    <div
-                      className="bg-status-perbaikan-fg/60 h-full"
-                      style={{ width: `${pctPerbaikan}%` }}
-                    />
-                    <div
-                      className="bg-status-standby-fg/30 h-full"
-                      style={{ width: `${pctStandby}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center gap-3 text-[11px] text-text-muted flex-wrap">
-                    <Legend
-                      color="bg-brand"
-                      label={`Bertugas ${Number(r.hari_bertugas).toFixed(1)}h`}
-                    />
-                    <Legend
-                      color="bg-status-perbaikan-fg/60"
-                      label={`Perbaikan ${Number(r.hari_perbaikan).toFixed(1)}h`}
-                    />
-                    <Legend
-                      color="bg-status-standby-fg/30"
-                      label={`Standby ${Number(r.hari_standby).toFixed(1)}h`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* KPI cards */}
+      <div
+        className="grid"
+        style={{
+          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+          gap: 12
+        }}
+      >
+        <KpiCard
+          label="Periode"
+          value={`${formatDate(rangeStart)} - ${formatDate(rangeEnd)}`}
+          sub={`${
+            Math.round(
+              (new Date(rangeEnd).getTime() -
+                new Date(rangeStart).getTime()) /
+                86400000
+            ) + 1
+          } hari`}
+          icon={<Calendar style={{ width: 13, height: 13 }} />}
+        />
+        <KpiCard
+          label="Rata-rata utilisasi"
+          value={`${avg.toFixed(1)}%`}
+          sub={`${rows.length} unit aktif`}
+          icon={<BarChart3 style={{ width: 13, height: 13 }} />}
+          tone="brand"
+        />
+        <KpiCard
+          label="Total hari bertugas"
+          value={String(totalBertugas)}
+          sub="Akumulasi seluruh unit"
+          icon={<Truck style={{ width: 13, height: 13 }} />}
+        />
+        {best && (
+          <KpiCard
+            label="Unit terbaik"
+            value={best.kode_unit}
+            sub={`${Number(best.persentase_utilisasi).toFixed(0)}% utilisasi`}
+            icon={<Sparkles style={{ width: 13, height: 13 }} />}
+            tone="brand"
+          />
         )}
-      </Card>
+      </div>
+
+      {/* Bar chart */}
+      <div className="card">
+        <div
+          style={{
+            padding: "14px 16px",
+            borderBottom: "0.5px solid var(--border-default)"
+          }}
+        >
+          <div className="h3">Utilisasi per unit</div>
+          <div className="caption">
+            Persentase hari bertugas dari total hari periode
+          </div>
+        </div>
+        <div style={{ padding: 20 }}>
+          {rows.length === 0 ? (
+            <div
+              style={{
+                padding: 24,
+                textAlign: "center",
+                color: "var(--text-tertiary)",
+                fontSize: 13
+              }}
+            >
+              Belum ada data unit aktif untuk periode ini.
+            </div>
+          ) : (
+            <UtilBarChart data={rows} />
+          )}
+        </div>
+      </div>
+
+      {/* Table */}
+      {rows.length > 0 && (
+        <div className="card">
+          <div
+            style={{
+              padding: "14px 16px",
+              borderBottom: "0.5px solid var(--border-default)"
+            }}
+          >
+            <div className="h3">Detail per unit</div>
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Kode</th>
+                <th>Jenis</th>
+                <th style={{ textAlign: "right" }}>Bertugas</th>
+                <th style={{ textAlign: "right" }}>Standby</th>
+                <th style={{ textAlign: "right" }}>Perbaikan</th>
+                <th style={{ width: 240 }}>Utilisasi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((u) => {
+                const pct = Number(u.persentase_utilisasi);
+                return (
+                  <tr key={u.unit_id}>
+                    <td style={{ fontWeight: 600 }}>{u.kode_unit}</td>
+                    <td className="muted">{u.jenis}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>
+                      {Number(u.hari_bertugas).toFixed(1)}h
+                    </td>
+                    <td
+                      style={{ textAlign: "right" }}
+                      className="muted"
+                    >
+                      {Number(u.hari_standby).toFixed(1)}h
+                    </td>
+                    <td
+                      style={{ textAlign: "right" }}
+                      className="muted"
+                    >
+                      {Number(u.hari_perbaikan).toFixed(1)}h
+                    </td>
+                    <td>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10
+                        }}
+                      >
+                        <div
+                          style={{
+                            flex: 1,
+                            height: 8,
+                            background: "var(--bg-subtle)",
+                            borderRadius: 99,
+                            overflow: "hidden"
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${pct}%`,
+                              height: "100%",
+                              background:
+                                pct >= 70
+                                  ? "var(--brand-primary)"
+                                  : pct >= 40
+                                    ? "#D89A24"
+                                    : "#C13838"
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            minWidth: 38,
+                            textAlign: "right"
+                          }}
+                        >
+                          {pct.toFixed(0)}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon,
+  tone = "neutral"
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  icon: React.ReactNode;
+  tone?: "neutral" | "brand";
+}) {
+  const bg = tone === "brand" ? "var(--brand-primary-light)" : "var(--bg-subtle)";
+  const col =
+    tone === "brand" ? "var(--brand-primary-dark)" : "var(--text-secondary)";
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn("w-2 h-2 rounded-full", color)} />
-      {label}
-    </span>
+    <div
+      className="card card-pad"
+      style={{ padding: 14 }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8
+        }}
+      >
+        <div className="eyebrow" style={{ fontSize: 10.5 }}>
+          {label}
+        </div>
+        <div
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 6,
+            background: bg,
+            color: col,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          {icon}
+        </div>
+      </div>
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 700,
+          letterSpacing: "-0.01em",
+          marginBottom: 2,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }}
+      >
+        {value}
+      </div>
+      <div className="caption" style={{ fontSize: 11 }}>
+        {sub}
+      </div>
+    </div>
+  );
+}
+
+function UtilBarChart({ data }: { data: UtilizationRow[] }) {
+  const maxH = 160;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-end",
+        gap: 12,
+        height: maxH + 30,
+        padding: "0 4px",
+        overflowX: "auto"
+      }}
+    >
+      {data.map((u) => {
+        const pct = Number(u.persentase_utilisasi);
+        const h = (pct / 100) * maxH;
+        const col =
+          pct >= 70
+            ? "var(--brand-primary)"
+            : pct >= 40
+              ? "#D89A24"
+              : "#C13838";
+        return (
+          <div
+            key={u.unit_id}
+            style={{
+              flex: 1,
+              minWidth: 40,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 600,
+                color: "var(--text-secondary)"
+              }}
+            >
+              {pct.toFixed(0)}%
+            </div>
+            <div
+              style={{
+                width: "100%",
+                maxWidth: 36,
+                height: h,
+                background: col,
+                borderRadius: "4px 4px 0 0",
+                minHeight: 4,
+                transition: "height 300ms ease"
+              }}
+            />
+            <div
+              style={{
+                fontSize: 10.5,
+                color: "var(--text-tertiary)",
+                fontWeight: 500
+              }}
+            >
+              {u.kode_unit}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

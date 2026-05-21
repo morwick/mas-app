@@ -1,18 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import {
-  CheckCircle2,
+  ArrowRight,
+  Check,
   Copy,
-  MessageCircle,
+  Download,
   ExternalLink,
-  Plus,
-  Eye
+  Eye,
+  MessageCircle,
+  Plus
 } from "lucide-react";
-import { Card, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import type { Job } from "@/lib/types";
 
@@ -25,12 +25,11 @@ interface Props {
 export function JobConfirmationView({ job, driverNama, driverNoHp }: Props) {
   const toast = useToast();
 
-  const shareUrl = useMemo(() => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/track/${job.share_token}`;
-    }
-    return `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/track/${job.share_token}`;
-  }, [job.share_token]);
+  const [origin, setOrigin] = useState(process.env.NEXT_PUBLIC_APP_URL ?? "");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+  const shareUrl = `${origin}/track/${job.share_token}`;
 
   const waText = useMemo(() => {
     const lines = [
@@ -55,118 +54,288 @@ export function JobConfirmationView({ job, driverNama, driverNoHp }: Props) {
   }
 
   const waHref = job.pic_no_hp
-    ? `https://wa.me/${job.pic_no_hp.replace(/^\+?0/, "62").replace(/^\+/, "")}?text=${encodeURIComponent(waText)}`
+    ? `https://wa.me/${job.pic_no_hp
+        .replace(/^\+?0/, "62")
+        .replace(/^\+/, "")}?text=${encodeURIComponent(waText)}`
     : `https://wa.me/?text=${encodeURIComponent(waText)}`;
 
   return (
-    <div className="flex flex-col gap-4 max-w-[640px]">
-      <div className="text-center py-6">
-        <div className="w-16 h-16 rounded-full bg-brand-light mx-auto flex items-center justify-center">
-          <CheckCircle2 className="w-9 h-9 text-brand" />
+    <div
+      className="mx-auto"
+      style={{ maxWidth: 820, display: "flex", flexDirection: "column", gap: 16 }}
+    >
+      {/* Success banner */}
+      <div
+        className="card card-pad-lg"
+        style={{
+          background: "linear-gradient(135deg, #E8F7E0 0%, #FAFFF6 100%)",
+          border: "0.5px solid #B5DFA0",
+          padding: 24
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 99,
+              background: "var(--brand-primary)",
+              color: "white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}
+          >
+            <Check style={{ width: 26, height: 26 }} strokeWidth={2.2} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div
+              className="h1"
+              style={{ color: "var(--brand-primary-dark)", marginBottom: 4 }}
+            >
+              Job berhasil dibuat
+            </div>
+            <div
+              className="body"
+              style={{
+                color: "var(--brand-primary-dark)",
+                marginBottom: 12
+              }}
+            >
+              Status unit sudah otomatis berubah ke Bertugas. Share link siap
+              dikirim ke customer.
+            </div>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
+            >
+              <div
+                className="caption"
+                style={{ color: "var(--brand-primary-dark)" }}
+              >
+                Job ID:
+              </div>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  padding: "4px 10px",
+                  background: "white",
+                  borderRadius: 6,
+                  color: "var(--brand-primary-dark)",
+                  border: "0.5px solid #B5DFA0"
+                }}
+              >
+                {job.job_number}
+              </span>
+            </div>
+          </div>
         </div>
-        <h1 className="text-h1 mt-3">Job berhasil dibuat</h1>
-        <p className="text-[13px] text-text-muted mt-1">
-          Salin & kirim share link ke customer Anda.
-        </p>
       </div>
 
-      <Card>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <p className="text-[11px] uppercase tracking-wider text-text-subtle">
-              Nomor job
-            </p>
-            <p className="text-[20px] font-semibold text-text mt-0.5">
-              {job.job_number}
-            </p>
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "1.4fr 1fr" }}
+      >
+        {/* Share link + WhatsApp */}
+        <div className="card card-pad-lg">
+          <div className="h3" style={{ marginBottom: 4 }}>
+            Bagikan ke customer
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<Copy className="w-3.5 h-3.5" />}
-            onClick={() => copy(job.job_number, "job", "Nomor job disalin")}
-          >
-            {copiedKey === "job" ? "Tersalin" : "Salin"}
-          </Button>
-        </div>
-      </Card>
+          <div className="caption" style={{ marginBottom: 16 }}>
+            Link bisa diakses tanpa login. Auto-expire 24 jam setelah job
+            selesai.
+          </div>
 
-      <Card>
-        <CardHeader
-          title="Share link customer"
-          description="Customer tidak perlu login untuk membuka link ini."
-        />
-        <div className="flex flex-col gap-3">
-          <div className="bg-page rounded-md px-3 py-2.5 border border-border text-[12px] font-mono break-all">
-            {shareUrl}
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              leftIcon={<Copy className="w-4 h-4" />}
-              onClick={() => copy(shareUrl, "link", "Link disalin")}
-            >
-              {copiedKey === "link" ? "Tersalin" : "Salin link"}
-            </Button>
-            <a href={waHref} target="_blank" rel="noreferrer">
-              <Button
-                variant="secondary"
-                leftIcon={<MessageCircle className="w-4 h-4" />}
-                fullWidth
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label className="field-label">Share link</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                readOnly
+                className="input mono"
+                value={shareUrl}
+                style={{ fontSize: 12.5 }}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => copy(shareUrl, "link", "Link disalin")}
               >
-                Kirim via WhatsApp
-              </Button>
-            </a>
+                <Copy style={{ width: 14, height: 14 }} />
+                {copiedKey === "link" ? "Tersalin" : "Copy"}
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => copy(waText, "wa", "Template WhatsApp disalin")}
-            className="text-left text-[12px] text-brand-dark hover:underline"
-          >
-            {copiedKey === "wa" ? "Tersalin" : "Salin link + template WhatsApp"}
-          </button>
-        </div>
-      </Card>
 
-      <Card>
-        <CardHeader
-          title="QR code"
-          description="Untuk share offline, scan dari HP customer."
-        />
-        <div className="flex flex-col items-center py-3">
-          <div className="p-3 rounded-md border border-border bg-white">
-            <QRCodeSVG value={shareUrl} size={160} fgColor="#1C9600" />
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label className="field-label">Template WhatsApp</label>
+            <textarea
+              readOnly
+              className="textarea"
+              rows={7}
+              value={waText}
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                fontFamily: "var(--font-sans)"
+              }}
+            />
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={() =>
+                  copy(waText, "wa", "Template WhatsApp disalin")
+                }
+              >
+                <Copy style={{ width: 14, height: 14 }} />
+                {copiedKey === "wa" ? "Tersalin" : "Copy template"}
+              </button>
+              <a
+                href={waHref}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary"
+                style={{ textDecoration: "none" }}
+              >
+                <MessageCircle style={{ width: 14, height: 14 }} />
+                Buka WhatsApp
+              </a>
+            </div>
           </div>
-          <p className="mt-3 text-[11px] text-text-muted">
-            Tunjukkan QR ini ke customer untuk akses tracking.
-          </p>
-        </div>
-      </Card>
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Link href={`/jobs/${job.id}`}>
-          <Button
-            variant="secondary"
-            fullWidth
-            leftIcon={<Eye className="w-4 h-4" />}
+          <div className="divider" style={{ margin: "16px 0" }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Link
+              href={`/jobs/${job.id}`}
+              className="btn btn-secondary"
+              style={{ flex: 1, textDecoration: "none" }}
+            >
+              Lihat detail job <ArrowRight style={{ width: 14, height: 14 }} />
+            </Link>
+            <Link
+              href="/jobs/new"
+              className="btn btn-ghost"
+              style={{ textDecoration: "none" }}
+            >
+              <Plus style={{ width: 14, height: 14 }} />
+              Buat job lagi
+            </Link>
+          </div>
+        </div>
+
+        {/* QR + preview */}
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: 16 }}
+        >
+          <div
+            className="card card-pad"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center"
+            }}
           >
-            Lihat detail job
-          </Button>
-        </Link>
-        <Link href="/jobs/new">
-          <Button fullWidth leftIcon={<Plus className="w-4 h-4" />}>
-            Buat job baru lagi
-          </Button>
-        </Link>
+            <div className="eyebrow" style={{ marginBottom: 10 }}>
+              Share offline
+            </div>
+            <div
+              style={{
+                padding: 12,
+                background: "white",
+                border: "0.5px solid var(--border-strong)",
+                borderRadius: 8
+              }}
+            >
+              <QRCodeSVG value={shareUrl} size={160} fgColor="#1C9600" />
+            </div>
+            <div
+              className="caption"
+              style={{ marginTop: 10, textAlign: "center" }}
+            >
+              Scan QR untuk buka tracking page
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 8 }}
+            >
+              <Download style={{ width: 13, height: 13 }} />
+              Download QR
+            </button>
+          </div>
+
+          <div className="card card-pad">
+            <div className="eyebrow" style={{ marginBottom: 8 }}>
+              Customer akan melihat
+            </div>
+            <ul
+              style={{
+                margin: 0,
+                padding: 0,
+                listStyle: "none",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                fontSize: 12.5
+              }}
+            >
+              {[
+                "Status real-time + progress stepper",
+                "Lokasi GPS via TrackSolid",
+                "Info driver + tombol WhatsApp",
+                "Foto loading & unloading",
+                "Info unit & detail pengiriman"
+              ].map((t) => (
+                <li
+                  key={t}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "flex-start",
+                    color: "var(--text-secondary)"
+                  }}
+                >
+                  <Check
+                    style={{
+                      width: 14,
+                      height: 14,
+                      color: "var(--brand-primary)",
+                      flexShrink: 0,
+                      marginTop: 2
+                    }}
+                    strokeWidth={2.2}
+                  />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
 
       <Link
         href={`/track/${job.share_token}`}
         target="_blank"
         rel="noreferrer"
-        className="text-center text-[12px] text-text-muted hover:text-text inline-flex items-center gap-1 justify-center"
+        style={{
+          textAlign: "center",
+          fontSize: 12,
+          color: "var(--text-tertiary)",
+          textDecoration: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          justifyContent: "center"
+        }}
       >
-        Pratinjau halaman customer <ExternalLink className="w-3.5 h-3.5" />
+        Pratinjau halaman customer{" "}
+        <ExternalLink style={{ width: 12, height: 12 }} />
       </Link>
+
+      <Eye style={{ display: "none" }} />
     </div>
   );
 }

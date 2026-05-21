@@ -7,8 +7,7 @@ import {
   useEffect,
   useState
 } from "react";
-import { CheckCircle2, AlertCircle, Info, XCircle, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertCircle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 
 type Variant = "success" | "error" | "info" | "warning";
 
@@ -43,11 +42,11 @@ const iconFor: Record<Variant, React.ComponentType<{ className?: string }>> = {
   warning: AlertCircle
 };
 
-const colorFor: Record<Variant, string> = {
-  success: "bg-brand-light text-brand-dark border-brand/30",
-  error: "bg-status-cancelled-bg text-status-cancelled-fg border-danger/30",
-  info: "bg-status-info-bg text-status-info-fg border-blue-300",
-  warning: "bg-status-perbaikan-bg text-status-perbaikan-fg border-amber-300"
+const bgFor: Record<Variant, string> = {
+  success: "var(--brand-primary)",
+  error: "#c13838",
+  info: "#1f4fa8",
+  warning: "#854f0b"
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -77,24 +76,51 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 sm:left-auto sm:right-4 sm:translate-x-0 z-[100] flex flex-col gap-2 w-[min(92vw,400px)]">
+      <div
+        style={{
+          position: "fixed",
+          top: 20,
+          right: 20,
+          zIndex: 100,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          maxWidth: 400
+        }}
+      >
         {toasts.map((t) => {
           const Icon = iconFor[t.variant];
           return (
             <div
               key={t.id}
-              className={cn(
-                "flex items-start gap-2 border rounded-lg px-3 py-2.5 shadow-sm bg-white",
-                colorFor[t.variant]
-              )}
+              className="slide-up"
+              style={{
+                background: bgFor[t.variant],
+                color: "white",
+                padding: "10px 16px",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontSize: 13,
+                fontWeight: 500,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.18)"
+              }}
             >
-              <Icon className="w-4 h-4 mt-0.5 shrink-0" />
-              <p className="text-[13px] flex-1">{t.message}</p>
+              <Icon className="w-4 h-4" />
+              <p style={{ flex: 1, margin: 0 }}>{t.message}</p>
               <button
                 type="button"
                 onClick={() => remove(t.id)}
-                className="text-current/60 hover:text-current"
                 aria-label="Tutup"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255,255,255,0.7)",
+                  padding: 0,
+                  display: "flex",
+                  cursor: "pointer"
+                }}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -115,12 +141,10 @@ export function ToastConsumer({
   return <>{children(api)}</>;
 }
 
-// Hook that returns api without throwing if no provider — useful for early bootstrap
 export function useOptionalToast() {
   return useContext(ToastContext);
 }
 
-// Standalone helper effect to run an action after mount (used for inline page-level toasts)
 export function useMountEffect(fn: () => void) {
   useEffect(() => {
     fn();

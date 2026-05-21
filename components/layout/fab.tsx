@@ -15,13 +15,27 @@ export function Fab({ href, label = "Job baru", className, icon }: FabProps) {
   return (
     <Link
       href={href}
-      className={cn(
-        "lg:hidden fixed right-4 bottom-[72px] z-30 inline-flex items-center gap-2 h-12 px-4 rounded-full bg-brand text-white shadow-lg active:scale-[0.98] transition-transform",
-        className
-      )}
+      className={cn("lg:hidden fixed", className)}
+      style={{
+        right: 16,
+        bottom: 72,
+        zIndex: 30,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        height: 48,
+        padding: "0 18px",
+        borderRadius: 99,
+        background: "var(--brand-primary)",
+        color: "white",
+        boxShadow: "0 6px 20px rgba(28,150,0,0.32)",
+        textDecoration: "none",
+        fontSize: 13,
+        fontWeight: 600
+      }}
     >
-      {icon ?? <Plus className="w-4 h-4" />}
-      <span className="text-[13px] font-medium pr-1">{label}</span>
+      {icon ?? <Plus style={{ width: 16, height: 16 }} />}
+      <span>{label}</span>
     </Link>
   );
 }

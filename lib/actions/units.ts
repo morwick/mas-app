@@ -16,11 +16,35 @@ interface UnitInput {
   default_driver_id?: string | null;
 }
 
+async function driverAlreadyTakenBy(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  driverId: string,
+  excludeUnitId?: string
+): Promise<string | null> {
+  let q = supabase
+    .from("units")
+    .select("kode_unit")
+    .eq("default_driver_id", driverId)
+    .eq("is_active", true);
+  if (excludeUnitId) q = q.neq("id", excludeUnitId);
+  const { data, error } = await q.maybeSingle();
+  if (error || !data) return null;
+  return (data as { kode_unit: string }).kode_unit;
+}
+
 export async function createUnitAction(input: UnitInput): Promise<ActionResult<{ id: string }>> {
   if (!input.kode_unit?.trim()) return { ok: false, error: "Kode unit wajib diisi" };
   if (!input.no_polisi?.trim()) return { ok: false, error: "No polisi wajib diisi" };
   if (!input.jenis_unit_id) return { ok: false, error: "Jenis unit wajib dipilih" };
   const supabase = await createClient();
+  if (input.default_driver_id) {
+    const takenBy = await driverAlreadyTakenBy(supabase, input.default_driver_id);
+    if (takenBy)
+      return {
+        ok: false,
+        error: `Driver sudah jadi driver tetap unit ${takenBy}. Lepas dari unit itu dulu sebelum di-assign ke sini.`
+      };
+  }
   const { data, error } = await supabase
     .from("units")
     .insert({
@@ -35,8 +59,11 @@ export async function createUnitAction(input: UnitInput): Promise<ActionResult<{
     .select("id")
     .single();
   if (error) {
-    if (error.code === "23505")
+    if (error.code === "23505") {
+      if (error.message?.includes("units_default_driver_unique"))
+        return { ok: false, error: "Driver sudah dipakai unit lain" };
       return { ok: false, error: "Kode unit sudah dipakai" };
+    }
     return { ok: false, error: error.message };
   }
   revalidatePath("/units");
@@ -50,6 +77,14 @@ export async function updateUnitAction(
   input: Partial<UnitInput>
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  if (input.default_driver_id) {
+    const takenBy = await driverAlreadyTakenBy(supabase, input.default_driver_id, id);
+    if (takenBy)
+      return {
+        ok: false,
+        error: `Driver sudah jadi driver tetap unit ${takenBy}. Lepas dari unit itu dulu sebelum di-assign ke sini.`
+      };
+  }
   const payload: Record<string, unknown> = {};
   if (input.kode_unit) payload.kode_unit = input.kode_unit.trim().toUpperCase();
   if (input.jenis_unit_id) payload.jenis_unit_id = input.jenis_unit_id;
@@ -59,7 +94,14 @@ export async function updateUnitAction(
   if (input.default_driver_id !== undefined)
     payload.default_driver_id = input.default_driver_id || null;
   const { error } = await supabase.from("units").update(payload).eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    if (
+      error.code === "23505" &&
+      error.message?.includes("units_default_driver_unique")
+    )
+      return { ok: false, error: "Driver sudah dipakai unit lain" };
+    return { ok: false, error: error.message };
+  }
   revalidatePath("/units");
   revalidatePath(`/units/${id}`);
   revalidatePath("/dashboard");

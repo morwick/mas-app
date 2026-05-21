@@ -3,25 +3,23 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CalendarClock,
+  ArrowUpRight,
+  Camera,
+  Clock,
+  ExternalLink,
+  Flag,
   MapPin,
   MessageCircle,
   Phone,
-  ExternalLink,
-  Truck,
-  Camera,
-  RotateCw
+  Receipt,
+  Truck
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
-import { Logo } from "@/components/layout/logo";
 import { Lightbox } from "@/components/ui/lightbox";
 import { JobStepper } from "@/components/jobs/job-stepper";
 import { TrackSolidEmbed } from "@/components/tracking/tracksolid-embed";
 import { createClient } from "@/lib/supabase/client";
-import { formatDateTime, timeAgo } from "@/lib/utils";
-import type { Job } from "@/lib/types";
+import { formatDateTime } from "@/lib/utils";
+import type { Job, JobStatus } from "@/lib/types";
 
 interface Props {
   job: Job;
@@ -29,9 +27,60 @@ interface Props {
   driver: { nama: string; no_hp: string } | null;
 }
 
+type StatusInfo = { title: string; body: string; color: string; bg: string };
+
+const STATUS_INFO: Record<JobStatus, StatusInfo> = {
+  menunggu_pickup: {
+    title: "Menunggu pickup",
+    body: "Driver dalam perjalanan menuju lokasi pickup.",
+    color: "var(--status-pickup-text)",
+    bg: "var(--status-pickup-bg)"
+  },
+  loading: {
+    title: "Sedang loading",
+    body: "Alat sedang dinaikkan ke unit di lokasi asal.",
+    color: "#8a5a00",
+    bg: "#fff4e0"
+  },
+  dalam_perjalanan: {
+    title: "Dalam perjalanan",
+    body: "Unit menuju lokasi tujuan. Pantau lokasi real-time di peta.",
+    color: "var(--brand-primary-dark)",
+    bg: "var(--brand-primary-light)"
+  },
+  unloading: {
+    title: "Sedang unloading",
+    body: "Tiba di tujuan, alat sedang diturunkan.",
+    color: "#4a2bb0",
+    bg: "#efeafe"
+  },
+  selesai: {
+    title: "Pengiriman selesai",
+    body: "Alat sudah diturunkan di lokasi tujuan.",
+    color: "var(--brand-primary-dark)",
+    bg: "var(--brand-primary-light)"
+  },
+  cancelled: {
+    title: "Pengiriman dibatalkan",
+    body: "Pengiriman ini telah dibatalkan oleh admin.",
+    color: "#791f1f",
+    bg: "#fcebeb"
+  }
+};
+
+function driverInitials(nama: string) {
+  return nama
+    .replace(/^(Pak|Bapak|Bu|Ibu)\s+/i, "")
+    .split(" ")
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join("")
+    .toUpperCase();
+}
+
 export function CustomerTrackingView({ job, unit, driver }: Props) {
   const router = useRouter();
-
+  const si = STATUS_INFO[job.status] ?? STATUS_INFO.menunggu_pickup;
   const loadingPhotos = (job.photos ?? []).filter((p) => p.type === "loading");
   const unloadingPhotos = (job.photos ?? []).filter(
     (p) => p.type === "unloading"
@@ -42,12 +91,8 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
     index: number;
   } | null>(null);
 
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-
-  // Realtime subscribe + 30s polling fallback
   useEffect(() => {
     const supabase = createClient();
-
     const channel = supabase
       .channel(`track-${job.id}`)
       .on(
@@ -58,10 +103,7 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
           table: "jobs",
           filter: `id=eq.${job.id}`
         },
-        () => {
-          router.refresh();
-          setLastUpdate(new Date());
-        }
+        () => router.refresh()
       )
       .on(
         "postgres_changes",
@@ -71,18 +113,11 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
           table: "job_photos",
           filter: `job_id=eq.${job.id}`
         },
-        () => {
-          router.refresh();
-          setLastUpdate(new Date());
-        }
+        () => router.refresh()
       )
       .subscribe();
 
-    const poll = setInterval(() => {
-      router.refresh();
-      setLastUpdate(new Date());
-    }, 30000);
-
+    const poll = setInterval(() => router.refresh(), 30000);
     return () => {
       supabase.removeChannel(channel);
       clearInterval(poll);
@@ -90,210 +125,522 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
   }, [job.id, router]);
 
   return (
-    <div className="min-h-screen bg-page">
-      <header className="bg-white border-b border-border sticky top-0 z-20">
-        <div className="max-w-[720px] mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <Logo size="sm" />
-          <div className="text-right">
-            <p className="text-[10px] text-text-subtle uppercase tracking-wider">
-              Live tracking
-            </p>
-            <p className="text-[11px] text-text-muted inline-flex items-center gap-1">
-              <RotateCw className="w-3 h-3" />
-              update {timeAgo(lastUpdate)}
-            </p>
+    <div style={{ minHeight: "100vh", background: "var(--bg-page)" }}>
+      {/* Top bar */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          background: "white",
+          borderBottom: "0.5px solid var(--border-default)"
+        }}
+      >
+        <div
+          className="mx-auto"
+          style={{
+            maxWidth: 720,
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}
+        >
+          <div className="mas-mark">
+            <div
+              className="mas-mark-icon"
+              style={{ width: 26, height: 26, fontSize: 10 }}
+            >
+              MAS
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.1 }}>
+                MAS Tracking
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
+                Mitra Angkutan Sejati
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "4px 8px",
+              background: "var(--brand-primary-light)",
+              borderRadius: 99,
+              fontSize: 10,
+              fontWeight: 600,
+              color: "var(--brand-primary-dark)"
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 99,
+                background: "var(--brand-primary)",
+                animation: "pulse 1.5s infinite"
+              }}
+            />
+            LIVE
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-[720px] mx-auto px-4 py-4 flex flex-col gap-4">
-        <Card>
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-text-subtle">
-                Nomor job
-              </p>
-              <p className="text-[20px] font-semibold mt-0.5">{job.job_number}</p>
-              <p className="text-[13px] text-text mt-1">{job.customer_nama}</p>
+      <main
+        className="mx-auto"
+        style={{
+          maxWidth: 720,
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12
+        }}
+      >
+        {/* Hero status card */}
+        <div
+          style={{
+            padding: 16,
+            background: `linear-gradient(135deg, ${si.bg} 0%, white 100%)`,
+            border: `0.5px solid ${si.color}33`,
+            borderRadius: 14
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 8
+            }}
+          >
+            <span
+              className="mono"
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--text-secondary)"
+              }}
+            >
+              {job.job_number}
+            </span>
+            <span style={{ color: "var(--text-tertiary)", fontSize: 11 }}>·</span>
+            <span className="caption" style={{ fontSize: 11 }}>
+              {job.customer_nama}
+            </span>
+          </div>
+          <div
+            style={{
+              fontSize: 19,
+              fontWeight: 700,
+              color: si.color,
+              marginBottom: 4,
+              letterSpacing: "-0.005em"
+            }}
+          >
+            {si.title}
+          </div>
+          <div
+            style={{
+              fontSize: 12.5,
+              color: "var(--text-secondary)",
+              lineHeight: 1.5
+            }}
+          >
+            {si.body}
+          </div>
+          {job.eta && (
+            <div
+              style={{
+                marginTop: 14,
+                padding: "10px 12px",
+                background: "white",
+                borderRadius: 10,
+                border: `0.5px solid ${si.color}22`,
+                display: "flex",
+                alignItems: "center",
+                gap: 10
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 8,
+                  background: si.bg,
+                  color: si.color,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+              >
+                <Clock style={{ width: 18, height: 18 }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div
+                  className="caption"
+                  style={{ fontSize: 10.5, marginBottom: 2 }}
+                >
+                  Estimasi tiba
+                </div>
+                <div
+                  className="mono"
+                  style={{ fontSize: 14, fontWeight: 700 }}
+                >
+                  {formatDateTime(job.eta)}
+                </div>
+              </div>
             </div>
-            <StatusBadge status={job.status} size="md" />
-          </div>
-        </Card>
+          )}
+        </div>
 
-        <Card>
-          <p className="text-[12px] uppercase tracking-wider text-text-subtle mb-3">
+        {/* Progress stepper */}
+        <div
+          style={{
+            padding: 16,
+            background: "white",
+            borderRadius: 14,
+            border: "0.5px solid var(--border-default)"
+          }}
+        >
+          <div className="eyebrow" style={{ marginBottom: 12 }}>
             Progress pengiriman
-          </p>
-          <div className="hidden sm:block">
-            <JobStepper status={job.status} />
           </div>
-          <div className="sm:hidden">
-            <JobStepper status={job.status} orientation="vertical" />
-          </div>
-        </Card>
+          <JobStepper status={job.status} />
+        </div>
 
-        <Card padded={false}>
-          <div className="p-4 pb-2 flex items-center justify-between gap-2">
-            <p className="text-[12px] uppercase tracking-wider text-text-subtle">
-              Lokasi real-time
-            </p>
+        {/* Map */}
+        <div
+          style={{
+            borderRadius: 14,
+            overflow: "hidden",
+            border: "0.5px solid var(--border-default)",
+            background: "white"
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 14px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderBottom: "0.5px solid var(--border-default)"
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                Lokasi real-time
+              </div>
+              <div className="caption" style={{ fontSize: 10.5 }}>
+                TrackSolid · update tiap 30 detik
+              </div>
+            </div>
             {job.tracksolid_share_link && (
               <a
                 href={job.tracksolid_share_link}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[12px] text-brand-dark hover:underline"
+                className="btn btn-primary btn-sm"
+                style={{ textDecoration: "none" }}
               >
-                Buka di tab baru
-                <ExternalLink className="w-3 h-3" />
+                Buka peta <ArrowUpRight style={{ width: 11, height: 11 }} />
               </a>
             )}
           </div>
           <TrackSolidEmbed url={job.tracksolid_share_link} />
-        </Card>
+        </div>
 
+        {/* Unit & alat */}
         {unit && (
-          <Card>
-            <p className="text-[12px] uppercase tracking-wider text-text-subtle mb-3">
-              Unit yang mengangkut
-            </p>
-            <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-md bg-brand-light text-brand-dark flex items-center justify-center shrink-0">
-                <Truck className="w-6 h-6" />
+          <div
+            style={{
+              padding: 14,
+              background: "white",
+              borderRadius: 14,
+              border: "0.5px solid var(--border-default)"
+            }}
+          >
+            <div className="eyebrow" style={{ marginBottom: 10 }}>
+              Unit &amp; alat
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                paddingBottom: 12,
+                borderBottom: "0.5px solid var(--border-default)",
+                marginBottom: 12
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  background: "var(--brand-primary-light)",
+                  color: "var(--brand-primary-dark)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+              >
+                <Truck style={{ width: 22, height: 22 }} />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-semibold">{unit.kode_unit}</p>
-                <p className="text-[12px] text-text-muted">
-                  {unit.jenis} · {unit.no_polisi}
-                </p>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    marginBottom: 2
+                  }}
+                >
+                  {unit.kode_unit} · {unit.jenis}
+                </div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 11.5,
+                    color: "var(--text-tertiary)"
+                  }}
+                >
+                  {unit.no_polisi}
+                </div>
               </div>
             </div>
-          </Card>
+            <CustField
+              icon={<Receipt style={{ width: 14, height: 14 }} />}
+              label="Alat yang diangkut"
+              value={job.alat_diangkut}
+            />
+            <CustField
+              icon={<MapPin style={{ width: 14, height: 14 }} />}
+              label="Lokasi asal"
+              value={job.asal}
+            />
+            <CustField
+              icon={<Flag style={{ width: 14, height: 14 }} />}
+              label="Lokasi tujuan"
+              value={job.tujuan}
+            />
+          </div>
         )}
 
-        <Card>
-          <p className="text-[12px] uppercase tracking-wider text-text-subtle mb-3">
-            Detail pengiriman
-          </p>
-          <dl className="grid gap-3 text-[13px]">
-            <Row icon={<Truck className="w-4 h-4" />} label="Alat">
-              {job.alat_diangkut}
-            </Row>
-            <Row icon={<MapPin className="w-4 h-4" />} label="Asal">
-              {job.asal}
-            </Row>
-            <Row icon={<MapPin className="w-4 h-4" />} label="Tujuan">
-              {job.tujuan}
-            </Row>
-            <Row icon={<CalendarClock className="w-4 h-4" />} label="Berangkat">
-              {formatDateTime(job.etd)}
-            </Row>
-            {job.eta && (
-              <Row icon={<CalendarClock className="w-4 h-4" />} label="Perkiraan tiba">
-                {formatDateTime(job.eta)}
-              </Row>
-            )}
-          </dl>
-        </Card>
-
+        {/* Driver */}
         {driver && (
-          <Card>
-            <p className="text-[12px] uppercase tracking-wider text-text-subtle mb-3">
-              Driver
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-brand-light text-brand-dark flex items-center justify-center font-medium text-[14px] shrink-0">
-                {driver.nama
-                  .replace(/^(Pak|Bapak|Bu|Ibu)\s+/i, "")
-                  .split(" ")
-                  .slice(0, 2)
-                  .map((s) => s[0])
-                  .join("")}
+          <div
+            style={{
+              padding: 14,
+              background: "white",
+              borderRadius: 14,
+              border: "0.5px solid var(--border-default)"
+            }}
+          >
+            <div className="eyebrow" style={{ marginBottom: 10 }}>
+              Driver yang bertugas
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 99,
+                  background: "var(--brand-primary)",
+                  color: "white",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  flexShrink: 0
+                }}
+              >
+                {driverInitials(driver.nama)}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-semibold">{driver.nama}</p>
-                <p className="text-[12px] text-text-muted">{driver.no_hp}</p>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {driver.nama}
+                </div>
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 11.5,
+                    color: "var(--text-tertiary)"
+                  }}
+                >
+                  {driver.no_hp}
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 mt-3">
-              <a href={`tel:${driver.no_hp}`}>
-                <Button variant="secondary" fullWidth leftIcon={<Phone className="w-4 h-4" />}>
-                  Telepon
-                </Button>
-              </a>
+            <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
               <a
                 href={`https://wa.me/${driver.no_hp.replace(/^\+?0/, "62")}`}
                 target="_blank"
                 rel="noreferrer"
+                style={{
+                  flex: 1,
+                  background: "#25D366",
+                  color: "white",
+                  border: "none",
+                  padding: 10,
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  textDecoration: "none"
+                }}
               >
-                <Button fullWidth leftIcon={<MessageCircle className="w-4 h-4" />}>
-                  WhatsApp
-                </Button>
+                <MessageCircle style={{ width: 14, height: 14 }} />
+                WhatsApp driver
+              </a>
+              <a
+                href={`tel:${driver.no_hp}`}
+                style={{
+                  flex: 1,
+                  background: "white",
+                  color: "var(--text-primary)",
+                  border: "0.5px solid var(--border-strong)",
+                  padding: 10,
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  textDecoration: "none"
+                }}
+              >
+                <Phone style={{ width: 14, height: 14 }} />
+                Telepon
               </a>
             </div>
-          </Card>
+          </div>
         )}
 
-        {loadingPhotos.length > 0 && (
-          <Card>
-            <p className="text-[12px] uppercase tracking-wider text-text-subtle mb-3 inline-flex items-center gap-1.5">
-              <Camera className="w-3.5 h-3.5" />
-              Foto loading
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {loadingPhotos.map((p, i) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() =>
-                    setLightbox({
-                      images: loadingPhotos.map((x) => x.file_url),
-                      index: i
-                    })
-                  }
-                  className="aspect-square rounded-md overflow-hidden border border-border bg-page"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.file_url} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
+        {/* Photos */}
+        {(loadingPhotos.length > 0 || unloadingPhotos.length > 0) && (
+          <div
+            style={{
+              padding: 14,
+              background: "white",
+              borderRadius: 14,
+              border: "0.5px solid var(--border-default)"
+            }}
+          >
+            <div
+              className="eyebrow"
+              style={{
+                marginBottom: 10,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6
+              }}
+            >
+              <Camera style={{ width: 12, height: 12 }} />
+              Dokumentasi
             </div>
-          </Card>
+            {([
+              ["loading", "Saat loading", loadingPhotos],
+              ["unloading", "Saat unloading", unloadingPhotos]
+            ] as const).map(([key, label, photos]) => {
+              if (photos.length === 0) return null;
+              const urls = photos.map((p) => p.file_url);
+              return (
+                <div key={key} style={{ marginBottom: 10 }}>
+                  <div
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      marginBottom: 6,
+                      color: "var(--text-secondary)"
+                    }}
+                  >
+                    {label}
+                  </div>
+                  <div
+                    className="grid gap-1.5"
+                    style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
+                  >
+                    {photos.map((p, i) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setLightbox({ images: urls, index: i })}
+                        style={{
+                          aspectRatio: "1",
+                          borderRadius: 8,
+                          overflow: "hidden",
+                          border: "0.5px solid var(--border-default)",
+                          padding: 0,
+                          background: "var(--bg-page)",
+                          cursor: "pointer"
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.file_url}
+                          alt=""
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block"
+                          }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
 
-        {unloadingPhotos.length > 0 && (
-          <Card>
-            <p className="text-[12px] uppercase tracking-wider text-text-subtle mb-3 inline-flex items-center gap-1.5">
-              <Camera className="w-3.5 h-3.5" />
-              Foto unloading
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {unloadingPhotos.map((p, i) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() =>
-                    setLightbox({
-                      images: unloadingPhotos.map((x) => x.file_url),
-                      index: i
-                    })
-                  }
-                  className="aspect-square rounded-md overflow-hidden border border-border bg-page"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.file_url} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </Card>
-        )}
+        {/* Footer */}
+        <div
+          style={{
+            padding: 14,
+            background: "white",
+            borderRadius: 14,
+            border: "0.5px solid var(--border-default)",
+            textAlign: "center",
+            fontSize: 12,
+            color: "var(--text-secondary)",
+            lineHeight: 1.5
+          }}
+        >
+          Pertanyaan tentang pengiriman?
+          <br />
+          <strong style={{ color: "var(--text-primary)" }}>
+            (021) 8888-2026
+          </strong>{" "}
+          · admin@mas.co.id
+        </div>
 
-        <footer className="text-center py-6 text-[11px] text-text-subtle">
-          <p>PT. Mitra Angkutan Sejati &middot; Layanan angkutan alat berat</p>
-          <p className="mt-1">
-            Halaman ini akan otomatis tertutup 24 jam setelah pengiriman selesai.
-          </p>
-        </footer>
+        <div
+          style={{
+            textAlign: "center",
+            padding: "4px 0 24px",
+            fontSize: 10,
+            color: "var(--text-tertiary)"
+          }}
+        >
+          Powered by <strong>MAS Fleet Operations</strong>
+        </div>
       </main>
 
       <Lightbox
@@ -306,24 +653,56 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
   );
 }
 
-function Row({
+function CustField({
   icon,
   label,
-  children
+  value
 }: {
   icon: React.ReactNode;
   label: string;
-  children: React.ReactNode;
+  value: string;
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="text-text-muted mt-0.5 shrink-0">{icon}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] uppercase tracking-wider text-text-subtle">
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "flex-start",
+        padding: "8px 0"
+      }}
+    >
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 6,
+          background: "var(--bg-subtle)",
+          color: "var(--text-secondary)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0
+        }}
+      >
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="caption" style={{ fontSize: 10.5, marginBottom: 2 }}>
           {label}
-        </p>
-        <p className="mt-0.5">{children}</p>
+        </div>
+        <div
+          style={{
+            fontSize: 12.5,
+            lineHeight: 1.45,
+            color: "var(--text-primary)"
+          }}
+        >
+          {value}
+        </div>
       </div>
     </div>
   );
 }
+
+// Keep unused import lint happy
+void ExternalLink;

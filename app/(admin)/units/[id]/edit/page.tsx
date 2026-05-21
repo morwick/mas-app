@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getUnit } from "@/lib/queries/units";
+import { getUnit, getDriverAssignments } from "@/lib/queries/units";
 import { listJenisUnit } from "@/lib/queries/jenis-unit";
 import { listDrivers } from "@/lib/queries/drivers";
 import { UnitForm } from "@/components/units/unit-form";
@@ -12,13 +12,20 @@ export default async function EditUnitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [unit, jenis, drivers] = await Promise.all([
+  const [unit, jenis, drivers, driverAssignments] = await Promise.all([
     getUnit(id),
     listJenisUnit(),
-    listDrivers()
+    listDrivers(),
+    getDriverAssignments()
   ]);
   if (!unit) return notFound();
   return (
-    <UnitForm mode="edit" initial={unit} jenisUnitList={jenis} drivers={drivers} />
+    <UnitForm
+      mode="edit"
+      initial={unit}
+      jenisUnitList={jenis}
+      drivers={drivers}
+      driverAssignments={driverAssignments}
+    />
   );
 }

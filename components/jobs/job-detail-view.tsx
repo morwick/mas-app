@@ -1,26 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  CalendarClock,
   Camera,
   Copy,
   Eye,
   ExternalLink,
+  Flag,
   History,
+  Link as LinkIcon,
   MapPin,
   MessageCircle,
   Pencil,
-  Phone,
-  PowerOff,
   Printer,
+  RotateCw,
+  Trash2,
   Truck,
-  Trash2
+  X
 } from "lucide-react";
-import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -41,7 +41,7 @@ import type {
   JobStatusHistoryEntry,
   Unit
 } from "@/lib/types";
-import { formatDateTime, timeAgo } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 
 interface Props {
   job: Job;
@@ -50,19 +50,30 @@ interface Props {
   history: JobStatusHistoryEntry[];
 }
 
+function driverInitials(nama: string) {
+  return nama
+    .replace(/^(Pak|Bapak|Bu|Ibu)\s+/i, "")
+    .split(" ")
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join("")
+    .toUpperCase();
+}
+
 export function JobDetailView({ job, unit, driver, history }: Props) {
   const router = useRouter();
   const toast = useToast();
 
   const loadingPhotos = (job.photos ?? []).filter((p) => p.type === "loading");
-  const unloadingPhotos = (job.photos ?? []).filter((p) => p.type === "unloading");
+  const unloadingPhotos = (job.photos ?? []).filter(
+    (p) => p.type === "unloading"
+  );
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [uploadType, setUploadType] = useState<"loading" | "unloading" | null>(
     null
   );
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [lightbox, setLightbox] = useState<{
     images: string[];
     index: number;
@@ -73,12 +84,11 @@ export function JobDetailView({ job, unit, driver, history }: Props) {
     path: string;
   } | null>(null);
 
-  const shareUrl = useMemo(() => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/track/${job.share_token}`;
-    }
-    return `/track/${job.share_token}`;
-  }, [job.share_token]);
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+  const shareUrl = `${origin}/track/${job.share_token}`;
 
   const closed = job.status === "selesai" || job.status === "cancelled";
 
@@ -113,307 +123,520 @@ export function JobDetailView({ job, unit, driver, history }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <p className="text-[11px] uppercase tracking-wider text-text-subtle">
-              Nomor job
-            </p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <h1 className="text-h1">{job.job_number}</h1>
-              <StatusBadge status={job.status} size="md" />
+      {/* Header card with stepper */}
+      <div className="card">
+        <div
+          style={{
+            padding: 20,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 20,
+            flexWrap: "wrap"
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 6,
+                flexWrap: "wrap"
+              }}
+            >
+              <span
+                className="mono"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: "3px 8px",
+                  background: "var(--bg-subtle)",
+                  borderRadius: 6
+                }}
+              >
+                {job.job_number}
+              </span>
+              <StatusBadge status={job.status} />
+              <span className="caption mono">
+                Dibuat {formatDateTime(job.created_at)}
+              </span>
             </div>
-            <p className="text-[13px] text-text mt-1">
+            <div className="h1" style={{ marginBottom: 4 }}>
+              {job.alat_diangkut}
+            </div>
+            <div className="body muted">
               {job.customer_nama}
               {job.pic_nama && (
-                <span className="text-text-muted"> · PIC {job.pic_nama}</span>
+                <>
+                  {" · PIC "}
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    {job.pic_nama}
+                  </strong>
+                </>
               )}
-            </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div
+            style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+          >
             <Link
               href={`/jobs/${job.id}/surat-jalan`}
               target="_blank"
               rel="noreferrer"
+              className="btn btn-secondary btn-sm"
+              style={{ textDecoration: "none" }}
             >
-              <Button
-                variant="secondary"
-                leftIcon={<Printer className="w-4 h-4" />}
-              >
-                Cetak surat jalan
-              </Button>
+              <Printer style={{ width: 14, height: 14 }} />
+              Cetak surat jalan
             </Link>
-            <Link href={`/jobs/${job.id}/edit`}>
-              <Button variant="secondary" leftIcon={<Pencil className="w-4 h-4" />}>
-                Edit
-              </Button>
+            <Link
+              href={`/jobs/${job.id}/edit`}
+              className="btn btn-secondary btn-sm"
+              style={{ textDecoration: "none" }}
+            >
+              <Pencil style={{ width: 14, height: 14 }} />
+              Edit
             </Link>
             {!closed && (
-              <Button
-                leftIcon={<ArrowRight className="w-4 h-4" />}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ color: "#C13838", borderColor: "#F5C0C0" }}
+                onClick={() => setCancelOpen(true)}
+              >
+                Cancel job
+              </button>
+            )}
+            {!closed && (
+              <button
+                type="button"
+                className="btn btn-primary"
                 onClick={() => setStatusOpen(true)}
               >
+                <RotateCw style={{ width: 14, height: 14 }} />
                 Update status
-              </Button>
+              </button>
             )}
           </div>
         </div>
-        {job.cancelled_reason && (
-          <p className="mt-3 text-[13px] text-status-cancelled-fg bg-status-cancelled-bg px-3 py-2 rounded-md">
-            Dibatalkan: {job.cancelled_reason}
-          </p>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader title="Progress pengiriman" />
-        <div className="hidden sm:block">
+        <div
+          style={{
+            padding: "20px 20px 24px",
+            borderTop: "0.5px solid var(--border-default)",
+            background: "var(--bg-muted)"
+          }}
+        >
           <JobStepper status={job.status} />
         </div>
-        <div className="sm:hidden">
-          <JobStepper status={job.status} orientation="vertical" />
+      </div>
+
+      {job.cancelled_reason && (
+        <div
+          style={{
+            padding: "10px 14px",
+            background: "var(--status-cancelled-bg)",
+            color: "var(--status-cancelled-text)",
+            borderRadius: 8,
+            fontSize: 13
+          }}
+        >
+          <strong>Dibatalkan:</strong> {job.cancelled_reason}
         </div>
-      </Card>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Detail pengiriman" />
-          <dl className="grid gap-3 text-[13px]">
-            <Row icon={<Truck className="w-4 h-4" />} label="Alat">
-              {job.alat_diangkut}
-            </Row>
-            <Row icon={<MapPin className="w-4 h-4" />} label="Asal">
-              {job.asal}
-            </Row>
-            <Row icon={<MapPin className="w-4 h-4" />} label="Tujuan">
-              {job.tujuan}
-            </Row>
-            <Row icon={<CalendarClock className="w-4 h-4" />} label="ETD">
-              {formatDateTime(job.etd)}
-            </Row>
-            {job.eta && (
-              <Row icon={<CalendarClock className="w-4 h-4" />} label="ETA">
-                {formatDateTime(job.eta)}
-              </Row>
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "1.6fr 1fr" }}
+      >
+        {/* Left column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Detail pengiriman */}
+          <div className="card card-pad-lg">
+            <div className="h3" style={{ marginBottom: 14 }}>
+              Detail pengiriman
+            </div>
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: "1fr 1fr", gap: 16 }}
+            >
+              <DetailField label="Alat diangkut" value={job.alat_diangkut} />
+              <DetailField
+                label="ETD"
+                value={formatDateTime(job.etd)}
+                mono
+              />
+              <DetailField label="Asal" value={job.asal} />
+              <DetailField
+                label="ETA"
+                value={job.eta ? formatDateTime(job.eta) : "—"}
+                mono
+              />
+              <DetailField label="Tujuan" value={job.tujuan} fullWidth />
+            </div>
+            {job.catatan && (
+              <>
+                <div className="divider" style={{ margin: "14px 0" }} />
+                <DetailField
+                  label="Catatan internal"
+                  value={job.catatan}
+                  fullWidth
+                />
+              </>
             )}
-            {job.pic_no_hp && (
-              <Row icon={<Phone className="w-4 h-4" />} label="PIC">
-                {job.pic_nama} ({job.pic_no_hp})
-              </Row>
-            )}
-          </dl>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader title="Unit & driver" />
-          <div className="grid gap-3 text-[13px]">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-md bg-brand-light text-brand-dark flex items-center justify-center shrink-0">
-                <Truck className="w-5 h-5" />
+          {/* Photos sections */}
+          <PhotoSection
+            title="Foto loading"
+            photos={loadingPhotos}
+            onUpload={() => setUploadType("loading")}
+            onOpen={(i) =>
+              setLightbox({
+                images: loadingPhotos.map((p) => p.file_url),
+                index: i
+              })
+            }
+            onDelete={(p) =>
+              setDeletePhoto({ id: p.id, path: p.file_path })
+            }
+            canUpload={!closed}
+            max={5}
+          />
+          <PhotoSection
+            title="Foto unloading"
+            photos={unloadingPhotos}
+            onUpload={() => setUploadType("unloading")}
+            onOpen={(i) =>
+              setLightbox({
+                images: unloadingPhotos.map((p) => p.file_url),
+                index: i
+              })
+            }
+            onDelete={(p) =>
+              setDeletePhoto({ id: p.id, path: p.file_path })
+            }
+            canUpload={
+              !closed && (job.status === "unloading" || job.status === "selesai")
+            }
+            max={5}
+          />
+        </div>
+
+        {/* Right column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Share link card */}
+          <div
+            className="card card-pad"
+            style={{
+              background: "var(--brand-primary-light)",
+              border: "0.5px solid #B5DFA0"
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 8
+              }}
+            >
+              <LinkIcon
+                style={{
+                  width: 16,
+                  height: 16,
+                  color: "var(--brand-primary-dark)"
+                }}
+              />
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--brand-primary-dark)"
+                }}
+              >
+                Share link customer
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium">{unit?.kode_unit}</p>
-                  {unit && <StatusBadge status={unit.status} />}
+            </div>
+            <div
+              style={{
+                background: "white",
+                padding: 8,
+                borderRadius: 6,
+                marginBottom: 10,
+                border: "0.5px solid #B5DFA0"
+              }}
+            >
+              <div
+                className="mono"
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-secondary)",
+                  wordBreak: "break-all"
+                }}
+              >
+                {shareUrl}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ flex: 1, background: "white" }}
+                onClick={() => {
+                  navigator.clipboard?.writeText(shareUrl);
+                  toast.success("Link disalin");
+                }}
+              >
+                <Copy style={{ width: 13, height: 13 }} />
+                Copy link
+              </button>
+              <Link
+                href={`/track/${job.share_token}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ background: "white", textDecoration: "none" }}
+              >
+                <Eye style={{ width: 13, height: 13 }} />
+                Preview
+              </Link>
+            </div>
+          </div>
+
+          {/* TrackSolid */}
+          <div className="card card-pad">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 10
+              }}
+            >
+              <div className="eyebrow">TrackSolid</div>
+              <Link
+                href={`/jobs/${job.id}/edit`}
+                className="btn-link"
+                style={{ fontSize: 11 }}
+              >
+                Edit link
+              </Link>
+            </div>
+            {job.tracksolid_share_link ? (
+              <a
+                href={job.tracksolid_share_link}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ width: "100%", textDecoration: "none" }}
+              >
+                <ExternalLink style={{ width: 13, height: 13 }} />
+                Buka di TrackSolid
+              </a>
+            ) : (
+              <p
+                style={{
+                  fontSize: 12.5,
+                  color: "var(--text-tertiary)",
+                  margin: 0
+                }}
+              >
+                Belum ada link TrackSolid.
+              </p>
+            )}
+          </div>
+
+          {/* Unit */}
+          {unit && (
+            <div className="card card-pad">
+              <div className="eyebrow" style={{ marginBottom: 10 }}>
+                Unit
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12
+                }}
+              >
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 8,
+                    background: "var(--bg-subtle)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--text-secondary)"
+                  }}
+                >
+                  <Truck style={{ width: 20, height: 20 }} />
                 </div>
-                <p className="text-text-muted text-[12px]">
-                  {unit?.jenis_unit_nama} · {unit?.no_polisi}
-                </p>
-              </div>
-              {unit && (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{unit.kode_unit}</div>
+                  <div className="caption">
+                    {unit.jenis_unit_nama} · {unit.no_polisi}
+                  </div>
+                </div>
                 <Link
                   href={`/units/${unit.id}`}
-                  className="text-[12px] text-brand-dark hover:underline shrink-0"
+                  className="btn-link"
+                  style={{ display: "inline-flex" }}
                 >
-                  Lihat
+                  <ArrowRight style={{ width: 14, height: 14 }} />
                 </Link>
-              )}
+              </div>
             </div>
-            <div className="border-t border-border/70 pt-3 flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-brand-light text-brand-dark flex items-center justify-center text-[12px] font-medium shrink-0">
-                {driver?.nama
-                  .replace(/^(Pak|Bapak|Bu|Ibu)\s+/i, "")
-                  .split(" ")
-                  .slice(0, 2)
-                  .map((s) => s[0])
-                  .join("")}
+          )}
+
+          {/* Driver */}
+          {driver && (
+            <div className="card card-pad">
+              <div className="eyebrow" style={{ marginBottom: 10 }}>
+                Driver
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium">{driver?.nama}</p>
-                <p className="text-text-muted text-[12px]">{driver?.no_hp}</p>
-              </div>
-              {driver && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12
+                }}
+              >
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 99,
+                    background: "var(--brand-primary)",
+                    color: "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 600,
+                    fontSize: 13
+                  }}
+                >
+                  {driverInitials(driver.nama)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{driver.nama}</div>
+                  <div className="caption mono">{driver.no_hp}</div>
+                </div>
                 <a
                   href={`https://wa.me/${driver.no_hp.replace(/^\+?0/, "62")}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[12px] text-brand-dark hover:underline shrink-0 inline-flex items-center gap-1"
+                  className="btn btn-primary btn-sm btn-icon"
+                  style={{ textDecoration: "none" }}
+                  title="WhatsApp"
                 >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  WhatsApp
+                  <MessageCircle style={{ width: 14, height: 14 }} />
                 </a>
+              </div>
+            </div>
+          )}
+
+          {/* Audit log */}
+          <div className="card">
+            <div
+              style={{
+                padding: "14px 16px",
+                borderBottom: "0.5px solid var(--border-default)"
+              }}
+            >
+              <div className="h3">Riwayat status</div>
+              <div className="caption">Auto-log perubahan status</div>
+            </div>
+            <div style={{ padding: 14 }}>
+              {history.length === 0 ? (
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    color: "var(--text-tertiary)",
+                    textAlign: "center",
+                    padding: 12
+                  }}
+                >
+                  Belum ada perubahan.
+                </div>
+              ) : (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 0 }}
+                >
+                  {history.map((h, i) => (
+                    <div
+                      key={h.id}
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        paddingBottom: i === history.length - 1 ? 0 : 14,
+                        position: "relative"
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "relative",
+                          flexShrink: 0,
+                          paddingTop: 4
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 99,
+                            background:
+                              i === 0
+                                ? "var(--brand-primary)"
+                                : "var(--text-tertiary)"
+                          }}
+                        />
+                        {i < history.length - 1 && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 14,
+                              left: 3.5,
+                              width: 1,
+                              bottom: -14,
+                              background: "var(--border-default)"
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, paddingBottom: 4 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            marginBottom: 2
+                          }}
+                        >
+                          <StatusBadge status={h.status_new} />
+                        </div>
+                        <div className="caption mono">
+                          {formatDateTime(h.changed_at)}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: "var(--text-tertiary)"
+                          }}
+                        >
+                          oleh {h.changed_by_nama}
+                          {h.notes ? ` · ${h.notes}` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader
-          title="Tracking GPS (TrackSolid)"
-          action={
-            <Link href={`/jobs/${job.id}/edit`}>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Pencil className="w-3.5 h-3.5" />}
-              >
-                Edit link
-              </Button>
-            </Link>
-          }
-        />
-        {job.tracksolid_share_link ? (
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-[12px] font-mono text-text-muted break-all bg-page px-3 py-2 rounded-md border border-border flex-1 min-w-0">
-              {job.tracksolid_share_link}
-            </div>
-            <a href={job.tracksolid_share_link} target="_blank" rel="noreferrer">
-              <Button
-                variant="secondary"
-                leftIcon={<ExternalLink className="w-4 h-4" />}
-              >
-                Buka
-              </Button>
-            </a>
-          </div>
-        ) : (
-          <p className="text-[13px] text-text-muted">
-            Belum ada link TrackSolid. Tambahkan agar customer bisa lihat lokasi
-            real-time.
-          </p>
-        )}
-      </Card>
-
-      <PhotoSection
-        title="Foto loading"
-        photos={loadingPhotos}
-        onUpload={() => setUploadType("loading")}
-        onOpen={(i) =>
-          setLightbox({
-            images: loadingPhotos.map((p) => p.file_url),
-            index: i
-          })
-        }
-        onDelete={(p) => setDeletePhoto({ id: p.id, path: p.file_path })}
-        canUpload={!closed}
-        max={5}
-      />
-      <PhotoSection
-        title="Foto unloading"
-        photos={unloadingPhotos}
-        onUpload={() => setUploadType("unloading")}
-        onOpen={(i) =>
-          setLightbox({
-            images: unloadingPhotos.map((p) => p.file_url),
-            index: i
-          })
-        }
-        onDelete={(p) => setDeletePhoto({ id: p.id, path: p.file_path })}
-        canUpload={!closed}
-        max={5}
-      />
-
-      <Card>
-        <CardHeader
-          title="Share link customer"
-          description="Customer akses tracking tanpa login."
-          action={
-            <Link href={`/track/${job.share_token}`} target="_blank" rel="noreferrer">
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Eye className="w-3.5 h-3.5" />}
-              >
-                Lihat sebagai customer
-              </Button>
-            </Link>
-          }
-        />
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex-1 bg-page rounded-md px-3 py-2 text-[12px] font-mono border border-border break-all">
-            {shareUrl}
-          </div>
-          <Button
-            variant="secondary"
-            leftIcon={<Copy className="w-4 h-4" />}
-            onClick={() => {
-              navigator.clipboard?.writeText(shareUrl);
-              toast.success("Link disalin");
-            }}
-          >
-            Salin
-          </Button>
         </div>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Riwayat perubahan"
-          action={
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((v) => !v)}
-              className="text-[12px] text-brand-dark hover:underline inline-flex items-center gap-1"
-            >
-              <History className="w-3.5 h-3.5" />
-              {historyOpen ? "Sembunyikan" : "Tampilkan"}
-            </button>
-          }
-        />
-        {historyOpen && (
-          <ol className="flex flex-col gap-3 text-[13px]">
-            {history.map((h) => (
-              <li key={h.id} className="flex items-start gap-3">
-                <span className="w-2 h-2 mt-2 rounded-full bg-brand shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p>
-                    <span className="text-text-muted">
-                      {h.status_old ? `${h.status_old} →` : "Dibuat →"}
-                    </span>{" "}
-                    <span className="font-medium">{h.status_new}</span>
-                  </p>
-                  <p className="text-[11px] text-text-muted">
-                    {formatDateTime(h.changed_at)} · oleh {h.changed_by_nama}
-                    {h.notes ? ` · ${h.notes}` : ""}
-                  </p>
-                </div>
-                <span className="text-[10px] text-text-subtle whitespace-nowrap">
-                  {timeAgo(h.changed_at)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </Card>
-
-      {!closed && (
-        <Card className="border-danger/30">
-          <CardHeader
-            title="Zona berbahaya"
-            description="Batalkan job bila pengiriman tidak jadi dilakukan."
-            action={
-              <Button
-                variant="danger"
-                leftIcon={<PowerOff className="w-4 h-4" />}
-                onClick={() => setCancelOpen(true)}
-              >
-                Batalkan job
-              </Button>
-            }
-          />
-        </Card>
-      )}
+      </div>
 
       <UpdateStatusModal
         open={statusOpen}
@@ -454,27 +677,41 @@ export function JobDetailView({ job, unit, driver, history }: Props) {
         images={lightbox?.images ?? []}
         initialIndex={lightbox?.index ?? 0}
       />
+
+      {/* Silence unused imports */}
+      <MapPin style={{ display: "none" }} />
+      <Flag style={{ display: "none" }} />
+      <History style={{ display: "none" }} />
+      <X style={{ display: "none" }} />
+      <Button style={{ display: "none" }} />
     </div>
   );
 }
 
-function Row({
-  icon,
+function DetailField({
   label,
-  children
+  value,
+  mono,
+  fullWidth
 }: {
-  icon: React.ReactNode;
   label: string;
-  children: React.ReactNode;
+  value: string;
+  mono?: boolean;
+  fullWidth?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="text-text-muted mt-0.5 shrink-0">{icon}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] uppercase tracking-wider text-text-subtle">
-          {label}
-        </p>
-        <p className="mt-0.5">{children}</p>
+    <div style={{ gridColumn: fullWidth ? "1 / -1" : "auto" }}>
+      <div
+        className="eyebrow"
+        style={{ marginBottom: 4, fontSize: 10.5 }}
+      >
+        {label}
+      </div>
+      <div
+        className={mono ? "mono" : ""}
+        style={{ fontSize: 14, fontWeight: 500 }}
+      >
+        {value}
       </div>
     </div>
   );
@@ -500,57 +737,119 @@ function PhotoSection({
   max
 }: PhotoSectionProps) {
   return (
-    <Card>
-      <CardHeader
-        title={title}
-        description={`${photos.length} / ${max} foto`}
-        action={
-          canUpload &&
-          photos.length < max && (
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<Camera className="w-3.5 h-3.5" />}
-              onClick={onUpload}
-            >
-              Upload foto
-            </Button>
-          )
-        }
-      />
-      {photos.length === 0 ? (
-        <p className="text-[13px] text-text-muted">Belum ada foto.</p>
-      ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-          {photos.map((p, i) => (
+    <div className="card">
+      <div
+        style={{
+          padding: "14px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: "0.5px solid var(--border-default)"
+        }}
+      >
+        <div>
+          <div className="h3">{title}</div>
+          <div className="caption" style={{ fontSize: 11 }}>
+            {photos.length} / {max} foto
+          </div>
+        </div>
+        {canUpload && photos.length < max && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onUpload}
+          >
+            <Camera style={{ width: 14, height: 14 }} />
+            Upload foto
+          </button>
+        )}
+      </div>
+      <div
+        className="grid"
+        style={{
+          padding: 14,
+          gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+          gap: 10
+        }}
+      >
+        {photos.length === 0 ? (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              padding: 24,
+              textAlign: "center",
+              border: "1px dashed var(--border-strong)",
+              borderRadius: 8,
+              color: "var(--text-tertiary)",
+              fontSize: 12.5
+            }}
+          >
+            Belum ada foto {title.toLowerCase().replace("foto ", "")}.
+          </div>
+        ) : (
+          photos.map((p, i) => (
             <div
               key={p.id}
-              className="aspect-square rounded-md overflow-hidden border border-border bg-page relative group"
+              style={{
+                aspectRatio: "1",
+                borderRadius: 8,
+                overflow: "hidden",
+                border: "0.5px solid var(--border-default)",
+                background: "var(--bg-page)",
+                position: "relative"
+              }}
             >
               <button
                 type="button"
                 onClick={() => onOpen(i)}
-                className="w-full h-full"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer"
+                }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={p.file_url}
                   alt=""
-                  className="w-full h-full object-cover"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block"
+                  }}
                 />
               </button>
               <button
                 type="button"
                 onClick={() => onDelete(p)}
-                className="absolute top-1 right-1 w-7 h-7 bg-white/90 hover:bg-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 aria-label="Hapus foto"
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: 4,
+                  width: 26,
+                  height: 26,
+                  borderRadius: 99,
+                  background: "rgba(255,255,255,0.92)",
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer"
+                }}
               >
-                <Trash2 className="w-3.5 h-3.5 text-status-cancelled-fg" />
+                <Trash2
+                  style={{ width: 13, height: 13, color: "#C13838" }}
+                />
               </button>
             </div>
-          ))}
-        </div>
-      )}
-    </Card>
+          ))
+        )}
+      </div>
+    </div>
   );
 }

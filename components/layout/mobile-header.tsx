@@ -16,7 +16,8 @@ function getPageTitle(pathname: string) {
   if (last === "edit") return `Edit ${root.label.toLowerCase()}`;
   if (last === "confirmation") return "Konfirmasi job";
   if (last === "utilisasi") return "Utilisasi armada";
-  if (segments[0] === "reports" && last === "customers") return "Riwayat customer";
+  if (segments[0] === "reports" && last === "customers")
+    return "Riwayat customer";
   if (segments[0] === "settings" && last === "profile") return "Profil";
   if (segments[0] === "settings" && last === "jenis-unit") return "Jenis unit";
   return `Detail ${root.label.toLowerCase()}`;
@@ -29,8 +30,14 @@ export function MobileHeader() {
   const title = getPageTitle(pathname);
 
   return (
-    <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-border">
-      <div className="flex items-center justify-between h-14 px-3">
+    <header
+      className="lg:hidden sticky top-0 z-30 bg-white"
+      style={{ borderBottom: "0.5px solid var(--border-default)" }}
+    >
+      <div
+        className="flex items-center justify-between"
+        style={{ height: 56, padding: "0 12px" }}
+      >
         {isRoot ? (
           <Logo size="sm" />
         ) : (
@@ -39,21 +46,66 @@ export function MobileHeader() {
               type="button"
               onClick={() => router.back()}
               aria-label="Kembali"
-              className="w-9 h-9 rounded-md hover:bg-page flex items-center justify-center text-text"
+              className="btn-ghost"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 6,
+                background: "transparent",
+                border: "none",
+                color: "var(--text-primary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft style={{ width: 20, height: 20 }} />
             </button>
-            <h1 className="text-[16px] font-medium text-text truncate">{title}</h1>
+            <h1
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                margin: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {title}
+            </h1>
           </div>
         )}
         <div className="flex items-center gap-1">
           <Link
             href="/dashboard"
             aria-label="Notifikasi"
-            className="relative w-9 h-9 rounded-md hover:bg-page flex items-center justify-center text-text-muted"
+            className="btn-ghost"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 6,
+              background: "transparent",
+              color: "var(--text-tertiary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative"
+            }}
           >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-brand rounded-full" />
+            <Bell style={{ width: 18, height: 18 }} />
+            <span
+              style={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                width: 7,
+                height: 7,
+                borderRadius: 99,
+                background: "#c13838",
+                border: "1.5px solid white"
+              }}
+            />
           </Link>
         </div>
       </div>

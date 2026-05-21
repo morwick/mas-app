@@ -13,18 +13,18 @@ type StatusKey =
   | "selesai"
   | "neutral";
 
-const statusStyle: Record<StatusKey, string> = {
-  standby: "bg-status-standby-bg text-status-standby-fg",
-  bertugas: "bg-status-bertugas-bg text-status-bertugas-fg",
-  perbaikan: "bg-status-perbaikan-bg text-status-perbaikan-fg",
-  cancelled: "bg-status-cancelled-bg text-status-cancelled-fg",
-  info: "bg-status-info-bg text-status-info-fg",
-  menunggu_pickup: "bg-status-standby-bg text-status-standby-fg",
-  loading: "bg-status-perbaikan-bg text-status-perbaikan-fg",
-  dalam_perjalanan: "bg-status-info-bg text-status-info-fg",
-  unloading: "bg-status-perbaikan-bg text-status-perbaikan-fg",
-  selesai: "bg-status-bertugas-bg text-status-bertugas-fg",
-  neutral: "bg-status-standby-bg text-status-standby-fg"
+const statusClass: Record<StatusKey, string> = {
+  standby: "badge-standby",
+  bertugas: "badge-bertugas",
+  perbaikan: "badge-perbaikan",
+  cancelled: "badge-cancelled",
+  info: "badge-pickup",
+  menunggu_pickup: "badge-pickup",
+  loading: "badge-loading",
+  dalam_perjalanan: "badge-perjalanan",
+  unloading: "badge-unloading",
+  selesai: "badge-selesai",
+  neutral: ""
 };
 
 const labels: Partial<Record<StatusKey, string>> = {
@@ -42,21 +42,19 @@ const labels: Partial<Record<StatusKey, string>> = {
 interface StatusBadgeProps {
   status: StatusKey;
   className?: string;
+  /** @deprecated kept for backward compat; design uses single size */
   size?: "sm" | "md";
+  withDot?: boolean;
 }
 
-export function StatusBadge({ status, className, size = "sm" }: StatusBadgeProps) {
+export function StatusBadge({
+  status,
+  className,
+  withDot = true
+}: StatusBadgeProps) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center font-medium tracking-[0.3px] rounded-full",
-        size === "sm"
-          ? "px-2.5 py-0.5 text-[10px]"
-          : "px-3 py-1 text-[12px]",
-        statusStyle[status],
-        className
-      )}
-    >
+    <span className={cn("badge", statusClass[status], className)}>
+      {withDot && <span className="badge-dot" />}
       {labels[status] ?? status}
     </span>
   );
@@ -68,22 +66,17 @@ interface BadgeProps {
   className?: string;
 }
 
+const variantClass: Record<NonNullable<BadgeProps["variant"]>, string> = {
+  neutral: "",
+  brand: "badge-bertugas",
+  info: "badge-pickup",
+  warning: "badge-perbaikan",
+  danger: "badge-cancelled"
+};
+
 export function Badge({ children, variant = "neutral", className }: BadgeProps) {
-  const styles: Record<string, string> = {
-    neutral: "bg-status-standby-bg text-status-standby-fg",
-    brand: "bg-brand-light text-brand-dark",
-    info: "bg-status-info-bg text-status-info-fg",
-    warning: "bg-status-perbaikan-bg text-status-perbaikan-fg",
-    danger: "bg-status-cancelled-bg text-status-cancelled-fg"
-  };
   return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full",
-        styles[variant],
-        className
-      )}
-    >
+    <span className={cn("badge", variantClass[variant], className)}>
       {children}
     </span>
   );

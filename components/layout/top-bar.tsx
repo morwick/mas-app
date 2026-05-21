@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronRight } from "lucide-react";
+import { Bell, ChevronRight, Search } from "lucide-react";
 import { navItems } from "./nav-items";
 
 function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
@@ -22,60 +22,139 @@ function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
       crumbs.push({ label: "Riwayat customer" });
     else if (seg === "profile") crumbs.push({ label: "Profil" });
     else if (seg === "jenis-unit") crumbs.push({ label: "Jenis unit" });
-    else if (seg.length > 8 && /[0-9a-f-]/i.test(seg)) crumbs.push({ label: "Detail" });
+    else if (seg.length > 8 && /[0-9a-f-]/i.test(seg))
+      crumbs.push({ label: "Detail" });
   }
   return crumbs;
 }
 
-interface TopBarProps {
-  user: { nama: string; email: string; initials: string } | null;
+function getPageTitle(pathname: string): string {
+  const crumbs = getBreadcrumb(pathname);
+  if (crumbs.length === 0) return "MAS";
+  const last = crumbs[crumbs.length - 1];
+  if (crumbs.length === 1) return last.label;
+  const root = crumbs[0].label;
+  if (last.label === "Baru") return `${root} baru`;
+  if (last.label === "Edit") return `Edit ${root.toLowerCase()}`;
+  if (last.label === "Konfirmasi") return "Konfirmasi job";
+  if (last.label === "Detail") return `Detail ${root.toLowerCase()}`;
+  return last.label;
 }
 
-export function TopBar({ user }: TopBarProps) {
+export function TopBar() {
   const pathname = usePathname();
   const crumbs = getBreadcrumb(pathname);
+  const title = getPageTitle(pathname);
+  const breadcrumbTrail = crumbs.length > 1 ? crumbs.slice(0, -1) : [];
 
   return (
-    <header className="hidden lg:flex h-14 sticky top-0 z-30 bg-white border-b border-border items-center justify-between px-6">
-      <nav className="flex items-center gap-1.5 text-[13px]">
-        {crumbs.map((c, i) => (
-          <span key={i} className="flex items-center gap-1.5">
-            {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-text-subtle" />}
-            {c.href ? (
-              <Link
-                href={c.href}
-                className="text-text-muted hover:text-text"
+    <header
+      className="hidden lg:flex items-center sticky top-0 z-30 bg-white"
+      style={{
+        height: "var(--topbar-h)",
+        borderBottom: "0.5px solid var(--border-default)",
+        padding: "0 24px",
+        gap: 16
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {breadcrumbTrail.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "var(--text-tertiary)",
+              marginBottom: 2
+            }}
+          >
+            {breadcrumbTrail.map((c, i) => (
+              <span
+                key={i}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                {c.label}
-              </Link>
-            ) : (
-              <span className="text-text font-medium">{c.label}</span>
-            )}
-          </span>
-        ))}
-      </nav>
-      <div className="flex items-center gap-3">
+                {i > 0 && <ChevronRight style={{ width: 12, height: 12 }} />}
+                {c.href ? (
+                  <Link
+                    href={c.href}
+                    style={{
+                      color: "var(--text-tertiary)",
+                      textDecoration: "none"
+                    }}
+                  >
+                    {c.label}
+                  </Link>
+                ) : (
+                  <span style={{ color: "var(--text-secondary)" }}>{c.label}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="h2">{title}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ position: "relative" }}>
+          <div
+            style={{
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "var(--text-tertiary)",
+              pointerEvents: "none",
+              display: "flex"
+            }}
+          >
+            <Search style={{ width: 15, height: 15 }} />
+          </div>
+          <input
+            placeholder="Cari job, unit, customer…"
+            className="input"
+            style={{
+              width: 280,
+              paddingLeft: 36,
+              paddingRight: 56,
+              height: 36,
+              fontSize: 13
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              right: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "flex",
+              gap: 3,
+              pointerEvents: "none"
+            }}
+          >
+            <span className="kbd">⌘</span>
+            <span className="kbd">K</span>
+          </div>
+        </div>
         <button
           type="button"
           aria-label="Notifikasi"
-          className="relative w-9 h-9 rounded-md hover:bg-page flex items-center justify-center text-text-muted"
+          className="btn btn-secondary btn-sm btn-icon"
+          style={{ position: "relative" }}
         >
-          <Bell className="w-4 h-4" />
+          <Bell style={{ width: 16, height: 16 }} />
+          <span
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 5,
+              width: 7,
+              height: 7,
+              borderRadius: 99,
+              background: "#c13838",
+              border: "1.5px solid white"
+            }}
+          />
         </button>
-        {user && (
-          <Link
-            href="/settings/profile"
-            className="flex items-center gap-2 pl-3 border-l border-border hover:opacity-80"
-          >
-            <div className="w-8 h-8 rounded-full bg-brand-light text-brand-dark flex items-center justify-center text-[12px] font-semibold">
-              {user.initials}
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="text-[13px] font-medium text-text">{user.nama}</span>
-              <span className="text-[11px] text-text-muted">{user.email}</span>
-            </div>
-          </Link>
-        )}
       </div>
     </header>
   );

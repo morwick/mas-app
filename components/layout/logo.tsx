@@ -1,39 +1,32 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface LogoProps {
   size?: "sm" | "md" | "lg";
-  withTagline?: boolean;
+  /** Tidak dipakai lagi sejak logo PNG sudah berisi tagline. Disisakan untuk backward compat. */
+  showSub?: boolean;
   className?: string;
 }
 
-const sizes = {
-  sm: { box: "w-8 h-8 text-[12px]", text: "text-[14px]", tagline: "text-[10px]" },
-  md: { box: "w-10 h-10 text-[14px]", text: "text-[16px]", tagline: "text-[11px]" },
-  lg: { box: "w-16 h-16 text-[20px]", text: "text-[22px]", tagline: "text-[12px]" }
-};
+const heightMap = { sm: 24, md: 36, lg: 48 } as const;
+const LOGO_RATIO = 6; // ~600x100 native, lebar:tinggi ~6:1
 
-export function Logo({ size = "md", withTagline, className }: LogoProps) {
-  const s = sizes[size];
+export function Logo({ size = "md", className }: LogoProps) {
+  const h = heightMap[size];
+  const w = Math.round(h * LOGO_RATIO);
   return (
-    <div className={cn("inline-flex items-center gap-2.5", className)}>
-      <div
-        className={cn(
-          "rounded-md bg-brand text-white flex items-center justify-center font-semibold tracking-tight",
-          s.box
-        )}
-      >
-        MAS
-      </div>
-      <div className="flex flex-col leading-tight">
-        <span className={cn("font-semibold text-text", s.text)}>
-          Mitra Angkutan Sejati
-        </span>
-        {withTagline && (
-          <span className={cn("text-text-muted", s.tagline)}>
-            Manajemen armada & tracking
-          </span>
-        )}
-      </div>
+    <div
+      className={cn("inline-flex items-center", className)}
+      style={{ height: h }}
+    >
+      <Image
+        src="/logo.png"
+        alt="MAS Group — Heavy Equipment & Truck"
+        width={w}
+        height={h}
+        priority
+        style={{ width: "auto", height: h, display: "block" }}
+      />
     </div>
   );
 }

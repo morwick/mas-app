@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Building2, MapPin } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Building2, ChevronRight, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,9 +15,21 @@ interface Props {
   jobCounts: Record<string, number>;
 }
 
+function abbr(nama: string) {
+  return nama
+    .replace(/^(PT|CV)\s+/i, "")
+    .split(" ")
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join("")
+    .toUpperCase();
+}
+
 export function CustomersListView({ customers, jobCounts }: Props) {
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "inactive">("active");
+  const [filter, setFilter] = useState<"all" | "active" | "inactive">(
+    "active"
+  );
 
   const counts = useMemo(
     () => ({
@@ -41,35 +52,39 @@ export function CustomersListView({ customers, jobCounts }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="text-h1 hidden lg:block">Customer</h1>
-          <p className="hidden lg:block text-[13px] text-text-muted mt-0.5">
-            Master data perusahaan customer
-          </p>
+      {/* Toolbar */}
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center"
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cari nama perusahaan…"
+            leftIcon={<Search style={{ width: 15, height: 15 }} />}
+          />
         </div>
-        <Link href="/customers/new" className="hidden lg:block">
-          <Button leftIcon={<Plus className="w-4 h-4" />}>Tambah customer</Button>
+        <Link href="/customers/new" className="hidden lg:inline-flex">
+          <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+            Tambah customer
+          </Button>
         </Link>
       </div>
 
-      <Card className="flex flex-col gap-3">
-        <Input
-          placeholder="Cari nama perusahaan"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          leftIcon={<Search className="w-4 h-4" />}
-        />
-        <FilterChips
-          value={filter}
-          onChange={(k) => setFilter(k as typeof filter)}
-          items={[
-            { key: "active", label: "Aktif", count: counts.active },
-            { key: "inactive", label: "Nonaktif", count: counts.inactive },
-            { key: "all", label: "Semua", count: counts.all }
-          ]}
-        />
-      </Card>
+      <FilterChips
+        value={filter}
+        onChange={(k) => setFilter(k as typeof filter)}
+        items={[
+          { key: "active", label: "Aktif", count: counts.active },
+          { key: "inactive", label: "Nonaktif", count: counts.inactive },
+          { key: "all", label: "Semua", count: counts.all }
+        ]}
+      />
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -78,46 +93,115 @@ export function CustomersListView({ customers, jobCounts }: Props) {
           description="Tambahkan customer pertama Anda."
           action={
             <Link href="/customers/new">
-              <Button leftIcon={<Plus className="w-4 h-4" />}>Tambah customer</Button>
+              <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+                Tambah customer
+              </Button>
             </Link>
           }
         />
       ) : (
-        <div className="grid gap-2.5 grid-cols-1 md:grid-cols-2">
-          {filtered.map((c) => (
-            <Link
-              key={c.id}
-              href={`/customers/${c.id}/edit`}
-              className="block bg-card rounded-lg border border-border p-3.5 hover:border-border-hover"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-md bg-brand-light text-brand-dark flex items-center justify-center shrink-0">
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-[14px] font-medium text-text truncate">
-                      {c.nama_perusahaan}
-                    </p>
-                    {!c.is_active && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-page text-text-muted border border-border">
-                        Nonaktif
-                      </span>
+        <div className="card">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Nama perusahaan</th>
+                <th>Alamat</th>
+                <th style={{ width: 110 }}>Total job</th>
+                <th style={{ width: 100 }}>Status</th>
+                <th style={{ width: 50 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c) => (
+                <tr key={c.id} className="row-link">
+                  <td>
+                    <Link
+                      href={`/customers/${c.id}/edit`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        textDecoration: "none",
+                        color: "inherit"
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 6,
+                          background: "var(--brand-primary-light)",
+                          color: "var(--brand-primary-dark)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 700,
+                          fontSize: 11,
+                          flexShrink: 0
+                        }}
+                      >
+                        {abbr(c.nama_perusahaan)}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 13.5,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap"
+                          }}
+                        >
+                          {c.nama_perusahaan}
+                        </div>
+                        {c.catatan && (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: "var(--text-tertiary)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            {c.catatan}
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>
+                    {c.alamat ?? (
+                      <span style={{ color: "var(--text-tertiary)" }}>—</span>
                     )}
-                  </div>
-                  {c.alamat && (
-                    <p className="text-[12px] text-text-muted mt-0.5 inline-flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{c.alamat}</span>
-                    </p>
-                  )}
-                  <p className="text-[11px] text-text-subtle mt-1.5">
-                    {jobCounts[c.id] ?? 0} job tercatat
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
+                  </td>
+                  <td>
+                    <span style={{ fontWeight: 600 }}>
+                      {jobCounts[c.id] ?? 0}
+                    </span>
+                  </td>
+                  <td>
+                    {c.is_active ? (
+                      <span className="badge badge-bertugas">Aktif</span>
+                    ) : (
+                      <span className="badge">Nonaktif</span>
+                    )}
+                  </td>
+                  <td>
+                    <Link
+                      href={`/customers/${c.id}/edit`}
+                      style={{
+                        color: "var(--text-tertiary)",
+                        display: "inline-flex"
+                      }}
+                    >
+                      <ChevronRight style={{ width: 16, height: 16 }} />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

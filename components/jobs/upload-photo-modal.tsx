@@ -1,10 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload, X } from "lucide-react";
+import { CheckCircle2, Upload, X } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { Modal } from "@/components/ui/modal";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import { registerJobPhotoAction } from "@/lib/actions/photos";
@@ -23,13 +22,27 @@ interface Item {
   preview: string;
   progress: number;
   error?: string;
+  size: string;
 }
 
-export function UploadPhotoModal({ open, onClose, type, jobId, onDone }: Props) {
+function fmtSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function UploadPhotoModal({
+  open,
+  onClose,
+  type,
+  jobId,
+  onDone
+}: Props) {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   function addFiles(files: FileList | null) {
     if (!files) return;
@@ -38,7 +51,8 @@ export function UploadPhotoModal({ open, onClose, type, jobId, onDone }: Props) 
       id: `${Date.now()}-${Math.random()}`,
       file: f,
       preview: URL.createObjectURL(f),
-      progress: 0
+      progress: 0,
+      size: fmtSize(f.size)
     }));
     setItems((prev) => [...prev, ...next].slice(0, 5));
   }
@@ -55,7 +69,6 @@ export function UploadPhotoModal({ open, onClose, type, jobId, onDone }: Props) 
     const results = await Promise.all(
       items.map(async (item) => {
         try {
-          // 1. Compress client-side
           const compressed = await imageCompression(item.file, {
             maxSizeMB: 1.5,
             maxWidthOrHeight: 1920,
@@ -63,17 +76,13 @@ export function UploadPhotoModal({ open, onClose, type, jobId, onDone }: Props) 
             fileType: "image/jpeg",
             initialQuality: 0.85
           });
-
           setItems((prev) =>
             prev.map((p) => (p.id === item.id ? { ...p, progress: 30 } : p))
           );
-
-          // 2. Upload to Supabase Storage
           const ext = "jpg";
           const ts = Date.now();
           const rand = Math.random().toString(36).slice(2, 8);
           const path = `${jobId}/${type}/${ts}-${rand}.${ext}`;
-
           const { error: upErr } = await supabase.storage
             .from("job-photos")
             .upload(path, compressed, {
@@ -81,12 +90,9 @@ export function UploadPhotoModal({ open, onClose, type, jobId, onDone }: Props) 
               cacheControl: "3600"
             });
           if (upErr) throw upErr;
-
           setItems((prev) =>
             prev.map((p) => (p.id === item.id ? { ...p, progress: 70 } : p))
           );
-
-          // 3. Register in DB via server action
           const res = await registerJobPhotoAction({
             job_id: jobId,
             type,
@@ -94,7 +100,6 @@ export function UploadPhotoModal({ open, onClose, type, jobId, onDone }: Props) 
             file_size: compressed.size
           });
           if (!res.ok) throw new Error(res.error);
-
           setItems((prev) =>
             prev.map((p) => (p.id === item.id ? { ...p, progress: 100 } : p))
           );
@@ -129,89 +134,248 @@ export function UploadPhotoModal({ open, onClose, type, jobId, onDone }: Props) 
     }
   }
 
+  const totalSize = items.reduce((s, i) => s + i.file.size, 0);
+
   return (
     <Modal
       open={open}
       onClose={uploading ? () => {} : onClose}
       title={`Upload foto ${type === "loading" ? "loading" : "unloading"}`}
-      description="Maksimal 5 foto. Foto akan otomatis di-resize sebelum upload."
+      description="Maksimal 5 foto. Otomatis di-resize ke 1920px sebelum upload."
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={uploading}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onClose}
+            disabled={uploading}
+          >
             Batal
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
             onClick={doUpload}
             disabled={items.length === 0 || uploading}
-            loading={uploading}
           >
-            Upload {items.length > 0 && `(${items.length})`}
-          </Button>
+            <Upload style={{ width: 14, height: 14 }} />
+            {uploading
+              ? "Mengupload…"
+              : `Upload ${items.length > 0 ? `${items.length} foto` : ""}`}
+          </button>
         </>
       }
     >
-      <div className="flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg p-6 hover:border-brand hover:bg-brand-light/20 transition-colors text-text-muted"
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          addFiles(e.dataTransfer.files);
+        }}
+        onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        style={{
+          border: `2px dashed ${
+            dragOver ? "var(--brand-primary)" : "var(--border-strong)"
+          }`,
+          borderRadius: 12,
+          padding: 28,
+          textAlign: "center",
+          marginBottom: 14,
+          background: dragOver ? "var(--brand-primary-light)" : "var(--bg-muted)",
+          cursor: "pointer",
+          transition: "all 120ms ease"
+        }}
+      >
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            margin: "0 auto 12px",
+            borderRadius: 99,
+            background: "white",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--text-secondary)",
+            border: "0.5px solid var(--border-default)"
+          }}
         >
-          <Upload className="w-6 h-6" />
-          <span className="text-[13px] font-medium">Klik untuk pilih foto</span>
-          <span className="text-[11px]">PNG, JPG · max 5 foto</span>
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
-        />
+          <Upload style={{ width: 22, height: 22 }} />
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>
+          Drag &amp; drop foto di sini
+        </div>
+        <div className="caption" style={{ marginBottom: 0 }}>
+          atau <span className="btn-link">browse</span> · Max 5 foto · JPG/PNG ·
+          Auto-resize ke 1920px
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: "none" }}
+        onChange={(e) => addFiles(e.target.files)}
+      />
 
-        {items.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
+      {items.length > 0 && (
+        <>
+          <div className="caption" style={{ marginBottom: 8 }}>
+            {items.length} foto · {fmtSize(totalSize)} total
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              marginBottom: 4
+            }}
+          >
             {items.map((it) => (
               <div
                 key={it.id}
-                className="relative aspect-square rounded-md overflow-hidden border border-border bg-page"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 10,
+                  background: "var(--bg-muted)",
+                  borderRadius: 8
+                }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={it.preview}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-                {!uploading && (
-                  <button
-                    type="button"
-                    onClick={() => remove(it.id)}
-                    className="absolute top-1 right-1 w-6 h-6 bg-white/90 hover:bg-white rounded-full flex items-center justify-center"
-                    aria-label="Hapus"
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 4,
+                    overflow: "hidden",
+                    flexShrink: 0,
+                    background: "var(--bg-subtle)"
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={it.preview}
+                    alt=""
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover"
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: 4
+                    }}
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {uploading && (
-                  <div className="absolute inset-x-0 bottom-0 bg-black/40 p-1">
-                    <div className="h-1 bg-white/30 rounded overflow-hidden">
-                      <div
-                        className="h-full bg-brand transition-all"
-                        style={{ width: `${it.progress}%` }}
-                      />
+                    <span
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {it.file.name}
+                    </span>
+                    <span
+                      className="caption mono"
+                      style={{ fontSize: 11 }}
+                    >
+                      {it.size}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: 4,
+                      background: "var(--bg-subtle)",
+                      borderRadius: 99,
+                      overflow: "hidden"
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${it.progress}%`,
+                        height: "100%",
+                        background:
+                          it.progress === 100
+                            ? "var(--brand-primary)"
+                            : "#D89A24",
+                        transition: "width 200ms ease"
+                      }}
+                    />
+                  </div>
+                  {it.error && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#C13838",
+                        marginTop: 4
+                      }}
+                    >
+                      {it.error}
                     </div>
-                  </div>
-                )}
-                {it.error && (
-                  <div className="absolute inset-0 bg-status-cancelled-bg/95 text-status-cancelled-fg flex items-center justify-center text-[10px] p-2 text-center">
-                    {it.error}
-                  </div>
+                  )}
+                </div>
+                {it.progress === 100 ? (
+                  <CheckCircle2
+                    style={{
+                      width: 16,
+                      height: 16,
+                      color: "var(--brand-primary)"
+                    }}
+                  />
+                ) : it.progress > 0 ? (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "#854F0B"
+                    }}
+                  >
+                    {it.progress}%
+                  </span>
+                ) : (
+                  !uploading && (
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        remove(it.id);
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 6,
+                        color: "var(--text-tertiary)",
+                        cursor: "pointer",
+                        display: "flex"
+                      }}
+                      aria-label="Hapus"
+                    >
+                      <X style={{ width: 14, height: 14 }} />
+                    </button>
+                  )
                 )}
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </Modal>
   );
 }

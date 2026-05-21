@@ -6,51 +6,97 @@ import type { LucideIcon } from "lucide-react";
 interface StatCardProps {
   label: string;
   value: number | string;
+  sublabel?: string;
   icon: LucideIcon;
-  tone: "standby" | "bertugas" | "perbaikan";
+  tone?: "neutral" | "standby" | "bertugas" | "perbaikan";
   active?: boolean;
   onClick?: () => void;
 }
 
-const tones = {
-  standby: "bg-status-standby-bg text-status-standby-fg",
-  bertugas: "bg-status-bertugas-bg text-status-bertugas-fg",
-  perbaikan: "bg-status-perbaikan-bg text-status-perbaikan-fg"
+const toneStyle: Record<
+  NonNullable<StatCardProps["tone"]>,
+  { bg: string; col: string }
+> = {
+  neutral: { bg: "var(--bg-subtle)", col: "var(--text-secondary)" },
+  standby: {
+    bg: "var(--status-standby-bg)",
+    col: "var(--status-standby-text)"
+  },
+  bertugas: {
+    bg: "var(--status-bertugas-bg)",
+    col: "var(--status-bertugas-text)"
+  },
+  perbaikan: {
+    bg: "var(--status-perbaikan-bg)",
+    col: "var(--status-perbaikan-text)"
+  }
 };
 
 export function StatCard({
   label,
   value,
+  sublabel,
   icon: Icon,
-  tone,
+  tone = "neutral",
   active,
   onClick
 }: StatCardProps) {
+  const t = toneStyle[tone];
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "text-left bg-card rounded-lg border p-3 sm:p-4 transition-colors",
-        active
-          ? "border-brand ring-[2px] ring-brand/30"
-          : "border-border hover:border-border-hover"
-      )}
+      className={cn("text-left", onClick ? "cursor-pointer" : "cursor-default")}
+      style={{
+        background: "white",
+        border: `0.5px solid ${
+          active ? "var(--brand-primary)" : "var(--border-default)"
+        }`,
+        borderRadius: 12,
+        padding: 16,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        boxShadow: active ? "0 0 0 3px var(--brand-primary-ring)" : "none",
+        transition: "all 120ms ease",
+        width: "100%"
+      }}
     >
-      <div className="flex items-center gap-2">
-        <div
-          className={cn(
-            "w-8 h-8 rounded-md flex items-center justify-center",
-            tones[tone]
-          )}
-        >
-          <Icon className="w-4 h-4" />
-        </div>
-        <span className="text-[11px] sm:text-[12px] text-text-muted">{label}</span>
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          background: t.bg,
+          color: t.col,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0
+        }}
+      >
+        <Icon style={{ width: 20, height: 20 }} />
       </div>
-      <p className="mt-2 sm:mt-3 text-[24px] sm:text-[28px] font-semibold text-text leading-none">
-        {value}
-      </p>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="caption" style={{ fontSize: 11.5, marginBottom: 2 }}>
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: 26,
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            lineHeight: 1
+          }}
+        >
+          {value}
+        </div>
+        {sublabel && (
+          <div className="caption" style={{ fontSize: 11, marginTop: 4 }}>
+            {sublabel}
+          </div>
+        )}
+      </div>
     </button>
   );
 }

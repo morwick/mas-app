@@ -2,10 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Truck } from "lucide-react";
+import {
+  ChevronRight,
+  Plus,
+  Search,
+  Truck
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/layout/fab";
@@ -41,52 +45,66 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="text-h1 hidden lg:block">Unit</h1>
-          <p className="hidden lg:block text-[13px] text-text-muted mt-0.5">
-            Master data armada, status, dan riwayat
-          </p>
+      {/* Toolbar */}
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center"
+        }}
+      >
+        <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cari kode unit atau nomor polisi…"
+            leftIcon={<Search style={{ width: 15, height: 15 }} />}
+          />
         </div>
-        <Link href="/units/new" className="hidden lg:block">
-          <Button leftIcon={<Plus className="w-4 h-4" />}>Tambah unit</Button>
+        <Select
+          value={jenis}
+          onChange={(e) => setJenis(e.target.value)}
+          style={{ width: 160 }}
+        >
+          <option value="">Semua jenis</option>
+          {jenisUnitList.map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.nama}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          style={{ width: 160 }}
+        >
+          <option value="">Semua status</option>
+          <option value="standby">Standby</option>
+          <option value="bertugas">Bertugas</option>
+          <option value="perbaikan">Perbaikan</option>
+        </Select>
+        <Link href="/units/new" className="hidden lg:inline-flex">
+          <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+            Tambah unit
+          </Button>
         </Link>
       </div>
 
-      <Card padded={false} className="p-3 lg:p-4 flex flex-col gap-3">
-        <Input
-          placeholder="Cari kode unit atau no polisi"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          leftIcon={<Search className="w-4 h-4" />}
+      <label
+        className="flex items-center gap-2"
+        style={{ fontSize: 12.5, color: "var(--text-tertiary)" }}
+      >
+        <input
+          type="checkbox"
+          checked={showInactive}
+          onChange={(e) => setShowInactive(e.target.checked)}
+          style={{ width: 14, height: 14, accentColor: "var(--brand-primary)" }}
         />
-        <div className="grid grid-cols-2 gap-2">
-          <Select value={jenis} onChange={(e) => setJenis(e.target.value)}>
-            <option value="">Semua jenis</option>
-            {jenisUnitList.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.nama}
-              </option>
-            ))}
-          </Select>
-          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">Semua status</option>
-            <option value="standby">Standby</option>
-            <option value="bertugas">Bertugas</option>
-            <option value="perbaikan">Perbaikan</option>
-          </Select>
-        </div>
-        <label className="flex items-center gap-2 text-[13px] text-text-muted">
-          <input
-            type="checkbox"
-            checked={showInactive}
-            onChange={(e) => setShowInactive(e.target.checked)}
-            className="w-4 h-4 accent-brand"
-          />
-          Tampilkan unit nonaktif
-        </label>
-      </Card>
+        Tampilkan unit nonaktif
+      </label>
 
+      {/* Table */}
       {filtered.length === 0 ? (
         <EmptyState
           icon={Truck}
@@ -94,56 +112,93 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
           description="Coba ubah filter atau tambah unit baru."
           action={
             <Link href="/units/new">
-              <Button leftIcon={<Plus className="w-4 h-4" />}>Tambah unit</Button>
+              <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+                Tambah unit
+              </Button>
             </Link>
           }
         />
       ) : (
-        <div className="grid gap-2.5 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((u) => (
-            <Link
-              key={u.id}
-              href={`/units/${u.id}`}
-              className="bg-card rounded-lg border border-border p-3.5 hover:border-border-hover transition-colors"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-[15px] font-semibold text-text">
-                      {u.kode_unit}
-                    </p>
+        <div className="card">
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ width: 130 }}>Kode</th>
+                <th>Jenis</th>
+                <th>No. Polisi</th>
+                <th style={{ width: 80 }}>Tahun</th>
+                <th style={{ width: 140 }}>Status</th>
+                <th>Driver default</th>
+                <th style={{ width: 50 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((u) => (
+                <tr key={u.id} className="row-link">
+                  <td>
+                    <Link
+                      href={`/units/${u.id}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        textDecoration: "none",
+                        color: "inherit"
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 6,
+                          background: "var(--bg-subtle)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--text-secondary)"
+                        }}
+                      >
+                        <Truck style={{ width: 14, height: 14 }} />
+                      </div>
+                      <span style={{ fontWeight: 600 }}>{u.kode_unit}</span>
+                      {!u.is_active && (
+                        <span
+                          className="badge"
+                          style={{ fontSize: 10, height: 18 }}
+                        >
+                          Nonaktif
+                        </span>
+                      )}
+                    </Link>
+                  </td>
+                  <td>{u.jenis_unit_nama}</td>
+                  <td className="mono" style={{ fontSize: 13 }}>
+                    {u.no_polisi}
+                  </td>
+                  <td className="muted">{u.tahun ?? "—"}</td>
+                  <td>
                     <StatusBadge status={u.status} />
-                    {!u.is_active && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-page text-text-muted border border-border">
-                        Nonaktif
-                      </span>
+                  </td>
+                  <td className="muted" style={{ fontSize: 12.5 }}>
+                    {u.default_driver_nama ?? (
+                      <span style={{ color: "var(--text-tertiary)" }}>—</span>
                     )}
-                  </div>
-                  <p className="text-[12px] text-text-muted mt-0.5">
-                    {u.jenis_unit_nama} &middot; {u.no_polisi}
-                    {u.tahun ? ` · ${u.tahun}` : ""}
-                  </p>
-                </div>
-              </div>
-              <p className="text-[12px] mt-2">
-                {u.default_driver_nama ? (
-                  <>
-                    <span className="text-text-subtle uppercase text-[10px] tracking-wider mr-1.5">
-                      Driver
-                    </span>
-                    <span className="text-text">{u.default_driver_nama}</span>
-                  </>
-                ) : (
-                  <span className="text-text-subtle italic">Driver belum ditugaskan</span>
-                )}
-              </p>
-              {u.catatan && (
-                <p className="text-[12px] text-text-muted mt-2 line-clamp-2">
-                  {u.catatan}
-                </p>
-              )}
-            </Link>
-          ))}
+                  </td>
+                  <td>
+                    <Link
+                      href={`/units/${u.id}`}
+                      style={{
+                        color: "var(--text-tertiary)",
+                        display: "inline-flex"
+                      }}
+                    >
+                      <ChevronRight style={{ width: 16, height: 16 }} />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { Button } from "@/components/ui/button";
 import { Textarea, Field } from "@/components/ui/input";
+import { StatusBadge } from "@/components/ui/badge";
 import { jobStatusOrder } from "@/lib/types";
 import type { JobStatus } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -15,12 +15,45 @@ interface Props {
   onConfirm: (next: JobStatus, notes?: string) => void | Promise<void>;
 }
 
-export function UpdateStatusModal({ open, onClose, current, onConfirm }: Props) {
+export function UpdateStatusModal({
+  open,
+  onClose,
+  current,
+  onConfirm
+}: Props) {
   const idx = jobStatusOrder.findIndex((s) => s.key === current);
-  const candidates = jobStatusOrder.filter((_, i) => i > idx);
-  const [next, setNext] = useState<JobStatus | "">(candidates[0]?.key ?? "");
+  const recommended = idx >= 0 && idx < jobStatusOrder.length - 1
+    ? jobStatusOrder[idx + 1]
+    : null;
+
+  const options: {
+    key: JobStatus;
+    label: string;
+    recommended?: boolean;
+    danger?: boolean;
+  }[] = [];
+  if (recommended) {
+    options.push({
+      key: recommended.key,
+      label: recommended.label,
+      recommended: true
+    });
+  }
+  if (current !== "cancelled" && current !== "selesai") {
+    options.push({ key: "cancelled", label: "Batalkan job", danger: true });
+  }
+
+  const [next, setNext] = useState<JobStatus | "">("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setNext(options[0]?.key ?? "");
+      setNotes("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, current]);
 
   async function handle() {
     if (!next) return;
@@ -37,58 +70,139 @@ export function UpdateStatusModal({ open, onClose, current, onConfirm }: Props) 
       description="Customer akan langsung melihat update ini di halaman tracking."
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={loading}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onClose}
+            disabled={loading}
+          >
             Batal
-          </Button>
-          <Button disabled={!next} loading={loading} onClick={handle}>
-            Konfirmasi
-          </Button>
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!next || loading}
+            onClick={handle}
+          >
+            {loading ? "Menyimpan…" : "Konfirmasi"}
+          </button>
         </>
       }
     >
-      <div className="flex flex-col gap-2">
-        {candidates.length === 0 ? (
-          <p className="text-[13px] text-text-muted">
+      <div
+        style={{
+          marginBottom: 16,
+          padding: 12,
+          background: "var(--bg-muted)",
+          borderRadius: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 12
+        }}
+      >
+        <div>
+          <div className="caption" style={{ marginBottom: 4 }}>
+            Status sekarang
+          </div>
+          <StatusBadge status={current} />
+        </div>
+        <span style={{ color: "var(--text-tertiary)" }}>→</span>
+        <div>
+          <div className="caption" style={{ marginBottom: 4 }}>
+            Akan diubah ke
+          </div>
+          {next ? (
+            <StatusBadge status={next as JobStatus} />
+          ) : (
+            <span className="muted">Pilih di bawah</span>
+          )}
+        </div>
+      </div>
+
+      <div className="field-label" style={{ marginBottom: 8 }}>
+        Pilih status berikutnya
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          marginBottom: 14
+        }}
+      >
+        {options.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)" }}>
             Tidak ada status berikutnya. Job sudah selesai.
           </p>
         ) : (
-          candidates.map((s) => {
-            const active = next === s.key;
+          options.map((o) => {
+            const active = next === o.key;
             return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setNext(s.key)}
-                className={cn(
-                  "flex items-start gap-3 p-3 rounded-md border text-left transition-colors",
-                  active
-                    ? "border-brand bg-brand-light/40"
-                    : "border-border hover:border-border-hover bg-white"
-                )}
+              <label
+                key={o.key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 12,
+                  border: `0.5px solid ${
+                    active ? "var(--brand-primary)" : "var(--border-strong)"
+                  }`,
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  background: active
+                    ? "var(--brand-primary-light)"
+                    : "white"
+                }}
               >
-                <span
-                  className={cn(
-                    "w-4 h-4 mt-0.5 rounded-full border-2 shrink-0",
-                    active ? "border-brand bg-brand" : "border-border"
-                  )}
-                >
-                  {active && (
-                    <span className="block w-1.5 h-1.5 bg-white rounded-full m-auto mt-[3px]" />
-                  )}
-                </span>
-                <span className="text-[14px] font-medium text-text">{s.label}</span>
-              </button>
+                <input
+                  type="radio"
+                  name="status"
+                  checked={active}
+                  onChange={() => setNext(o.key)}
+                  style={{ accentColor: "var(--brand-primary)" }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6
+                    }}
+                  >
+                    <StatusBadge status={o.key} />
+                    {o.recommended && (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          color: "var(--brand-primary-dark)",
+                          fontWeight: 600
+                        }}
+                      >
+                        · Direkomendasikan
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {o.danger && (
+                  <AlertTriangle
+                    style={{ width: 14, height: 14, color: "#C13838" }}
+                  />
+                )}
+              </label>
             );
           })
         )}
-        <Field label="Catatan (opsional)" className="mt-2">
-          <Textarea
-            placeholder="Misal: berangkat tepat waktu, akan kontak PIC saat tiba"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </Field>
       </div>
+
+      <Field label="Catatan (opsional)">
+        <Textarea
+          rows={3}
+          placeholder="Tambah catatan untuk audit log…"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </Field>
     </Modal>
   );
 }

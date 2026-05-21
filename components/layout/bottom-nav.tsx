@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { mobileNavItems } from "./nav-items";
-import { cn } from "@/lib/utils";
 
 export function BottomNav() {
   const pathname = usePathname();
   return (
-    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-border pb-[env(safe-area-inset-bottom,0)]">
+    <nav
+      className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white"
+      style={{
+        borderTop: "0.5px solid var(--border-default)",
+        paddingBottom: "env(safe-area-inset-bottom, 0)"
+      }}
+    >
       <ul className="flex items-stretch">
         {mobileNavItems.map((item) => {
           const active = item.match
@@ -19,13 +24,36 @@ export function BottomNav() {
             <li key={item.href} className="flex-1">
               <Link
                 href={item.href}
-                className={cn(
-                  "flex flex-col items-center gap-1 py-2 h-14 transition-colors",
-                  active ? "text-brand-dark" : "text-text-muted"
-                )}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 4,
+                  height: 56,
+                  color: active
+                    ? "var(--brand-primary-dark)"
+                    : "var(--text-tertiary)",
+                  textDecoration: "none",
+                  transition: "color 120ms ease"
+                }}
               >
-                <Icon className={cn("w-5 h-5", active && "text-brand")} />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <Icon
+                  style={{
+                    width: 20,
+                    height: 20,
+                    color: active ? "var(--brand-primary)" : undefined
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: active ? 600 : 500,
+                    letterSpacing: 0.02
+                  }}
+                >
+                  {item.label}
+                </span>
               </Link>
             </li>
           );

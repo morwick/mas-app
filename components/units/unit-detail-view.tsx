@@ -5,8 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowRight,
   CalendarClock,
+  Download,
   MapPin,
+  PackageCheck,
   Pencil,
   Plus,
   PowerOff,
@@ -14,8 +17,6 @@ import {
   Truck,
   Wrench
 } from "lucide-react";
-import { Card, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -39,7 +40,7 @@ import {
   incidentStatusLabel,
   incidentTypeLabel
 } from "@/lib/types";
-import { formatDateTime, formatRupiah, timeAgo } from "@/lib/utils";
+import { formatDateTime, formatRupiah } from "@/lib/utils";
 
 interface Props {
   unit: Unit;
@@ -77,6 +78,16 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
     [jobs]
   );
 
+  // Utilization placeholders — to be replaced with real query result later
+  const utilisasi = useMemo(() => {
+    const totalJobs = jobs.length;
+    const completed = pastJobs.filter((j) => j.status === "selesai").length;
+    const bertugas = Math.max(2, Math.round(completed * 2));
+    const perbaikan = unit.status === "perbaikan" ? 5 : 1;
+    const standby = Math.max(0, 30 - bertugas - perbaikan);
+    return { bertugas, standby, perbaikan, totalJobs };
+  }, [jobs, pastJobs, unit.status]);
+
   async function onChangeStatus(next: UnitStatus, reason?: string) {
     setPending(true);
     const res = await changeUnitStatusAction(unit.id, next, reason);
@@ -93,320 +104,612 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
     const res = await deactivateUnitAction(unit.id);
     setPending(false);
     if (res && !("ok" in res ? res.ok : true)) {
-      toast.error((res as any).error ?? "Gagal menonaktifkan unit");
+      toast.error((res as { error?: string }).error ?? "Gagal menonaktifkan unit");
     }
-    // redirect happens in server action
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-h1">{unit.kode_unit}</h1>
-              <StatusBadge status={unit.status} size="md" />
-            </div>
-            <p className="text-[13px] text-text-muted mt-0.5">
-              {unit.jenis_unit_nama} &middot; {unit.no_polisi}
-              {unit.tahun ? ` · ${unit.tahun}` : ""}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              leftIcon={<RotateCcw className="w-4 h-4" />}
-              onClick={() => setStatusOpen(true)}
-            >
-              Ubah status
-            </Button>
-            <Link href={`/units/${unit.id}/edit`}>
-              <Button
-                variant="secondary"
-                leftIcon={<Pencil className="w-4 h-4" />}
+    <div
+      className="grid gap-4"
+      style={{ gridTemplateColumns: "1.6fr 1fr" }}
+    >
+      {/* Left column */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Header card */}
+        <div className="card card-pad-lg">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 16,
+              flexWrap: "wrap"
+            }}
+          >
+            <div style={{ display: "flex", gap: 14 }}>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 12,
+                  background: "var(--brand-primary-light)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--brand-primary-dark)",
+                  flexShrink: 0
+                }}
               >
+                <Truck style={{ width: 28, height: 28 }} />
+              </div>
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 2,
+                    flexWrap: "wrap"
+                  }}
+                >
+                  <div className="h1" style={{ fontSize: 24 }}>
+                    {unit.kode_unit}
+                  </div>
+                  <StatusBadge status={unit.status} />
+                </div>
+                <div className="body-sm muted">
+                  {unit.jenis_unit_nama} · {unit.no_polisi}
+                  {unit.tahun ? ` · ${unit.tahun}` : ""}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setStatusOpen(true)}
+              >
+                <RotateCcw style={{ width: 14, height: 14 }} />
+                Ubah status
+              </button>
+              <Link
+                href={`/units/${unit.id}/edit`}
+                className="btn btn-secondary btn-sm"
+                style={{ textDecoration: "none" }}
+              >
+                <Pencil style={{ width: 14, height: 14 }} />
                 Edit
-              </Button>
-            </Link>
+              </Link>
+            </div>
           </div>
+
+          <div className="divider" style={{ marginBottom: 14 }} />
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}
+          >
+            <DetailField label="Jenis unit" value={unit.jenis_unit_nama} />
+            <DetailField label="No. polisi" value={unit.no_polisi} mono />
+            <DetailField
+              label="Tahun"
+              value={unit.tahun ? String(unit.tahun) : "—"}
+            />
+            <DetailField
+              label="Total job"
+              value={`${utilisasi.totalJobs}`}
+            />
+            <DetailField
+              label="Driver tetap"
+              value={unit.default_driver_nama ?? "Belum ditugaskan"}
+            />
+            <DetailField
+              label="Status saat ini"
+              valueNode={<StatusBadge status={unit.status} />}
+            />
+          </div>
+          {unit.catatan && (
+            <>
+              <div className="divider" style={{ margin: "14px 0" }} />
+              <DetailField label="Catatan" value={unit.catatan} fullWidth />
+            </>
+          )}
         </div>
-        <div className="mt-3 pt-3 border-t border-border/70 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
+
+        {/* Tabs */}
+        <div className="card">
+          <Tabs
+            value={tab}
+            onChange={(k) => setTab(k as TabKey)}
+            items={[
+              { key: "aktif", label: "Job aktif", count: activeJob ? 1 : 0 },
+              { key: "riwayat", label: "Riwayat job", count: pastJobs.length },
+              {
+                key: "history",
+                label: "Riwayat status",
+                count: history.length
+              },
+              {
+                key: "insiden",
+                label: "Insiden",
+                count:
+                  openIncidentCount > 0 ? openIncidentCount : incidents.length
+              }
+            ]}
+          />
+
           <div>
-            <span className="text-text-subtle uppercase text-[10px] tracking-wider mr-2">
-              Driver tetap
-            </span>
-            {unit.default_driver_nama ? (
-              <span className="text-text">
-                {unit.default_driver_nama}
-                {unit.default_driver_no_hp && (
-                  <span className="text-text-muted">
-                    {" "}
-                    · {unit.default_driver_no_hp}
-                  </span>
+            {tab === "aktif" &&
+              (activeJob ? (
+                <div style={{ padding: 16 }}>
+                  <Link
+                    href={`/jobs/${activeJob.id}`}
+                    style={{
+                      padding: "12px 16px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      border: "0.5px solid var(--border-default)",
+                      borderRadius: 8,
+                      textDecoration: "none",
+                      color: "var(--text-primary)"
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          marginBottom: 4
+                        }}
+                      >
+                        <span
+                          className="mono"
+                          style={{
+                            fontSize: 11,
+                            color: "var(--text-tertiary)",
+                            fontWeight: 500
+                          }}
+                        >
+                          {activeJob.job_number}
+                        </span>
+                        <StatusBadge status={activeJob.status} />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          lineHeight: 1.35,
+                          marginBottom: 2
+                        }}
+                      >
+                        {activeJob.alat_diangkut}
+                      </div>
+                      <div
+                        className="caption"
+                        style={{
+                          fontSize: 11.5,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6
+                        }}
+                      >
+                        <MapPin style={{ width: 11, height: 11 }} />
+                        {activeJob.tujuan.split(",")[0]}
+                      </div>
+                    </div>
+                    <ArrowRight
+                      style={{
+                        width: 16,
+                        height: 16,
+                        color: "var(--text-tertiary)"
+                      }}
+                    />
+                  </Link>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={PackageCheck}
+                  title="Tidak ada job aktif"
+                  description="Unit ini siap di-assign untuk job baru."
+                />
+              ))}
+
+            {tab === "riwayat" && (
+              <div>
+                {pastJobs.length === 0 ? (
+                  <EmptyState
+                    icon={PackageCheck}
+                    title="Belum ada riwayat"
+                    description="Unit ini belum memiliki job yang selesai."
+                  />
+                ) : (
+                  pastJobs.map((j) => (
+                    <Link
+                      key={j.id}
+                      href={`/jobs/${j.id}`}
+                      style={{
+                        padding: "12px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        borderBottom: "0.5px solid var(--border-default)",
+                        textDecoration: "none",
+                        color: "var(--text-primary)"
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 4
+                          }}
+                        >
+                          <span
+                            className="mono"
+                            style={{ fontSize: 11, fontWeight: 600 }}
+                          >
+                            {j.job_number}
+                          </span>
+                          <StatusBadge status={j.status} />
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>
+                          {j.alat_diangkut}
+                        </div>
+                        <div className="caption" style={{ fontSize: 11 }}>
+                          {j.customer_nama} ·{" "}
+                          {formatDateTime(j.completed_at ?? j.etd)}
+                        </div>
+                      </div>
+                    </Link>
+                  ))
                 )}
-              </span>
-            ) : (
-              <span className="text-text-subtle italic">Belum ditugaskan</span>
+              </div>
+            )}
+
+            {tab === "history" && (
+              <div style={{ padding: 16 }}>
+                {history.length === 0 ? (
+                  <EmptyState
+                    icon={RotateCcw}
+                    title="Belum ada perubahan status"
+                  />
+                ) : (
+                  <div
+                    style={{ display: "flex", flexDirection: "column" }}
+                  >
+                    {history.map((h, i) => (
+                      <div
+                        key={h.id}
+                        style={{
+                          display: "flex",
+                          gap: 14,
+                          paddingBottom: i === history.length - 1 ? 0 : 16,
+                          position: "relative"
+                        }}
+                      >
+                        <div
+                          style={{ position: "relative", flexShrink: 0 }}
+                        >
+                          <div
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: 99,
+                              background:
+                                h.status_new === "bertugas"
+                                  ? "var(--brand-primary)"
+                                  : h.status_new === "perbaikan"
+                                    ? "#D89A24"
+                                    : "var(--text-tertiary)",
+                              marginTop: 6
+                            }}
+                          />
+                          {i < history.length - 1 && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 18,
+                                left: 4,
+                                width: 1,
+                                bottom: -16,
+                                background: "var(--border-default)"
+                              }}
+                            />
+                          )}
+                        </div>
+                        <div style={{ flex: 1, paddingBottom: 4 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              marginBottom: 2
+                            }}
+                          >
+                            <StatusBadge status={h.status_new} />
+                            <span className="caption mono">
+                              {formatDateTime(h.changed_at)}
+                            </span>
+                          </div>
+                          {h.reason && (
+                            <div
+                              style={{
+                                fontSize: 13,
+                                color: "var(--text-primary)",
+                                marginBottom: 2
+                              }}
+                            >
+                              {h.reason}
+                            </div>
+                          )}
+                          <div className="caption" style={{ fontSize: 11 }}>
+                            oleh {h.changed_by_nama}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === "insiden" && (
+              <div style={{ padding: 16 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--text-secondary)"
+                    }}
+                  >
+                    {openIncidentCount > 0
+                      ? `${openIncidentCount} insiden belum selesai`
+                      : "Tidak ada insiden terbuka"}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setIncidentFormOpen(true)}
+                  >
+                    <Plus style={{ width: 14, height: 14 }} />
+                    Catat insiden
+                  </button>
+                </div>
+
+                {incidents.length === 0 ? (
+                  <EmptyState
+                    icon={AlertTriangle}
+                    title="Belum ada catatan insiden"
+                    description="Catat insiden seperti kecelakaan, kerusakan, atau breakdown untuk riwayat & klaim asuransi."
+                  />
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8
+                    }}
+                  >
+                    {incidents.map((inc) => (
+                      <button
+                        key={inc.id}
+                        type="button"
+                        onClick={() => setOpenIncident(inc)}
+                        style={{
+                          textAlign: "left",
+                          background: "white",
+                          border: "0.5px solid var(--border-default)",
+                          borderRadius: 8,
+                          padding: 14,
+                          cursor: "pointer"
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                marginBottom: 4,
+                                flexWrap: "wrap"
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 600
+                                }}
+                              >
+                                {incidentTypeLabel[inc.tipe]}
+                              </span>
+                              <Badge
+                                variant={
+                                  inc.status === "resolved"
+                                    ? "brand"
+                                    : inc.status === "in_progress"
+                                      ? "info"
+                                      : "warning"
+                                }
+                              >
+                                {incidentStatusLabel[inc.status]}
+                              </Badge>
+                              {inc.job_number && (
+                                <Badge variant="neutral">
+                                  {inc.job_number}
+                                </Badge>
+                              )}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 12.5,
+                                color: "var(--text-secondary)",
+                                marginBottom: 4
+                              }}
+                            >
+                              {inc.deskripsi}
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 12,
+                                fontSize: 11,
+                                color: "var(--text-tertiary)",
+                                flexWrap: "wrap"
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4
+                                }}
+                              >
+                                <CalendarClock
+                                  style={{ width: 11, height: 11 }}
+                                />
+                                {formatDateTime(inc.tanggal)}
+                              </span>
+                              {inc.lokasi && (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4
+                                  }}
+                                >
+                                  <MapPin
+                                    style={{ width: 11, height: 11 }}
+                                  />
+                                  {inc.lokasi}
+                                </span>
+                              )}
+                              {inc.biaya_repair != null && (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4
+                                  }}
+                                >
+                                  <Wrench
+                                    style={{ width: 11, height: 11 }}
+                                  />
+                                  {formatRupiah(inc.biaya_repair)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {inc.photos.length > 0 && (
+                            <div
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 6,
+                                overflow: "hidden",
+                                border: "0.5px solid var(--border-default)",
+                                flexShrink: 0
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={inc.photos[0].file_url}
+                                alt=""
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover"
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
-        {unit.catatan && (
-          <p className="mt-3 text-[13px] text-text-muted">
-            <span className="text-text-subtle uppercase text-[10px] tracking-wider mr-2">
-              Catatan
-            </span>
-            {unit.catatan}
-          </p>
-        )}
-      </Card>
+      </div>
 
-      <Tabs
-        value={tab}
-        onChange={(k) => setTab(k as TabKey)}
-        items={[
-          { key: "aktif", label: "Job aktif", count: activeJob ? 1 : 0 },
-          { key: "riwayat", label: "Riwayat job", count: pastJobs.length },
-          { key: "history", label: "Riwayat status", count: history.length },
-          {
-            key: "insiden",
-            label: "Insiden",
-            count: openIncidentCount > 0 ? openIncidentCount : incidents.length
-          }
-        ]}
-      />
-
-      {tab === "aktif" && (
-        <>
-          {activeJob ? (
-            <Card>
-              <CardHeader
-                title={activeJob.job_number}
-                description={activeJob.customer_nama}
-                action={
-                  <Link href={`/jobs/${activeJob.id}`}>
-                    <Button variant="ghost" size="sm">
-                      Buka detail
-                    </Button>
-                  </Link>
-                }
-              />
-              <div className="flex flex-col gap-2 text-[13px]">
-                <div className="flex items-start gap-2">
-                  <Truck className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
-                  <span>{activeJob.alat_diangkut}</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
-                  <span>
-                    {activeJob.asal} <span className="text-text-subtle">→</span>{" "}
-                    {activeJob.tujuan}
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CalendarClock className="w-4 h-4 text-text-muted shrink-0 mt-0.5" />
-                  <span>ETD {formatDateTime(activeJob.etd)}</span>
-                </div>
-                <div className="mt-1">
-                  <StatusBadge status={activeJob.status} />
-                </div>
-              </div>
-            </Card>
-          ) : (
-            <EmptyState
-              icon={Truck}
-              title="Tidak ada job aktif"
-              description="Unit ini sedang tidak menjalankan pengiriman."
-            />
-          )}
-        </>
-      )}
-
-      {tab === "riwayat" && (
-        <div className="flex flex-col gap-2">
-          {pastJobs.length === 0 && (
-            <EmptyState
-              icon={Truck}
-              title="Belum ada riwayat"
-              description="Riwayat job unit ini akan muncul di sini."
-            />
-          )}
-          {pastJobs.map((j) => (
-            <Link
-              key={j.id}
-              href={`/jobs/${j.id}`}
-              className="block bg-card rounded-lg border border-border p-3.5 hover:border-border-hover"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[14px] font-medium text-text">
-                      {j.job_number}
-                    </span>
-                    <StatusBadge status={j.status} />
-                  </div>
-                  <p className="text-[12px] text-text-muted mt-0.5">
-                    {j.customer_nama} &middot; {j.alat_diangkut}
-                  </p>
-                </div>
-                <span className="text-[11px] text-text-subtle shrink-0">
-                  {formatDateTime(j.etd)}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {tab === "history" && (
-        <Card>
-          {history.length === 0 ? (
-            <EmptyState icon={RotateCcw} title="Belum ada perubahan status" />
-          ) : (
-            <ol className="flex flex-col gap-3">
-              {history.map((h) => (
-                <li key={h.id} className="flex items-start gap-3 text-[13px]">
-                  <span className="w-2 h-2 mt-2 rounded-full bg-brand shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p>
-                      <span className="text-text-muted">
-                        {h.status_old ? `${h.status_old} →` : "Inisialisasi →"}
-                      </span>{" "}
-                      <span className="font-medium">{h.status_new}</span>
-                    </p>
-                    <p className="text-[11px] text-text-muted">
-                      {formatDateTime(h.changed_at)} · oleh {h.changed_by_nama}
-                      {h.reason ? ` · ${h.reason}` : ""}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-text-subtle whitespace-nowrap">
-                    {timeAgo(h.changed_at)}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
-      )}
-
-      {tab === "insiden" && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[13px] text-text-muted">
-              {openIncidentCount > 0
-                ? `${openIncidentCount} insiden belum selesai`
-                : "Tidak ada insiden terbuka"}
-            </p>
-            <Button
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => setIncidentFormOpen(true)}
-            >
-              Catat insiden
-            </Button>
+      {/* Right column */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="card card-pad">
+          <div className="h3" style={{ marginBottom: 12 }}>
+            Utilisasi 30 hari
           </div>
-
-          {incidents.length === 0 ? (
-            <EmptyState
-              icon={AlertTriangle}
-              title="Belum ada catatan insiden"
-              description="Catat insiden seperti kecelakaan, kerusakan, atau breakdown untuk riwayat & klaim asuransi."
-              action={
-                <Button
-                  leftIcon={<Plus className="w-4 h-4" />}
-                  onClick={() => setIncidentFormOpen(true)}
-                >
-                  Catat insiden pertama
-                </Button>
-              }
-            />
-          ) : (
-            <div className="flex flex-col gap-2">
-              {incidents.map((inc) => (
-                <button
-                  key={inc.id}
-                  type="button"
-                  onClick={() => setOpenIncident(inc)}
-                  className="text-left bg-card rounded-lg border border-border p-3.5 hover:border-border-hover transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[14px] font-medium text-text">
-                          {incidentTypeLabel[inc.tipe]}
-                        </span>
-                        <Badge
-                          variant={
-                            inc.status === "resolved"
-                              ? "brand"
-                              : inc.status === "in_progress"
-                              ? "info"
-                              : "warning"
-                          }
-                        >
-                          {incidentStatusLabel[inc.status]}
-                        </Badge>
-                        {inc.job_number && (
-                          <Badge variant="neutral">{inc.job_number}</Badge>
-                        )}
-                      </div>
-                      <p className="text-[12px] text-text-muted mt-1 line-clamp-2">
-                        {inc.deskripsi}
-                      </p>
-                      <div className="flex items-center gap-3 mt-1.5 text-[11px] text-text-muted flex-wrap">
-                        <span className="inline-flex items-center gap-1">
-                          <CalendarClock className="w-3 h-3" />
-                          {formatDateTime(inc.tanggal)}
-                        </span>
-                        {inc.lokasi && (
-                          <span className="inline-flex items-center gap-1 truncate">
-                            <MapPin className="w-3 h-3" />
-                            {inc.lokasi}
-                          </span>
-                        )}
-                        {inc.biaya_repair !== null &&
-                          inc.biaya_repair !== undefined && (
-                            <span className="inline-flex items-center gap-1">
-                              <Wrench className="w-3 h-3" />
-                              {formatRupiah(inc.biaya_repair)}
-                            </span>
-                          )}
-                      </div>
-                    </div>
-                    {inc.photos.length > 0 && (
-                      <div className="shrink-0 w-12 h-12 rounded-md overflow-hidden border border-border bg-page">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={inc.photos[0].file_url}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+          <UtilizationDonut
+            bertugas={utilisasi.bertugas}
+            standby={utilisasi.standby}
+            perbaikan={utilisasi.perbaikan}
+          />
+          <div
+            className="caption"
+            style={{ marginTop: 10, fontSize: 11, opacity: 0.7 }}
+          >
+            * Data placeholder, akan dihitung dari riwayat status
+          </div>
         </div>
-      )}
-
-      {unit.is_active && (
-        <Card className="border-danger/30">
-          <CardHeader
-            title="Zona berbahaya"
-            description="Nonaktifkan unit agar tidak muncul di pemilihan job baru."
-            action={
-              <Button
-                variant="danger"
-                leftIcon={<PowerOff className="w-4 h-4" />}
+        <div className="card card-pad">
+          <div className="h3" style={{ marginBottom: 4 }}>
+            Aksi cepat
+          </div>
+          <div className="caption" style={{ marginBottom: 12 }}>
+            Operasi terhadap unit ini
+          </div>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 8 }}
+          >
+            <Link
+              href="/jobs/new"
+              className="btn btn-secondary"
+              style={{ justifyContent: "flex-start", textDecoration: "none" }}
+            >
+              <PackageCheck style={{ width: 16, height: 16 }} /> Assign ke job baru
+            </Link>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ justifyContent: "flex-start" }}
+            >
+              <Download style={{ width: 16, height: 16 }} /> Export riwayat
+            </button>
+            {unit.is_active && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{
+                  justifyContent: "flex-start",
+                  color: "#C13838",
+                  borderColor: "#F5C0C0"
+                }}
                 onClick={() => setDeactOpen(true)}
               >
-                Nonaktifkan unit
-              </Button>
-            }
-          />
-        </Card>
-      )}
+                <PowerOff style={{ width: 16, height: 16 }} /> Nonaktifkan unit
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       <UnitStatusModal
         open={statusOpen}
@@ -424,7 +727,6 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
         loading={pending}
         onConfirm={onDeactivate}
       />
-
       <IncidentFormModal
         open={incidentFormOpen}
         onClose={() => setIncidentFormOpen(false)}
@@ -438,6 +740,173 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
         onClose={() => setOpenIncident(null)}
         incident={openIncident}
       />
+    </div>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+  valueNode,
+  mono,
+  fullWidth
+}: {
+  label: string;
+  value?: string;
+  valueNode?: React.ReactNode;
+  mono?: boolean;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div style={{ gridColumn: fullWidth ? "1 / -1" : "auto" }}>
+      <div
+        className="eyebrow"
+        style={{ marginBottom: 4, fontSize: 10.5 }}
+      >
+        {label}
+      </div>
+      {valueNode ?? (
+        <div
+          className={mono ? "mono" : ""}
+          style={{ fontSize: 14, fontWeight: 500 }}
+        >
+          {value}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UtilizationDonut({
+  bertugas,
+  standby,
+  perbaikan
+}: {
+  bertugas: number;
+  standby: number;
+  perbaikan: number;
+}) {
+  const total = bertugas + standby + perbaikan;
+  const pct = total > 0 ? Math.round((bertugas / total) * 100) : 0;
+  const r = 48;
+  const c = 2 * Math.PI * r;
+  const dashB = total > 0 ? (bertugas / total) * c : 0;
+  const dashP = total > 0 ? (perbaikan / total) * c : 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <svg
+        width="120"
+        height="120"
+        viewBox="0 0 120 120"
+        style={{ flexShrink: 0 }}
+      >
+        <circle
+          cx="60"
+          cy="60"
+          r={r}
+          fill="none"
+          stroke="var(--bg-subtle)"
+          strokeWidth="14"
+        />
+        <g transform="rotate(-90 60 60)">
+          <circle
+            cx="60"
+            cy="60"
+            r={r}
+            fill="none"
+            stroke="var(--brand-primary)"
+            strokeWidth="14"
+            strokeDasharray={`${dashB} ${c}`}
+          />
+          <circle
+            cx="60"
+            cy="60"
+            r={r}
+            fill="none"
+            stroke="var(--status-perbaikan-text)"
+            strokeWidth="14"
+            strokeDasharray={`${dashP} ${c}`}
+            strokeDashoffset={-dashB}
+          />
+        </g>
+        <text
+          x="60"
+          y="58"
+          textAnchor="middle"
+          fontSize="20"
+          fontWeight="700"
+          fill="var(--text-primary)"
+        >
+          {pct}%
+        </text>
+        <text
+          x="60"
+          y="74"
+          textAnchor="middle"
+          fontSize="9"
+          fill="var(--text-tertiary)"
+          letterSpacing="0.5"
+        >
+          UTILISASI
+        </text>
+      </svg>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          flex: 1
+        }}
+      >
+        <LegendRow
+          color="var(--brand-primary)"
+          label="Bertugas"
+          value={`${bertugas}h`}
+        />
+        <LegendRow
+          color="var(--bg-subtle)"
+          label="Standby"
+          value={`${standby}h`}
+        />
+        <LegendRow
+          color="var(--status-perbaikan-text)"
+          label="Perbaikan"
+          value={`${perbaikan}h`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function LegendRow({
+  color,
+  label,
+  value
+}: {
+  color: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        fontSize: 12
+      }}
+    >
+      <div
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: 3,
+          background: color,
+          border: "0.5px solid var(--border-strong)"
+        }}
+      />
+      <span style={{ flex: 1, color: "var(--text-secondary)" }}>{label}</span>
+      <span style={{ fontWeight: 600 }}>{value}</span>
     </div>
   );
 }

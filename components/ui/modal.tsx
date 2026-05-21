@@ -42,25 +42,36 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4 animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center fade-in"
+      style={{ background: "rgba(0,0,0,0.45)", padding: 16 }}
       onClick={onClose}
     >
       <div
         className={cn(
-          "bg-white w-full rounded-t-lg sm:rounded-lg shadow-xl",
-          maxWidth,
-          "max-h-[90vh] flex flex-col"
+          "bg-white w-full flex flex-col slide-up",
+          maxWidth
         )}
+        style={{
+          borderRadius: 14,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+          maxHeight: "88vh"
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || !hideClose) && (
-          <div className="flex items-start justify-between gap-3 p-5 pb-3 border-b border-border">
+          <div
+            className="flex items-start justify-between gap-3"
+            style={{
+              padding: "16px 20px",
+              borderBottom: "0.5px solid var(--border-default)"
+            }}
+          >
             <div className="min-w-0">
-              {title && (
-                <h2 className="text-[18px] font-medium text-text">{title}</h2>
-              )}
+              {title && <h2 className="h3">{title}</h2>}
               {description && (
-                <p className="mt-0.5 text-[13px] text-text-muted">{description}</p>
+                <p className="caption" style={{ marginTop: 4 }}>
+                  {description}
+                </p>
               )}
             </div>
             {!hideClose && (
@@ -68,16 +79,37 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 aria-label="Tutup"
-                className="shrink-0 p-1 -m-1 text-text-muted hover:text-text rounded-md"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 6,
+                  borderRadius: 6,
+                  color: "var(--text-tertiary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer"
+                }}
               >
-                <X className="w-5 h-5" />
+                <X style={{ width: 18, height: 18 }} />
               </button>
             )}
           </div>
         )}
-        <div className="p-5 overflow-y-auto flex-1">{children}</div>
+        <div className="flex-1 overflow-y-auto" style={{ padding: 20 }}>
+          {children}
+        </div>
         {footer && (
-          <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2 flex-wrap">
+          <div
+            className="flex items-center justify-end gap-2 flex-wrap"
+            style={{
+              padding: "14px 20px",
+              borderTop: "0.5px solid var(--border-default)",
+              background: "var(--bg-muted)",
+              borderBottomLeftRadius: 14,
+              borderBottomRightRadius: 14
+            }}
+          >
             {footer}
           </div>
         )}

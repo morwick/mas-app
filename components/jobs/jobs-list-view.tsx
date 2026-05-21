@@ -3,22 +3,20 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  Plus,
-  Search,
-  PackageCheck,
+  ChevronRight,
+  Flag,
   MapPin,
-  Truck,
-  User,
-  CalendarClock
+  PackageCheck,
+  Plus,
+  Search
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/layout/fab";
-import { formatDateTime } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/utils";
 import type { Customer, Job, JobStatus } from "@/lib/types";
 
 type TabKey = "aktif" | "selesai" | "cancelled";
@@ -36,7 +34,20 @@ interface Props {
   driverMap: Record<string, string>;
 }
 
-export function JobsListView({ jobs, customers, unitMap, driverMap }: Props) {
+function takeLastSegment(text: string): string {
+  if (text.includes("—")) {
+    const parts = text.split("—");
+    return parts[parts.length - 1].trim();
+  }
+  return text.split(",")[0].trim();
+}
+
+export function JobsListView({
+  jobs,
+  customers,
+  unitMap,
+  driverMap
+}: Props) {
   const [tab, setTab] = useState<TabKey>("aktif");
   const [q, setQ] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -71,37 +82,49 @@ export function JobsListView({ jobs, customers, unitMap, driverMap }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="text-h1 hidden lg:block">Job</h1>
-          <p className="hidden lg:block text-[13px] text-text-muted mt-0.5">
-            Pengiriman aktif dan riwayat
-          </p>
-        </div>
-        <Link href="/jobs/new" className="hidden lg:block">
-          <Button leftIcon={<Plus className="w-4 h-4" />}>Job baru</Button>
-        </Link>
-      </div>
-
-      <Tabs
-        value={tab}
-        onChange={(k) => setTab(k as TabKey)}
-        items={[
-          { key: "aktif", label: "Aktif", count: counts.aktif },
-          { key: "selesai", label: "Selesai", count: counts.selesai },
-          { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
-        ]}
-      />
-
-      <Card className="flex flex-col gap-3">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Input
-            placeholder="Cari nomor job, customer, atau alat"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            leftIcon={<Search className="w-4 h-4" />}
-          />
-          <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+      {/* Top bar */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap"
+        }}
+      >
+        <Tabs
+          variant="pill"
+          value={tab}
+          onChange={(k) => setTab(k as TabKey)}
+          items={[
+            { key: "aktif", label: "Aktif", count: counts.aktif },
+            { key: "selesai", label: "Selesai", count: counts.selesai },
+            { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
+          ]}
+        />
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flex: 1,
+            justifyContent: "flex-end",
+            alignItems: "center"
+          }}
+        >
+          <div style={{ width: 280 }}>
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cari job, customer, alat…"
+              leftIcon={<Search style={{ width: 15, height: 15 }} />}
+              style={{ height: 36 }}
+            />
+          </div>
+          <Select
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+            style={{ width: 200, height: 36 }}
+          >
             <option value="">Semua customer</option>
             {customers
               .filter((c) => c.is_active)
@@ -111,92 +134,184 @@ export function JobsListView({ jobs, customers, unitMap, driverMap }: Props) {
                 </option>
               ))}
           </Select>
+          <Link href="/jobs/new" className="hidden lg:inline-flex">
+            <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+              Job baru
+            </Button>
+          </Link>
         </div>
-      </Card>
+      </div>
 
       {filtered.length === 0 ? (
-        <EmptyState
-          icon={PackageCheck}
-          title={
-            tab === "aktif"
-              ? "Belum ada job aktif"
-              : tab === "selesai"
-              ? "Belum ada job selesai"
-              : "Belum ada job dibatalkan"
-          }
-          description={
-            tab === "aktif"
-              ? "Buat job baru untuk mulai mencatat pengiriman."
-              : undefined
-          }
-          action={
-            tab === "aktif" && (
-              <Link href="/jobs/new">
-                <Button leftIcon={<Plus className="w-4 h-4" />}>Job baru</Button>
-              </Link>
-            )
-          }
-        />
+        <div className="card">
+          <EmptyState
+            icon={PackageCheck}
+            title={
+              tab === "aktif"
+                ? "Belum ada job aktif"
+                : tab === "selesai"
+                  ? "Belum ada job selesai"
+                  : "Belum ada job dibatalkan"
+            }
+            description={
+              tab === "aktif"
+                ? "Buat job baru untuk mulai mencatat pengiriman."
+                : undefined
+            }
+            action={
+              tab === "aktif" ? (
+                <Link href="/jobs/new">
+                  <Button
+                    leftIcon={<Plus style={{ width: 16, height: 16 }} />}
+                  >
+                    Job baru
+                  </Button>
+                </Link>
+              ) : undefined
+            }
+          />
+        </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {filtered.map((j) => {
-            const u = unitMap[j.unit_id];
-            const driverNama = driverMap[j.driver_id];
-            return (
-              <Link
-                key={j.id}
-                href={`/jobs/${j.id}`}
-                className="block bg-card rounded-lg border border-border p-3.5 hover:border-border-hover"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[14px] font-semibold text-text">
-                        {j.job_number}
-                      </span>
+        <div className="card">
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ width: 140 }}>Job ID</th>
+                <th>Customer &amp; Alat</th>
+                <th>Rute</th>
+                <th style={{ width: 130 }}>Unit / Driver</th>
+                <th style={{ width: 130 }}>ETD → ETA</th>
+                <th style={{ width: 150 }}>Status</th>
+                <th style={{ width: 50 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((j) => {
+                const u = unitMap[j.unit_id];
+                const driverNama = driverMap[j.driver_id];
+                return (
+                  <tr key={j.id} className="row-link">
+                    <td>
+                      <Link
+                        href={`/jobs/${j.id}`}
+                        style={{
+                          display: "block",
+                          textDecoration: "none",
+                          color: "inherit"
+                        }}
+                      >
+                        <div
+                          className="mono"
+                          style={{ fontWeight: 600, fontSize: 12.5 }}
+                        >
+                          {j.job_number}
+                        </div>
+                        <div
+                          className="caption mono"
+                          style={{ fontSize: 10.5 }}
+                        >
+                          {formatDate(j.created_at)}
+                        </div>
+                      </Link>
+                    </td>
+                    <td>
+                      <div
+                        style={{
+                          fontWeight: 500,
+                          fontSize: 13.5,
+                          marginBottom: 2
+                        }}
+                      >
+                        {j.customer_nama}
+                      </div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {j.alat_diangkut}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 12 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginBottom: 2,
+                          color: "var(--text-secondary)"
+                        }}
+                      >
+                        <MapPin
+                          style={{
+                            width: 11,
+                            height: 11,
+                            color: "var(--text-tertiary)"
+                          }}
+                        />
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            maxWidth: 240,
+                            display: "inline-block"
+                          }}
+                        >
+                          {takeLastSegment(j.asal)}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          color: "var(--brand-primary-dark)"
+                        }}
+                      >
+                        <Flag style={{ width: 11, height: 11 }} />
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            maxWidth: 240,
+                            display: "inline-block"
+                          }}
+                        >
+                          {takeLastSegment(j.tujuan)}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 12.5 }}>
+                      <div style={{ fontWeight: 600 }}>{u?.kode_unit ?? "—"}</div>
+                      <div className="muted" style={{ fontSize: 11.5 }}>
+                        {driverNama
+                          ? driverNama.split(" ").slice(0, 2).join(" ")
+                          : "—"}
+                      </div>
+                    </td>
+                    <td className="mono" style={{ fontSize: 11.5 }}>
+                      <div>{formatTime(j.etd)}</div>
+                      <div className="muted" style={{ fontSize: 10.5 }}>
+                        → {j.eta ? formatTime(j.eta) : "—"}
+                      </div>
+                    </td>
+                    <td>
                       <StatusBadge status={j.status} />
-                    </div>
-                    <p className="text-[13px] text-text mt-0.5 truncate">
-                      {j.customer_nama}
-                    </p>
-                  </div>
-                  <span className="text-[11px] text-text-subtle shrink-0">
-                    {formatDateTime(j.etd)}
-                  </span>
-                </div>
-                <div className="mt-2 grid gap-1 text-[12px] text-text-muted">
-                  <p className="inline-flex items-start gap-1.5">
-                    <Truck className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span className="truncate">{j.alat_diangkut}</span>
-                  </p>
-                  <p className="inline-flex items-start gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span className="truncate">
-                      {j.asal} <span className="text-text-subtle">→</span> {j.tujuan}
-                    </span>
-                  </p>
-                  <p className="inline-flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 shrink-0" />
-                    <span>
-                      {driverNama}
-                      {u && (
-                        <>
-                          {" "}
-                          <span className="text-text-subtle">·</span> {u.kode_unit}
-                        </>
-                      )}
-                    </span>
-                  </p>
-                  {j.eta && (
-                    <p className="inline-flex items-center gap-1.5">
-                      <CalendarClock className="w-3.5 h-3.5 shrink-0" />
-                      <span>ETA {formatDateTime(j.eta)}</span>
-                    </p>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+                    </td>
+                    <td>
+                      <Link
+                        href={`/jobs/${j.id}`}
+                        style={{
+                          color: "var(--text-tertiary)",
+                          display: "inline-flex"
+                        }}
+                      >
+                        <ChevronRight style={{ width: 16, height: 16 }} />
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

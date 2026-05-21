@@ -26,67 +26,114 @@ export function Tabs({
   if (variant === "pill") {
     return (
       <div
-        className={cn(
-          "inline-flex p-1 bg-page rounded-lg border border-border",
-          className
-        )}
+        className={cn("inline-flex", className)}
+        style={{
+          gap: 4,
+          background: "white",
+          padding: 4,
+          borderRadius: 8,
+          border: "0.5px solid var(--border-default)"
+        }}
       >
-        {items.map((it) => (
-          <button
-            key={it.key}
-            type="button"
-            onClick={() => onChange(it.key)}
-            className={cn(
-              "px-3 h-8 rounded-md text-[13px] font-medium transition-colors",
-              value === it.key
-                ? "bg-white text-text shadow-sm"
-                : "text-text-muted hover:text-text"
-            )}
-          >
-            {it.label}
-            {typeof it.count === "number" && (
-              <span className="ml-1.5 text-[11px] text-text-muted">{it.count}</span>
-            )}
-          </button>
-        ))}
+        {items.map((it) => {
+          const active = value === it.key;
+          return (
+            <button
+              key={it.key}
+              type="button"
+              onClick={() => onChange(it.key)}
+              style={{
+                background: active ? "var(--text-primary)" : "transparent",
+                color: active ? "white" : "var(--text-secondary)",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: 5,
+                fontSize: 12.5,
+                fontWeight: 500,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {it.label}
+              {typeof it.count === "number" && (
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    padding: "0 5px",
+                    borderRadius: 99,
+                    minWidth: 18,
+                    textAlign: "center",
+                    background: active
+                      ? "rgba(255,255,255,0.2)"
+                      : "var(--bg-subtle)"
+                  }}
+                >
+                  {it.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
     );
   }
 
   return (
     <div
-      className={cn(
-        "flex items-center gap-1 border-b border-border overflow-x-auto scrollbar-thin",
-        className
-      )}
+      className={cn("flex items-center overflow-x-auto scrollbar-thin", className)}
+      style={{ borderBottom: "0.5px solid var(--border-default)" }}
     >
-      {items.map((it) => (
-        <button
-          key={it.key}
-          type="button"
-          onClick={() => onChange(it.key)}
-          className={cn(
-            "px-3 h-10 text-[13px] font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
-            value === it.key
-              ? "border-brand text-brand-dark"
-              : "border-transparent text-text-muted hover:text-text"
-          )}
-        >
-          {it.label}
-          {typeof it.count === "number" && (
-            <span
-              className={cn(
-                "ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px]",
-                value === it.key
-                  ? "bg-brand-light text-brand-dark"
-                  : "bg-status-standby-bg text-text-muted"
-              )}
-            >
-              {it.count}
-            </span>
-          )}
-        </button>
-      ))}
+      {items.map((it) => {
+        const active = value === it.key;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            onClick={() => onChange(it.key)}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: "12px 16px",
+              fontSize: 13,
+              fontWeight: 500,
+              color: active ? "var(--text-primary)" : "var(--text-tertiary)",
+              borderBottom: active
+                ? "2px solid var(--brand-primary)"
+                : "2px solid transparent",
+              marginBottom: "-0.5px",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              whiteSpace: "nowrap",
+              cursor: "pointer"
+            }}
+          >
+            {it.label}
+            {typeof it.count === "number" && (
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  padding: "1px 6px",
+                  borderRadius: 99,
+                  background: active
+                    ? "var(--brand-primary-light)"
+                    : "var(--bg-subtle)",
+                  color: active
+                    ? "var(--brand-primary-dark)"
+                    : "var(--text-secondary)"
+                }}
+              >
+                {it.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

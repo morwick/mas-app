@@ -23,48 +23,71 @@ export function Stepper({
   cancelled
 }: StepperProps) {
   const currentIdx = steps.findIndex((s) => s.key === currentKey);
+  void cancelled; // kept for API compat — cancelled state is shown via separate banner
 
   if (orientation === "vertical") {
     return (
-      <ol className={cn("flex flex-col gap-0", className)}>
+      <ol className={cn("flex flex-col", className)}>
         {steps.map((step, i) => {
           const done = i < currentIdx;
           const active = i === currentIdx;
+          const isLast = i === steps.length - 1;
           return (
-            <li key={step.key} className="flex gap-3">
-              <div className="flex flex-col items-center">
+            <li
+              key={step.key}
+              className="flex gap-3"
+              style={{ paddingBottom: isLast ? 0 : 14 }}
+            >
+              <div
+                className="flex flex-col items-center"
+                style={{ position: "relative" }}
+              >
                 <div
                   className={cn(
-                    "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium border",
-                    done && "bg-brand border-brand text-white",
-                    active && !cancelled && "bg-white border-brand text-brand",
-                    !done && !active && "bg-white border-border text-text-muted",
-                    cancelled && active && "bg-status-cancelled-bg border-danger text-status-cancelled-fg"
+                    "stepper-dot",
+                    done && "done",
+                    active && "active"
                   )}
                 >
-                  {done ? <Check className="w-4 h-4" /> : i + 1}
+                  {done ? <Check style={{ width: 14, height: 14 }} /> : i + 1}
                 </div>
-                {i < steps.length - 1 && (
+                {!isLast && (
                   <div
-                    className={cn(
-                      "w-px flex-1 my-1",
-                      done ? "bg-brand" : "bg-border"
-                    )}
+                    style={{
+                      flex: 1,
+                      width: 1.5,
+                      marginTop: 4,
+                      background: done
+                        ? "var(--brand-primary)"
+                        : "var(--border-default)"
+                    }}
                   />
                 )}
               </div>
-              <div className="pb-5">
+              <div style={{ paddingBottom: 8, flex: 1 }}>
                 <p
-                  className={cn(
-                    "text-[13px] font-medium",
-                    active ? "text-brand-dark" : "text-text",
-                    !done && !active && "text-text-muted"
-                  )}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: active ? 600 : 500,
+                    color: active
+                      ? "var(--brand-primary-dark)"
+                      : done
+                        ? "var(--text-primary)"
+                        : "var(--text-tertiary)"
+                  }}
                 >
                   {step.label}
                 </p>
                 {step.hint && (
-                  <p className="text-[11px] text-text-muted mt-0.5">{step.hint}</p>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-tertiary)",
+                      marginTop: 2
+                    }}
+                  >
+                    {step.hint}
+                  </p>
                 )}
               </div>
             </li>
@@ -75,49 +98,30 @@ export function Stepper({
   }
 
   return (
-    <ol className={cn("flex items-start gap-0 w-full", className)}>
+    <div className={cn("stepper", className)}>
       {steps.map((step, i) => {
         const done = i < currentIdx;
         const active = i === currentIdx;
         return (
-          <li key={step.key} className="flex-1 flex flex-col items-center min-w-0">
-            <div className="w-full flex items-center">
-              <div
-                className={cn(
-                  "h-0.5 flex-1",
-                  i === 0 ? "bg-transparent" : done || active ? "bg-brand" : "bg-border"
-                )}
-              />
-              <div
-                className={cn(
-                  "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-medium border shrink-0",
-                  done && "bg-brand border-brand text-white",
-                  active && !cancelled && "bg-white border-brand text-brand",
-                  !done && !active && "bg-white border-border text-text-muted",
-                  cancelled && active && "bg-status-cancelled-bg border-danger text-status-cancelled-fg"
-                )}
-              >
-                {done ? <Check className="w-4 h-4" /> : i + 1}
-              </div>
-              <div
-                className={cn(
-                  "h-0.5 flex-1",
-                  i === steps.length - 1 ? "bg-transparent" : done ? "bg-brand" : "bg-border"
-                )}
-              />
-            </div>
-            <p
+          <div key={step.key} className="stepper-step">
+            <div
               className={cn(
-                "mt-2 text-[11px] text-center leading-tight px-1",
-                active ? "text-brand-dark font-medium" : "text-text-muted",
-                done && "text-text"
+                "stepper-dot",
+                done && "done",
+                active && "active"
               )}
             >
+              {done ? <Check style={{ width: 14, height: 14 }} /> : i + 1}
+              {i < steps.length - 1 && (
+                <div className={cn("stepper-connector", done && "done")} />
+              )}
+            </div>
+            <div className={cn("stepper-label", active && "active")}>
               {step.label}
-            </p>
-          </li>
+            </div>
+          </div>
         );
       })}
-    </ol>
+    </div>
   );
 }

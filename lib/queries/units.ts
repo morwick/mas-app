@@ -92,6 +92,49 @@ export async function getUnitStatusHistory(
   }));
 }
 
+export interface DriverAssignment {
+  unit_id: string;
+  kode_unit: string;
+}
+
+/**
+ * Map driverId → unit yang sedang memakai driver itu sebagai default driver.
+ * Hanya unit aktif yang dihitung.
+ */
+export async function getDriverAssignments(): Promise<
+  Record<string, DriverAssignment>
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("units")
+    .select("id, kode_unit, default_driver_id")
+    .eq("is_active", true)
+    .not("default_driver_id", "is", null);
+  if (error) throw new Error(error.message);
+  const map: Record<string, DriverAssignment> = {};
+  for (const row of (data ?? []) as Array<{
+    id: string;
+    kode_unit: string;
+    default_driver_id: string;
+  }>) {
+    map[row.default_driver_id] = {
+      unit_id: row.id,
+      kode_unit: row.kode_unit
+    };
+  }
+  return map;
+}
+
+export async function activeUnitsCount(): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("units")
+    .select("id", { count: "exact", head: true })
+    .eq("is_active", true);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function unitStatusCounts(): Promise<{
   standby: number;
   bertugas: number;

@@ -16,21 +16,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   rightIcon?: React.ReactNode;
 }
 
-const variantClasses: Record<Variant, string> = {
-  primary:
-    "bg-brand text-white hover:bg-brand-dark active:scale-[0.98] disabled:opacity-50",
-  secondary:
-    "bg-white text-text border border-border hover:border-border-hover active:scale-[0.98] disabled:opacity-50",
-  danger:
-    "bg-danger text-white hover:bg-danger-dark active:scale-[0.98] disabled:opacity-50",
-  ghost:
-    "bg-transparent text-brand hover:bg-brand-light active:scale-[0.98] disabled:opacity-50"
+const variantClass: Record<Variant, string> = {
+  primary: "btn-primary",
+  secondary: "btn-secondary",
+  danger: "btn-danger",
+  ghost: "btn-ghost"
 };
 
-const sizeClasses: Record<Size, string> = {
-  sm: "h-8 px-3 text-[12px]",
-  md: "h-10 px-4 text-[14px]",
-  lg: "h-12 px-5 text-[16px]"
+const sizeClass: Record<Size, string> = {
+  sm: "btn-sm",
+  md: "",
+  lg: "btn-lg"
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -55,9 +51,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors duration-150 no-tap-highlight select-none",
-        variantClasses[variant],
-        sizeClasses[size],
+        "btn",
+        variantClass[variant],
+        sizeClass[size],
         fullWidth && "w-full",
         className
       )}
@@ -69,7 +65,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         leftIcon && <span className="inline-flex">{leftIcon}</span>
       )}
       {children}
-      {!loading && rightIcon && <span className="inline-flex">{rightIcon}</span>}
+      {!loading && rightIcon && (
+        <span className="inline-flex">{rightIcon}</span>
+      )}
     </button>
   );
 });

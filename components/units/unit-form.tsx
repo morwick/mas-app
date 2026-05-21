@@ -15,9 +15,21 @@ interface UnitFormProps {
   initial?: Unit;
   jenisUnitList: JenisUnit[];
   drivers: Driver[];
+  /**
+   * Map driverId → kode_unit yang sudah memakai driver tsb sebagai default driver.
+   * Driver di map ini akan di-disable di dropdown (1 driver = 1 unit).
+   * Tidak termasuk unit yang sedang diedit (excludeSelf).
+   */
+  driverAssignments?: Record<string, { unit_id: string; kode_unit: string }>;
 }
 
-export function UnitForm({ mode, initial, jenisUnitList, drivers }: UnitFormProps) {
+export function UnitForm({
+  mode,
+  initial,
+  jenisUnitList,
+  drivers,
+  driverAssignments = {}
+}: UnitFormProps) {
   const router = useRouter();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
@@ -116,7 +128,7 @@ export function UnitForm({ mode, initial, jenisUnitList, drivers }: UnitFormProp
           </Field>
           <Field
             label="Driver tetap"
-            hint="Otomatis terpilih saat buat job baru untuk unit ini. Masih bisa di-override per-job."
+            hint="1 driver hanya boleh untuk 1 unit. Driver yang sudah dipakai unit lain di-disable."
             className="sm:col-span-2"
           >
             <Select
@@ -124,11 +136,22 @@ export function UnitForm({ mode, initial, jenisUnitList, drivers }: UnitFormProp
               onChange={(e) => set("default_driver_id", e.target.value)}
             >
               <option value="">— Belum ditugaskan —</option>
-              {drivers.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.nama} — {d.no_hp}
-                </option>
-              ))}
+              {drivers.map((d) => {
+                const takenBy = driverAssignments[d.id];
+                // Driver sedang dipakai unit ini sendiri → tetap enabled
+                const takenByOther =
+                  takenBy && takenBy.unit_id !== initial?.id ? takenBy : null;
+                return (
+                  <option
+                    key={d.id}
+                    value={d.id}
+                    disabled={!!takenByOther}
+                  >
+                    {d.nama} — {d.no_hp}
+                    {takenByOther ? ` (sudah di ${takenByOther.kode_unit})` : ""}
+                  </option>
+                );
+              })}
             </Select>
           </Field>
           {mode === "new" && (
