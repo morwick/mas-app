@@ -10,7 +10,7 @@ import type {
 const JOB_SELECT = `
   id, job_number, share_token, customer_id, pic_nama, pic_no_hp,
   alat_diangkut, asal, tujuan, unit_id, driver_id, etd, eta,
-  tracksolid_share_link, status, catatan, cancelled_reason,
+  status, catatan, cancelled_reason,
   created_at, completed_at,
   customer:customers(nama_perusahaan),
   photos:job_photos(id, type, file_path, uploaded_at)
@@ -30,7 +30,6 @@ interface JobRow {
   driver_id: string;
   etd: string;
   eta: string | null;
-  tracksolid_share_link: string | null;
   status: JobStatus;
   catatan: string | null;
   cancelled_reason: string | null;
@@ -74,7 +73,6 @@ function mapJob(row: JobRow): Job {
     driver_id: row.driver_id,
     etd: row.etd,
     eta: row.eta,
-    tracksolid_share_link: row.tracksolid_share_link,
     status: row.status,
     catatan: row.catatan,
     cancelled_reason: row.cancelled_reason,

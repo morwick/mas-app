@@ -23,7 +23,12 @@ import type { Job, JobStatus } from "@/lib/types";
 
 interface Props {
   job: Job;
-  unit: { kode_unit: string; no_polisi: string; jenis: string } | null;
+  unit: {
+    kode_unit: string;
+    no_polisi: string;
+    jenis: string;
+    tracksolid_share_link: string | null;
+  } | null;
   driver: { nama: string; no_hp: string } | null;
 }
 
@@ -338,9 +343,9 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
                 TrackSolid · update tiap 30 detik
               </div>
             </div>
-            {job.tracksolid_share_link && (
+            {unit?.tracksolid_share_link && (
               <a
-                href={job.tracksolid_share_link}
+                href={unit.tracksolid_share_link}
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-primary btn-sm"
@@ -350,7 +355,11 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
               </a>
             )}
           </div>
-          <TrackSolidEmbed url={job.tracksolid_share_link} />
+          <TrackSolidEmbed
+            jobToken={job.share_token}
+            externalLink={unit?.tracksolid_share_link ?? null}
+            jobStatus={job.status}
+          />
         </div>
 
         {/* Unit & alat */}

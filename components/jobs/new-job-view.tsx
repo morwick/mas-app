@@ -3,12 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ExternalLink,
-  Info,
-  Plus,
-  Sparkles
-} from "lucide-react";
+import { Info, Plus, Sparkles } from "lucide-react";
 import { Input, Select, Textarea, Field } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
@@ -80,7 +75,6 @@ export function NewJobView({
     driver_id: "",
     etd: "",
     eta: "",
-    tracksolid_share_link: "",
     catatan: ""
   });
   const [error, setError] = useState<Record<string, string>>({});
@@ -350,35 +344,29 @@ export function NewJobView({
           )}
         </FormSection>
 
-        <FormSection
-          title="TrackSolid & catatan"
-          subtitle="Bisa diisi belakangan"
-        >
+        <FormSection title="Catatan" subtitle="Bisa diisi belakangan">
           <div style={{ display: "grid", gap: 12 }}>
-            <Field
-              label="TrackSolid share link"
-              hint="Buka TrackSolid → pilih device → Share Location → copy link"
-            >
-              <Input
-                placeholder="https://tracksolid.com/share/..."
-                value={form.tracksolid_share_link}
-                onChange={(e) =>
-                  set("tracksolid_share_link", e.target.value)
-                }
-                className="mono"
-                rightAddon={
-                  <a
-                    href="https://www.tracksolid.com/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-link"
-                    style={{ fontSize: 11, padding: "0 8px" }}
-                  >
-                    Buka <ExternalLink style={{ width: 11, height: 11 }} />
-                  </a>
-                }
-              />
-            </Field>
+            {selectedUnit && (
+              <div
+                className="caption"
+                style={{
+                  fontSize: 11.5,
+                  padding: "8px 10px",
+                  background: selectedUnit.imei_gps
+                    ? "var(--brand-primary-light)"
+                    : "var(--bg-muted)",
+                  color: selectedUnit.imei_gps
+                    ? "var(--brand-primary-dark)"
+                    : "var(--text-secondary)",
+                  borderRadius: 8,
+                  lineHeight: 1.5
+                }}
+              >
+                {selectedUnit.imei_gps
+                  ? `Tracking GPS aktif dari unit ${selectedUnit.kode_unit}. Customer akan lihat peta real-time di halaman tracking.`
+                  : `Unit ${selectedUnit.kode_unit} belum punya link TrackSolid. Customer akan lihat fallback link-out. Tambahkan di form unit.`}
+              </div>
+            )}
             <Field label="Catatan internal">
               <Textarea
                 rows={2}

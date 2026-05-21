@@ -14,6 +14,8 @@ interface UnitInput {
   status?: UnitStatus;
   catatan?: string | null;
   default_driver_id?: string | null;
+  imei_gps?: string | null;
+  tracksolid_share_link?: string | null;
 }
 
 async function driverAlreadyTakenBy(
@@ -54,7 +56,9 @@ export async function createUnitAction(input: UnitInput): Promise<ActionResult<{
       tahun: input.tahun ?? null,
       status: input.status ?? "standby",
       catatan: input.catatan?.trim() || null,
-      default_driver_id: input.default_driver_id || null
+      default_driver_id: input.default_driver_id || null,
+      imei_gps: input.imei_gps?.trim() || null,
+      tracksolid_share_link: input.tracksolid_share_link?.trim() || null
     })
     .select("id")
     .single();
@@ -93,6 +97,10 @@ export async function updateUnitAction(
   if (input.catatan !== undefined) payload.catatan = input.catatan?.trim() || null;
   if (input.default_driver_id !== undefined)
     payload.default_driver_id = input.default_driver_id || null;
+  if (input.imei_gps !== undefined)
+    payload.imei_gps = input.imei_gps?.trim() || null;
+  if (input.tracksolid_share_link !== undefined)
+    payload.tracksolid_share_link = input.tracksolid_share_link?.trim() || null;
   const { error } = await supabase.from("units").update(payload).eq("id", id);
   if (error) {
     if (

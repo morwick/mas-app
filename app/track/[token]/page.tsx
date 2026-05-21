@@ -24,7 +24,7 @@ export default async function CustomerTrackingPage({
   const [unitRes, driverRes] = await Promise.all([
     supabase
       .from("units")
-      .select("id, kode_unit, no_polisi, jenis_unit(nama)")
+      .select("id, kode_unit, no_polisi, tracksolid_share_link, jenis_unit(nama)")
       .eq("id", job.unit_id)
       .maybeSingle(),
     supabase
@@ -35,7 +35,12 @@ export default async function CustomerTrackingPage({
   ]);
 
   const unit = unitRes.data as
-    | { kode_unit: string; no_polisi: string; jenis_unit: { nama: string } | null }
+    | {
+        kode_unit: string;
+        no_polisi: string;
+        tracksolid_share_link: string | null;
+        jenis_unit: { nama: string } | null;
+      }
     | null;
   const driver = driverRes.data as { nama: string; no_hp: string } | null;
 
@@ -47,7 +52,8 @@ export default async function CustomerTrackingPage({
           ? {
               kode_unit: unit.kode_unit,
               no_polisi: unit.no_polisi,
-              jenis: unit.jenis_unit?.nama ?? "—"
+              jenis: unit.jenis_unit?.nama ?? "—",
+              tracksolid_share_link: unit.tracksolid_share_link
             }
           : null
       }

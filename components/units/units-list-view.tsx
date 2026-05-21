@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
+  MapPin,
   Plus,
   Search,
   Truck
@@ -20,11 +21,52 @@ interface Props {
   jenisUnitList: JenisUnit[];
 }
 
+interface LocationEntry {
+  lat: number;
+  lng: number;
+  address: string | null;
+  fetchedAt: string;
+}
+
+const LOCATION_POLL_MS = 30_000;
+
 export function UnitsListView({ units, jenisUnitList }: Props) {
   const [q, setQ] = useState("");
   const [jenis, setJenis] = useState("");
   const [status, setStatus] = useState("");
   const [showInactive, setShowInactive] = useState(false);
+
+  // Alamat real-time per unit. State diisi via polling /api/units/locations.
+  // Map kosong saat first paint → kolom alamat tampilkan "Memuat…" untuk unit
+  // yang punya IMEI, dan "—" untuk unit yang belum di-set IMEI-nya.
+  const [locations, setLocations] = useState<Record<string, LocationEntry | null>>({});
+  const [locationsLoaded, setLocationsLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchLocations() {
+      try {
+        const res = await fetch("/api/units/locations", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as {
+          locations: Record<string, LocationEntry | null>;
+        };
+        if (!cancelled) {
+          setLocations(body.locations);
+          setLocationsLoaded(true);
+        }
+      } catch {
+        // Network error → biarkan state lama. Akan retry di interval berikutnya.
+        if (!cancelled) setLocationsLoaded(true);
+      }
+    }
+    fetchLocations();
+    const id = setInterval(fetchLocations, LOCATION_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     return units.filter((u) => {
@@ -126,7 +168,7 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
                 <th style={{ width: 130 }}>Kode</th>
                 <th>Jenis</th>
                 <th>No. Polisi</th>
-                <th style={{ width: 80 }}>Tahun</th>
+                <th style={{ minWidth: 220 }}>Alamat terkini</th>
                 <th style={{ width: 140 }}>Status</th>
                 <th>Driver default</th>
                 <th style={{ width: 50 }}></th>
@@ -175,7 +217,13 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
                   <td className="mono" style={{ fontSize: 13 }}>
                     {u.no_polisi}
                   </td>
-                  <td className="muted">{u.tahun ?? "—"}</td>
+                  <td>
+                    <LocationCell
+                      hasImei={!!u.imei_gps}
+                      entry={locations[u.id]}
+                      loaded={locationsLoaded}
+                    />
+                  </td>
                   <td>
                     <StatusBadge status={u.status} />
                   </td>
@@ -204,5 +252,73 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
 
       <Fab href="/units/new" label="Tambah unit" />
     </div>
+  );
+}
+
+function LocationCell({
+  hasImei,
+  entry,
+  loaded
+}: {
+  hasImei: boolean;
+  entry: LocationEntry | null | undefined;
+  loaded: boolean;
+}) {
+  if (!hasImei) {
+    return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
+  }
+  // Belum pernah dapat response dari API → "Memuat" hanya untuk unit ber-IMEI.
+  if (!loaded && entry === undefined) {
+    return (
+      <span
+        style={{
+          fontSize: 12,
+          color: "var(--text-tertiary)",
+          fontStyle: "italic"
+        }}
+      >
+        Memuat…
+      </span>
+    );
+  }
+  // Sudah loaded tapi entry null = TrackSolid error / device offline.
+  if (!entry?.address) {
+    return (
+      <span
+        style={{
+          fontSize: 12,
+          color: "var(--text-tertiary)"
+        }}
+      >
+        Lokasi tidak tersedia
+      </span>
+    );
+  }
+  return (
+    <span
+      title={entry.address}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 12.5,
+        color: "var(--text-secondary)",
+        lineHeight: 1.4,
+        maxWidth: 320,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      }}
+    >
+      <MapPin
+        style={{
+          width: 12,
+          height: 12,
+          color: "var(--brand-primary)",
+          flexShrink: 0
+        }}
+      />
+      {entry.address}
+    </span>
   );
 }

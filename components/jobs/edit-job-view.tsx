@@ -55,7 +55,6 @@ export function EditJobView({
     driver_id: job.driver_id,
     etd: toLocalDateTime(job.etd),
     eta: toLocalDateTime(job.eta),
-    tracksolid_share_link: job.tracksolid_share_link ?? "",
     catatan: job.catatan ?? ""
   });
 
@@ -188,12 +187,6 @@ export function EditJobView({
               type="datetime-local"
               value={form.eta}
               onChange={(e) => set("eta", e.target.value)}
-            />
-          </Field>
-          <Field label="TrackSolid share link" className="sm:col-span-2">
-            <Input
-              value={form.tracksolid_share_link}
-              onChange={(e) => set("tracksolid_share_link", e.target.value)}
             />
           </Field>
           <Field label="Catatan" className="sm:col-span-2">

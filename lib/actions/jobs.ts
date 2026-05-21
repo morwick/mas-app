@@ -22,7 +22,6 @@ interface JobInput {
   driver_id: string;
   etd: string;
   eta?: string | null;
-  tracksolid_share_link?: string | null;
   catatan?: string | null;
 }
 
@@ -107,7 +106,6 @@ export async function createJobAction(
       driver_id: input.driver_id,
       etd: new Date(input.etd).toISOString(),
       eta: input.eta ? new Date(input.eta).toISOString() : null,
-      tracksolid_share_link: input.tracksolid_share_link?.trim() || null,
       catatan: input.catatan?.trim() || null,
       created_by: user?.id ?? null
     })
@@ -177,8 +175,6 @@ export async function updateJobAction(
   if (input.etd) payload.etd = new Date(input.etd).toISOString();
   if (input.eta !== undefined)
     payload.eta = input.eta ? new Date(input.eta).toISOString() : null;
-  if (input.tracksolid_share_link !== undefined)
-    payload.tracksolid_share_link = input.tracksolid_share_link?.trim() || null;
   if (input.catatan !== undefined)
     payload.catatan = input.catatan?.trim() || null;
 

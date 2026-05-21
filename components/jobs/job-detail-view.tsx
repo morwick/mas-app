@@ -414,17 +414,19 @@ export function JobDetailView({ job, unit, driver, history }: Props) {
               }}
             >
               <div className="eyebrow">TrackSolid</div>
-              <Link
-                href={`/jobs/${job.id}/edit`}
-                className="btn-link"
-                style={{ fontSize: 11 }}
-              >
-                Edit link
-              </Link>
+              {unit && (
+                <Link
+                  href={`/units/${unit.id}/edit`}
+                  className="btn-link"
+                  style={{ fontSize: 11 }}
+                >
+                  Edit di unit
+                </Link>
+              )}
             </div>
-            {job.tracksolid_share_link ? (
+            {unit?.tracksolid_share_link ? (
               <a
-                href={job.tracksolid_share_link}
+                href={unit.tracksolid_share_link}
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-secondary btn-sm"
@@ -441,7 +443,7 @@ export function JobDetailView({ job, unit, driver, history }: Props) {
                   margin: 0
                 }}
               >
-                Belum ada link TrackSolid.
+                Unit {unit?.kode_unit ?? "ini"} belum punya link TrackSolid.
               </p>
             )}
           </div>

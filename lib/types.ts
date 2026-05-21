@@ -31,6 +31,8 @@ export interface Unit {
   default_driver_id?: string | null;
   default_driver_nama?: string | null;
   default_driver_no_hp?: string | null;
+  imei_gps?: string | null;
+  tracksolid_share_link?: string | null;
 }
 
 export interface Driver {
@@ -97,7 +99,6 @@ export interface Job {
   driver_id: string;
   etd: string;
   eta?: string | null;
-  tracksolid_share_link?: string | null;
   status: JobStatus;
   catatan?: string | null;
   cancelled_reason?: string | null;

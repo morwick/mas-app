@@ -23,6 +23,8 @@ interface UnitRow {
   is_active: boolean;
   created_at: string;
   default_driver_id: string | null;
+  imei_gps: string | null;
+  tracksolid_share_link: string | null;
   jenis_unit: { nama: string } | null;
   default_driver: { id: string; nama: string; no_hp: string } | null;
 }
@@ -41,7 +43,9 @@ function mapUnit(row: UnitRow): Unit {
     created_at: row.created_at,
     default_driver_id: row.default_driver_id,
     default_driver_nama: row.default_driver?.nama ?? null,
-    default_driver_no_hp: row.default_driver?.no_hp ?? null
+    default_driver_no_hp: row.default_driver?.no_hp ?? null,
+    imei_gps: row.imei_gps,
+    tracksolid_share_link: row.tracksolid_share_link
   };
 }
 

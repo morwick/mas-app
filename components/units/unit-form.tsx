@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea, Field } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { createUnitAction, updateUnitAction } from "@/lib/actions/units";
+import { parseTrackingInput } from "@/lib/tracksolid/parse-link";
 import type { Driver, JenisUnit, Unit, UnitStatus } from "@/lib/types";
 
 interface UnitFormProps {
@@ -33,6 +34,11 @@ export function UnitForm({
   const router = useRouter();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  // Initial value untuk field tracking: prioritas link mentah (kalau ada),
+  // fallback ke IMEI murni (kalau admin sebelumnya ketik IMEI langsung).
+  const initialTrackingInput =
+    initial?.tracksolid_share_link ?? initial?.imei_gps ?? "";
+
   const [form, setForm] = useState({
     kode_unit: initial?.kode_unit ?? "",
     jenis_unit_id: initial?.jenis_unit_id ?? jenisUnitList[0]?.id ?? "",
@@ -40,9 +46,16 @@ export function UnitForm({
     tahun: initial?.tahun?.toString() ?? "",
     status: (initial?.status ?? "standby") as UnitStatus,
     default_driver_id: initial?.default_driver_id ?? "",
-    catatan: initial?.catatan ?? ""
+    catatan: initial?.catatan ?? "",
+    tracking_input: initialTrackingInput
   });
   const [error, setError] = useState<Record<string, string>>({});
+
+  // Smart parse: user boleh ketik IMEI 15 digit langsung atau paste link.
+  const parsed = useMemo(
+    () => parseTrackingInput(form.tracking_input),
+    [form.tracking_input]
+  );
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -53,6 +66,9 @@ export function UnitForm({
     const errs: Record<string, string> = {};
     if (!form.kode_unit.trim()) errs.kode_unit = "Kode unit wajib diisi";
     if (!form.no_polisi.trim()) errs.no_polisi = "No polisi wajib diisi";
+    if (form.tracking_input.trim() && !parsed.imei)
+      errs.tracking_input =
+        "Format tidak dikenali. Masukkan IMEI 15 digit atau paste link TrackSolid lengkap.";
     setError(errs);
     if (Object.keys(errs).length > 0) return;
     setLoading(true);
@@ -63,7 +79,9 @@ export function UnitForm({
       no_polisi: form.no_polisi,
       tahun: form.tahun ? Number(form.tahun) : null,
       default_driver_id: form.default_driver_id || null,
-      catatan: form.catatan
+      catatan: form.catatan,
+      imei_gps: parsed.imei,
+      tracksolid_share_link: parsed.shareLink
     };
 
     const res =
@@ -165,6 +183,33 @@ export function UnitForm({
               </Select>
             </Field>
           )}
+          <Field
+            label="Tracking GPS (IMEI atau link TrackSolid)"
+            className="sm:col-span-2"
+            hint="Ketik 15 digit IMEI device GPS langsung, atau paste link TrackSolid lengkap — sistem akan extract IMEI otomatis."
+          >
+            <Input
+              placeholder="353701093101554 — atau paste link TrackSolid"
+              value={form.tracking_input}
+              onChange={(e) => set("tracking_input", e.target.value)}
+              error={error.tracking_input}
+              className="mono"
+            />
+            {form.tracking_input.trim() && (
+              <div
+                className="mt-2 text-[11px]"
+                style={{
+                  color: parsed.imei
+                    ? "var(--brand-primary-dark)"
+                    : "var(--status-danger-text)"
+                }}
+              >
+                {parsed.imei
+                  ? `IMEI: ${parsed.imei}${parsed.shareLink ? " (di-extract dari link)" : ""}`
+                  : "Format tidak dikenali"}
+              </div>
+            )}
+          </Field>
           <Field label="Catatan" className="sm:col-span-2">
             <Textarea
               placeholder="Catatan tambahan (opsional)"
