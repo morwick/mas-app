@@ -2,7 +2,12 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/reset-password"];
-const PUBLIC_PREFIXES = ["/track/", "/_next/", "/favicon"];
+const PUBLIC_PREFIXES = [
+  "/track/",
+  "/api/tracking/", // dipanggil dari halaman customer (public)
+  "/_next/",
+  "/favicon"
+];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
