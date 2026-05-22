@@ -273,3 +273,128 @@ export async function getVehicleLocation(imei: string): Promise<VehicleLocation>
 
   return extractFromMonitorInfo(body);
 }
+
+// ============================================================================
+// getPointList → totalMileage harian (untuk akumulasi odometer)
+// ============================================================================
+
+interface PointListResponse {
+  ok: boolean;
+  code: number;
+  msg: string;
+  data?: {
+    time?: number;
+    totalMileage?: string;       // "72.02"
+    showUnit?: string;            // "km"
+    gpsPointStrList?: unknown[];  // tidak dipakai untuk mileage
+  };
+}
+
+// Status code yang sama-sama jadi indikasi auth error untuk PointList.
+function isPointListAuthError(
+  status: number,
+  body: PointListResponse
+): boolean {
+  if (status === 401 || status === 403) return true;
+  if (body.ok === false) {
+    if (body.code === 100 || body.code === 401) return true;
+    if (typeof body.msg === "string" && /token|login/i.test(body.msg))
+      return true;
+  }
+  return false;
+}
+
+async function callPointList(
+  imei: string,
+  startTime: string,
+  endTime: string,
+  session: SessionState
+): Promise<{ status: number; body: PointListResponse }> {
+  const headers: Record<string, string> = {
+    ...BROWSER_HEADERS,
+    "Content-Type": "application/json",
+    Accept: "application/json, text/plain, */*",
+    Authorization: session.token
+  };
+  if (session.cookies) headers["Cookie"] = session.cookies;
+
+  // Payload schema (terverifikasi dari DevTools tracksolidpro.com):
+  //   { startTime, endTime, imei, confidenceLevel, selectMap, selectType }
+  // Format start/end: "YYYY-MM-DD HH:mm:ss" zona lokal device.
+  // selectMap "googleMap" wajib (server validasi enum). selectType "all"
+  // memilih semua tipe point (driving + stop). confidenceLevel "" = default.
+  const res = await fetch(`${BASE_URL}/v3/new/newTrackInfo/getPointList`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      startTime,
+      endTime,
+      imei,
+      confidenceLevel: "",
+      selectMap: "googleMap",
+      selectType: "all"
+    }),
+    cache: "no-store"
+  });
+
+  const body = (await res.json().catch(() => ({}))) as PointListResponse;
+  return { status: res.status, body };
+}
+
+export interface DailyMileage {
+  /** Total km perjalanan untuk window [beginTime, endTime] */
+  km: number;
+  /** Unit asli dari TrackSolid (biasanya "km") */
+  unit: string;
+  fetchedAt: string;
+}
+
+/**
+ * Ambil total mileage dalam window tertentu. Untuk akumulasi harian, caller
+ * pass window 00:00:00 – sekarang (atau 23:59:59 untuk hari lampau).
+ *
+ * startTime/endTime format: "YYYY-MM-DD HH:mm:ss" (zona WIB).
+ *
+ * Mengembalikan 0 (bukan throw) kalau totalMileage hilang/0 — itu valid
+ * untuk unit yang seharian diam.
+ */
+export async function getDailyMileage(
+  imei: string,
+  startTime: string,
+  endTime: string
+): Promise<DailyMileage> {
+  if (!/^\d{14,17}$/.test(imei)) {
+    throw new Error("Format IMEI tidak valid");
+  }
+
+  let session = await getSession();
+  let { status, body } = await callPointList(imei, startTime, endTime, session);
+
+  if (isPointListAuthError(status, body)) {
+    cached = null;
+    session = await getSession(true);
+    ({ status, body } = await callPointList(
+      imei,
+      startTime,
+      endTime,
+      session
+    ));
+  }
+
+  if (!body.ok || !body.data) {
+    throw new Error(
+      `TrackSolid getPointList gagal: ${body.msg ?? "unknown"} (code ${body.code})`
+    );
+  }
+
+  const raw = body.data.totalMileage;
+  const km = raw == null || raw === "" ? 0 : Number(raw);
+  if (!Number.isFinite(km) || km < 0) {
+    throw new Error(`totalMileage invalid: "${raw}"`);
+  }
+  return {
+    km,
+    unit: body.data.showUnit ?? "km",
+    fetchedAt: new Date().toISOString()
+  };
+}

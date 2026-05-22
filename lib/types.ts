@@ -33,6 +33,11 @@ export interface Unit {
   default_driver_no_hp?: string | null;
   imei_gps?: string | null;
   tracksolid_share_link?: string | null;
+  // Odometer fields — di-load dari DB sejak migration 20260522. Default 0
+  // untuk unit lama yang belum dikalibrasi.
+  odometer_baseline_km: number;
+  current_odometer_km: number;
+  service_interval_km: number;
 }
 
 export interface Driver {
@@ -157,3 +162,50 @@ export const jobStatusOrder: Array<{ key: JobStatus; label: string }> = [
   { key: "unloading", label: "Unloading" },
   { key: "selesai", label: "Selesai" }
 ];
+
+// ─── Service / Maintenance ──────────────────────────────────────────────────
+// Field odometer & last service belum dipersist ke Supabase; di fase ini
+// di-derive dari mock helper di lib/mock-services.ts. Saat backend siap, isi
+// dari kolom tabel `units` (lihat plan service tracking).
+export type JenisService = "rutin" | "oli" | "ban" | "mesin" | "lainnya";
+
+export const jenisServiceLabel: Record<JenisService, string> = {
+  rutin: "Servis Rutin",
+  oli: "Ganti Oli",
+  ban: "Ganti Ban",
+  mesin: "Servis Mesin",
+  lainnya: "Lainnya"
+};
+
+export interface ServiceRecord {
+  id: string;
+  unit_id: string;
+  unit_kode: string;
+  tanggal: string;
+  odometer_km: number;
+  jenis: JenisService;
+  catatan?: string | null;
+  created_by_nama: string;
+  created_at: string;
+}
+
+export type ServiceStatus = "ok" | "mendekati" | "overdue";
+
+export const serviceStatusLabel: Record<ServiceStatus, string> = {
+  ok: "OK",
+  mendekati: "Mendekati",
+  overdue: "Overdue"
+};
+
+// last_service_odometer_km di-derive dari MAX(odometer_km) di service_records,
+// tidak disimpan di tabel units.
+export interface UnitServiceInfo {
+  current_odometer_km: number;
+  last_service_odometer_km: number | null;
+  service_interval_km: number;
+}
+
+// Unit + last_service (yang di-fetch terpisah). Komponen UI pakai shape ini.
+export type UnitWithService = Unit & {
+  last_service_odometer_km: number | null;
+};

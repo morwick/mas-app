@@ -5,6 +5,7 @@ import {
 } from "@/lib/queries/units";
 import { getJobsByUnit } from "@/lib/queries/jobs";
 import { listIncidentsByUnit } from "@/lib/queries/incidents";
+import { listServiceRecordsByUnit } from "@/lib/queries/services";
 import { UnitDetailView } from "@/components/units/unit-detail-view";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +16,12 @@ export default async function UnitDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [unit, jobs, history, incidents] = await Promise.all([
+  const [unit, jobs, history, incidents, services] = await Promise.all([
     getUnit(id),
     getJobsByUnit(id),
     getUnitStatusHistory(id),
-    listIncidentsByUnit(id)
+    listIncidentsByUnit(id),
+    listServiceRecordsByUnit(id)
   ]);
   if (!unit) return notFound();
   return (
@@ -28,6 +30,7 @@ export default async function UnitDetailPage({
       jobs={jobs}
       history={history}
       incidents={incidents}
+      services={services}
     />
   );
 }

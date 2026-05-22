@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import type { ServiceStatus } from "@/lib/types";
 
 type StatusKey =
   | "standby"
@@ -78,6 +79,37 @@ export function Badge({ children, variant = "neutral", className }: BadgeProps) 
   return (
     <span className={cn("badge", variantClass[variant], className)}>
       {children}
+    </span>
+  );
+}
+
+const serviceStatusClass: Record<ServiceStatus, string> = {
+  ok: "badge-selesai",
+  mendekati: "badge-perbaikan",
+  overdue: "badge-cancelled"
+};
+
+const serviceStatusLabelShort: Record<ServiceStatus, string> = {
+  ok: "OK",
+  mendekati: "Mendekati",
+  overdue: "Overdue"
+};
+
+interface ServiceStatusBadgeProps {
+  status: ServiceStatus;
+  className?: string;
+  withDot?: boolean;
+}
+
+export function ServiceStatusBadge({
+  status,
+  className,
+  withDot = true
+}: ServiceStatusBadgeProps) {
+  return (
+    <span className={cn("badge", serviceStatusClass[status], className)}>
+      {withDot && <span className="badge-dot" />}
+      {serviceStatusLabelShort[status]}
     </span>
   );
 }

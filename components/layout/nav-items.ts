@@ -6,6 +6,7 @@ import {
   Building2,
   BarChart3,
   Settings,
+  Wrench,
   type LucideIcon
 } from "lucide-react";
 
@@ -48,6 +49,12 @@ export const navItems: NavItem[] = [
     match: (p) => p.startsWith("/customers")
   },
   {
+    href: "/services",
+    label: "Service",
+    icon: Wrench,
+    match: (p) => p.startsWith("/services")
+  },
+  {
     href: "/reports",
     label: "Laporan",
     icon: BarChart3,
@@ -66,5 +73,5 @@ export const mobileNavItems: NavItem[] = [
   navItems[1],
   navItems[2],
   navItems[3],
-  navItems[5]
+  navItems[6]
 ];

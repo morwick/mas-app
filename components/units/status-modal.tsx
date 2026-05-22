@@ -1,22 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Check, Info } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Textarea, Field } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import type { UnitStatus } from "@/lib/types";
 
+interface ActiveJobInfo {
+  id: string;
+  job_number: string;
+  customer_nama: string;
+}
+
 interface UnitStatusModalProps {
   open: boolean;
   onClose: () => void;
   currentStatus: UnitStatus;
+  activeJob?: ActiveJobInfo | null;
   onConfirm: (next: UnitStatus, reason?: string) => void | Promise<void>;
 }
 
-const options: { key: UnitStatus; label: string; desc: string }[] = [
+const manualOptions: { key: UnitStatus; label: string; desc: string }[] = [
   { key: "standby", label: "Standby", desc: "Siap menerima job baru" },
-  { key: "bertugas", label: "Bertugas", desc: "Sedang menjalankan job" },
   { key: "perbaikan", label: "Perbaikan", desc: "Tidak tersedia untuk job" }
 ];
 
@@ -24,23 +31,106 @@ export function UnitStatusModal({
   open,
   onClose,
   currentStatus,
+  activeJob,
   onConfirm
 }: UnitStatusModalProps) {
-  const [next, setNext] = useState<UnitStatus>(currentStatus);
+  const isBertugas = currentStatus === "bertugas";
+  const [next, setNext] = useState<UnitStatus>(
+    isBertugas ? "standby" : currentStatus
+  );
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setNext(currentStatus);
+      setNext(isBertugas ? "standby" : currentStatus);
       setReason("");
     }
-  }, [open, currentStatus]);
+  }, [open, currentStatus, isBertugas]);
 
   async function handle() {
     setLoading(true);
     await onConfirm(next, reason || undefined);
     setLoading(false);
+  }
+
+  if (isBertugas) {
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        title="Unit sedang bertugas"
+        description="Status unit dikelola otomatis lewat job yang sedang berjalan."
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onClose}
+            >
+              Tutup
+            </button>
+            {activeJob && (
+              <Link
+                href={`/jobs/${activeJob.id}`}
+                className="btn btn-primary"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                Buka Job <ArrowRight style={{ width: 14, height: 14 }} />
+              </Link>
+            )}
+          </>
+        }
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "flex-start",
+            padding: 12,
+            border: "0.5px solid var(--border-strong)",
+            borderRadius: 8,
+            background: "var(--brand-primary-light)"
+          }}
+        >
+          <Info
+            style={{
+              width: 18,
+              height: 18,
+              color: "var(--brand-primary)",
+              marginTop: 2,
+              flexShrink: 0
+            }}
+          />
+          <div style={{ fontSize: 13, lineHeight: 1.55 }}>
+            {activeJob ? (
+              <>
+                Unit ini sedang menjalankan{" "}
+                <strong>{activeJob.job_number}</strong> untuk{" "}
+                <strong>{activeJob.customer_nama}</strong>. Selesaikan atau
+                batalkan job tersebut untuk mengembalikan unit ke Standby.
+              </>
+            ) : (
+              <>
+                Status <strong>Bertugas</strong> terkunci karena unit ini
+                ter-assign ke job aktif. Status akan otomatis kembali ke
+                Standby saat job selesai.
+              </>
+            )}
+            <div
+              style={{
+                marginTop: 8,
+                color: "var(--text-tertiary)",
+                fontSize: 12
+              }}
+            >
+              Perlu unit tidak tersedia untuk job baru? Setelah job selesai,
+              ubah status ke <strong>Perbaikan</strong>.
+            </div>
+          </div>
+        </div>
+      </Modal>
+    );
   }
 
   return (
@@ -76,12 +166,12 @@ export function UnitStatusModal({
       <div
         className="grid"
         style={{
-          gridTemplateColumns: "repeat(3, 1fr)",
+          gridTemplateColumns: "repeat(2, 1fr)",
           gap: 6,
           marginBottom: 14
         }}
       >
-        {options.map((o) => {
+        {manualOptions.map((o) => {
           const active = next === o.key;
           return (
             <label
@@ -144,6 +234,17 @@ export function UnitStatusModal({
             </label>
           );
         })}
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          color: "var(--text-tertiary)",
+          marginBottom: 14,
+          lineHeight: 1.5
+        }}
+      >
+        Status <strong>Bertugas</strong> diatur otomatis sistem saat unit
+        di-assign ke job baru.
       </div>
       <Field label="Alasan (opsional)">
         <Textarea

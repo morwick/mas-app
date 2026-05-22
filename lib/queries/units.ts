@@ -25,8 +25,17 @@ interface UnitRow {
   default_driver_id: string | null;
   imei_gps: string | null;
   tracksolid_share_link: string | null;
+  odometer_baseline_km: number | string | null;
+  current_odometer_km: number | string | null;
+  service_interval_km: number | null;
   jenis_unit: { nama: string } | null;
   default_driver: { id: string; nama: string; no_hp: string } | null;
+}
+
+function toNum(v: number | string | null | undefined, fallback = 0): number {
+  if (v === null || v === undefined || v === "") return fallback;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function mapUnit(row: UnitRow): Unit {
@@ -45,7 +54,10 @@ function mapUnit(row: UnitRow): Unit {
     default_driver_nama: row.default_driver?.nama ?? null,
     default_driver_no_hp: row.default_driver?.no_hp ?? null,
     imei_gps: row.imei_gps,
-    tracksolid_share_link: row.tracksolid_share_link
+    tracksolid_share_link: row.tracksolid_share_link,
+    odometer_baseline_km: toNum(row.odometer_baseline_km),
+    current_odometer_km: toNum(row.current_odometer_km),
+    service_interval_km: toNum(row.service_interval_km, 10000)
   };
 }
 

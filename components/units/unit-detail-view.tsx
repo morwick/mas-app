@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
@@ -24,6 +24,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UnitStatusModal } from "@/components/units/status-modal";
 import { IncidentFormModal } from "@/components/units/incident-form-modal";
 import { IncidentDetailModal } from "@/components/units/incident-detail-modal";
+import { ServiceHistoryTab } from "@/components/services/service-history-tab";
+import { deriveServiceStatus } from "@/lib/service";
 import { useToast } from "@/components/ui/toast";
 import {
   changeUnitStatusAction,
@@ -32,9 +34,11 @@ import {
 import type {
   Incident,
   Job,
+  ServiceRecord,
   Unit,
   UnitStatus,
-  UnitStatusHistoryEntry
+  UnitStatusHistoryEntry,
+  UnitWithService
 } from "@/lib/types";
 import {
   incidentStatusLabel,
@@ -47,12 +51,20 @@ interface Props {
   jobs: Job[];
   history: UnitStatusHistoryEntry[];
   incidents: Incident[];
+  services: ServiceRecord[];
 }
 
-type TabKey = "aktif" | "riwayat" | "history" | "insiden";
+type TabKey = "aktif" | "riwayat" | "history" | "insiden" | "service";
 
-export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
+export function UnitDetailView({
+  unit,
+  jobs,
+  history,
+  incidents,
+  services
+}: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
 
   const openIncidentCount = useMemo(
@@ -60,9 +72,26 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
     [incidents]
   );
 
-  const [tab, setTab] = useState<TabKey>(
-    unit.status === "bertugas" ? "aktif" : "riwayat"
+  const unitWithService: UnitWithService = useMemo(() => {
+    const lastFromRecords =
+      services.length > 0
+        ? Math.max(...services.map((s) => s.odometer_km))
+        : null;
+    return { ...unit, last_service_odometer_km: lastFromRecords };
+  }, [unit, services]);
+  const serviceDerived = useMemo(
+    () => deriveServiceStatus(unitWithService),
+    [unitWithService]
   );
+
+  const initialTab: TabKey = ((): TabKey => {
+    const qp = searchParams.get("tab");
+    if (qp === "service" || qp === "insiden" || qp === "history" || qp === "riwayat" || qp === "aktif") {
+      return qp;
+    }
+    return unit.status === "bertugas" ? "aktif" : "riwayat";
+  })();
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [statusOpen, setStatusOpen] = useState(false);
   const [deactOpen, setDeactOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -234,6 +263,16 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
                 label: "Insiden",
                 count:
                   openIncidentCount > 0 ? openIncidentCount : incidents.length
+              },
+              {
+                key: "service",
+                label: "Service",
+                count:
+                  serviceDerived.status === "overdue"
+                    ? 1
+                    : serviceDerived.status === "mendekati"
+                      ? 1
+                      : services.length
               }
             ]}
           />
@@ -647,6 +686,13 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
                 )}
               </div>
             )}
+
+            {tab === "service" && (
+              <ServiceHistoryTab
+                unit={unitWithService}
+                initialRecords={services}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -715,6 +761,15 @@ export function UnitDetailView({ unit, jobs, history, incidents }: Props) {
         open={statusOpen}
         onClose={() => setStatusOpen(false)}
         currentStatus={unit.status}
+        activeJob={
+          activeJob
+            ? {
+                id: activeJob.id,
+                job_number: activeJob.job_number,
+                customer_nama: activeJob.customer_nama
+              }
+            : null
+        }
         onConfirm={onChangeStatus}
       />
       <ConfirmDialog
