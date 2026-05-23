@@ -93,7 +93,7 @@ export function ServiceFormModal({
       open={open}
       onClose={submitting ? () => {} : onClose}
       title={`Catat service — ${unitKode}`}
-      description="Servis baru akan dipakai untuk hitung jadwal servis berikutnya."
+      description="Setelah dicatat, counter sejak servis terakhir reset ke 0 dan mulai akumulasi lagi dari servis ini."
       maxWidth="max-w-[560px]"
       footer={
         <>
@@ -151,9 +151,9 @@ export function ServiceFormModal({
             />
           </Field>
           <Field
-            label="Odometer saat service"
+            label="Odometer total saat service (km)"
             required
-            hint="Pakai pembacaan dari unit saat servis"
+            hint="Auto-isi dari pembacaan saat ini. Edit kalau backdate servis."
           >
             <Input
               type="number"

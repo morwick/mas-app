@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Gauge, Plus, RefreshCw, Wrench } from "lucide-react";
 import { ServiceStatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,17 +15,58 @@ import {
 import { deriveServiceStatus, formatKm } from "@/lib/service";
 import { formatDate } from "@/lib/utils";
 
+const MILEAGE_POLL_MS = 5 * 60 * 1000;
+
 interface Props {
   unit: UnitWithService;
   initialRecords: ServiceRecord[];
 }
 
+interface SyncResponse {
+  ok?: boolean;
+  km?: number;
+  current_odometer_km?: number | null;
+  error?: string;
+}
+
 export function ServiceHistoryTab({ unit, initialRecords }: Props) {
-  const router = useRouter();
   const toast = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [calibrateOpen, setCalibrateOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [liveOdometer, setLiveOdometer] = useState<number | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
+
+  // Polling 5 menit untuk unit ini saja (lebih hemat ketimbang batch endpoint).
+  // Skip kalau unit belum punya IMEI atau bukan tab service yang aktif.
+  useEffect(() => {
+    if (!unit.imei_gps) return;
+    let cancelled = false;
+
+    async function tick() {
+      try {
+        const res = await fetch(`/api/units/${unit.id}/sync-mileage`, {
+          method: "POST"
+        });
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as SyncResponse;
+        if (cancelled || !body.ok) return;
+        if (body.current_odometer_km != null) {
+          setLiveOdometer(body.current_odometer_km);
+        }
+        setLastSyncAt(new Date());
+      } catch {
+        // diam, retry interval berikutnya
+      }
+    }
+
+    tick();
+    const id = setInterval(tick, MILEAGE_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [unit.id, unit.imei_gps]);
 
   const records = useMemo(
     () =>
@@ -37,7 +77,19 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
     [initialRecords]
   );
 
-  const derived = useMemo(() => deriveServiceStatus(unit), [unit]);
+  // Pakai odometer fresh dari polling kalau sudah ada
+  const effectiveUnit: UnitWithService = useMemo(
+    () =>
+      liveOdometer != null
+        ? { ...unit, current_odometer_km: liveOdometer }
+        : unit,
+    [unit, liveOdometer]
+  );
+
+  const derived = useMemo(
+    () => deriveServiceStatus(effectiveUnit),
+    [effectiveUnit]
+  );
 
   async function handleSync() {
     setSyncing(true);
@@ -45,18 +97,17 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
       const res = await fetch(`/api/units/${unit.id}/sync-mileage`, {
         method: "POST"
       });
-      const body = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        km?: number;
-        error?: string;
-      };
+      const body = (await res.json().catch(() => ({}))) as SyncResponse;
       if (!res.ok || !body.ok) {
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
+      if (body.current_odometer_km != null) {
+        setLiveOdometer(body.current_odometer_km);
+      }
+      setLastSyncAt(new Date());
       toast.success(
-        `Odometer ter-update dari TrackSolid (${formatKm(body.km ?? 0)} hari ini)`
+        `Odometer ter-update (${formatKm(body.km ?? 0)} hari ini)`
       );
-      router.refresh();
     } catch (e) {
       toast.error(
         `Gagal sync TrackSolid: ${e instanceof Error ? e.message : "unknown"}`
@@ -95,16 +146,16 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
             }}
           />
           <div style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>
-            <strong>Baseline odometer belum di-set.</strong> Atur baseline
-            sesuai pembacaan dashboard fisik unit supaya akumulasi km dari
-            TrackSolid akurat.
+            <strong>Counter awal belum di-set.</strong> Untuk unit baru pilih
+            0. Untuk unit lama, isi km yang sudah ditempuh sejak servis
+            terakhir.
           </div>
           <button
             type="button"
             className="btn btn-primary btn-sm"
             onClick={() => setCalibrateOpen(true)}
           >
-            Atur baseline
+            Set counter
           </button>
         </div>
       )}
@@ -119,25 +170,7 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
       >
         <SummaryCell
           icon={<Gauge style={{ width: 16, height: 16 }} />}
-          label="Odometer saat ini"
-          value={formatKm(unit.current_odometer_km)}
-          hint={
-            unit.odometer_baseline_km > 0
-              ? `Baseline ${formatKm(unit.odometer_baseline_km)} + akumulasi`
-              : "Baseline 0 — atur dulu"
-          }
-        />
-        <SummaryCell
-          icon={<Wrench style={{ width: 16, height: 16 }} />}
-          label="Servis terakhir"
-          value={
-            unit.last_service_odometer_km !== null
-              ? formatKm(unit.last_service_odometer_km)
-              : "Belum pernah"
-          }
-        />
-        <SummaryCell
-          label="Servis berikutnya"
+          label="Sejak servis terakhir"
           valueNode={
             <div
               style={{
@@ -148,15 +181,40 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
               }}
             >
               <span style={{ fontWeight: 600 }}>
-                {formatKm(derived.next_service_at_km)}
+                {formatKm(derived.km_since_last_service)}
               </span>
               <ServiceStatusBadge status={derived.status} />
             </div>
           }
+          hint={`Target servis tiap ${formatKm(effectiveUnit.service_interval_km)}`}
+        />
+        <SummaryCell
+          label="Sisa menuju servis"
+          value={
+            derived.status === "overdue"
+              ? `Lewat ${formatKm(Math.abs(derived.km_to_next_service))}`
+              : formatKm(derived.km_to_next_service)
+          }
           hint={
             derived.status === "overdue"
-              ? `Lewat ${formatKm(Math.abs(derived.km_to_next_service))} dari jadwal`
-              : `${formatKm(derived.km_to_next_service)} lagi`
+              ? "Segera lakukan servis"
+              : derived.status === "mendekati"
+                ? "Siapkan jadwal servis"
+                : "Aman"
+          }
+        />
+        <SummaryCell
+          icon={<Wrench style={{ width: 16, height: 16 }} />}
+          label="Servis terakhir"
+          value={
+            records.length > 0
+              ? formatDate(records[0].tanggal)
+              : "Belum pernah"
+          }
+          hint={
+            unit.last_service_odometer_km !== null
+              ? `pada odo total ${formatKm(unit.last_service_odometer_km)}`
+              : undefined
           }
         />
       </div>
@@ -174,7 +232,7 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
         >
           <span>
             {formatKm(derived.km_since_last_service)} dari{" "}
-            {formatKm(unit.service_interval_km)} interval
+            {formatKm(effectiveUnit.service_interval_km)} interval
           </span>
           <span>{Math.round(derived.progress_percent)}%</span>
         </div>
@@ -212,7 +270,14 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
           alignItems: "center"
         }}
       >
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center"
+          }}
+        >
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -226,7 +291,7 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
               className={syncing ? "animate-spin" : undefined}
               style={{ width: 14, height: 14 }}
             />
-            {syncing ? "Sinkron…" : "Sync dari TrackSolid"}
+            {syncing ? "Sinkron…" : "Sync sekarang"}
           </button>
           <button
             type="button"
@@ -234,8 +299,11 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
             onClick={() => setCalibrateOpen(true)}
           >
             <Gauge style={{ width: 14, height: 14 }} />
-            Atur baseline
+            Set counter
           </button>
+          {unit.imei_gps && (
+            <SyncIndicator polling={syncing} lastSyncAt={lastSyncAt} />
+          )}
         </div>
         <button
           type="button"
@@ -346,7 +414,7 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
         onClose={() => setFormOpen(false)}
         unitId={unit.id}
         unitKode={unit.kode_unit}
-        currentOdometerKm={unit.current_odometer_km}
+        currentOdometerKm={effectiveUnit.current_odometer_km}
       />
       <CalibrateBaselineModal
         open={calibrateOpen}
@@ -356,6 +424,54 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
         currentBaselineKm={unit.odometer_baseline_km}
       />
     </div>
+  );
+}
+
+function SyncIndicator({
+  polling,
+  lastSyncAt
+}: {
+  polling: boolean;
+  lastSyncAt: Date | null;
+}) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  let label = "Belum sinkron";
+  if (polling && !lastSyncAt) label = "Memuat…";
+  else if (lastSyncAt) {
+    const sec = Math.floor((Date.now() - lastSyncAt.getTime()) / 1000);
+    if (sec < 60) label = "Baru saja";
+    else if (sec < 3600) label = `${Math.floor(sec / 60)} mnt lalu`;
+    else label = `${Math.floor(sec / 3600)} jam lalu`;
+  }
+
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        color: "var(--text-tertiary)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4
+      }}
+      title="Polling otomatis tiap 5 menit"
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 99,
+          background: polling
+            ? "var(--brand-primary)"
+            : "var(--text-tertiary)"
+        }}
+      />
+      {label}
+    </span>
   );
 }
 

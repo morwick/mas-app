@@ -52,7 +52,7 @@ export function CalibrateBaselineModal({
       toast.error(res.error);
       return;
     }
-    toast.success(`Baseline ${unitKode} berhasil di-set`);
+    toast.success(`Counter awal ${unitKode} berhasil di-set`);
     onClose();
     router.refresh();
   }
@@ -61,8 +61,8 @@ export function CalibrateBaselineModal({
     <Modal
       open={open}
       onClose={submitting ? () => {} : onClose}
-      title={`Kalibrasi odometer — ${unitKode}`}
-      description="Baca dari dashboard fisik unit. Akumulasi km dari TrackSolid akan ditambahkan di atas baseline ini."
+      title={`Counter awal — ${unitKode}`}
+      description="Counter ini akan dijadikan starting point. TrackSolid akan menambah km hariannya ke counter. Counter reset ke 0 setiap kali admin catat servis."
       maxWidth="max-w-[440px]"
       footer={
         <>
@@ -70,15 +70,15 @@ export function CalibrateBaselineModal({
             Batal
           </Button>
           <Button onClick={submit} loading={submitting}>
-            Simpan baseline
+            Simpan
           </Button>
         </>
       }
     >
       <Field
-        label="Odometer fisik saat ini (km)"
+        label="Counter awal (km sejak servis terakhir)"
         required
-        hint="Sebaiknya di-set sekali saat onboard unit, jangan diubah-ubah."
+        hint="Untuk unit baru → 0. Untuk unit lama, isi km yang sudah ditempuh sejak servis terakhir di dashboard fisik."
       >
         <Input
           type="number"

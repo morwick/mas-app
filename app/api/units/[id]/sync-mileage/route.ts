@@ -1,30 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getDailyMileage } from "@/lib/tracksolid/client";
+import { syncUnitMileage } from "@/lib/services/mileage-sync";
 
 /**
- * Trigger sync mileage untuk 1 unit on-demand (tombol "Sync dari TrackSolid"
- * di tab Service). Endpoint ini diakses dari UI admin → cek auth user normal
- * (RLS-aware), lalu pakai admin client untuk UPSERT snapshot.
+ * Sync mileage 1 unit on-demand:
+ *   - Tombol "Sync sekarang" di tab Service
+ *   - Polling 5 menit dari tab Service (component-level)
+ *
+ * Logic sync sama dengan endpoint batch: hari ini + lazy backfill kemarin.
+ *
+ * Auth: user session (RLS-aware).
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function wibParts(now: Date) {
-  const wib = new Date(now.getTime() + WIB_OFFSET_MS);
-  const tanggal = `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth() + 1)}-${pad(wib.getUTCDate())}`;
-  const startTime = `${tanggal} 00:00:00`;
-  const endTime = `${tanggal} ${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())}`;
-  return { tanggal, startTime, endTime };
-}
 
 export async function POST(
   _req: Request,
@@ -32,7 +22,6 @@ export async function POST(
 ) {
   const { id } = await ctx.params;
 
-  // Verifikasi user login (RLS-aware client)
   const supabase = await createClient();
   const {
     data: { user }
@@ -41,7 +30,6 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Ambil imei unit (lewat user client; RLS akan filter)
   const { data: unit, error: unitErr } = await supabase
     .from("units")
     .select("id, imei_gps, is_active")
@@ -60,12 +48,11 @@ export async function POST(
     );
   }
 
-  const { tanggal, startTime, endTime } = wibParts(new Date());
+  const admin = createAdminClient();
 
-  let km: number;
+  let syncRes;
   try {
-    const m = await getDailyMileage(unit.imei_gps, startTime, endTime);
-    km = m.km;
+    syncRes = await syncUnitMileage(admin, id, unit.imei_gps);
   } catch (e) {
     return NextResponse.json(
       {
@@ -75,23 +62,23 @@ export async function POST(
     );
   }
 
-  // UPSERT pakai admin client (snapshot table tidak punya RLS INSERT untuk authenticated)
-  const admin = createAdminClient();
-  const { error: upErr } = await admin
-    .from("unit_odometer_snapshots")
-    .upsert(
-      {
-        unit_id: id,
-        tanggal,
-        daily_km: km,
-        source: "tracksolid",
-        fetched_at: new Date().toISOString()
-      },
-      { onConflict: "unit_id,tanggal" }
-    );
-  if (upErr) {
-    return NextResponse.json({ error: upErr.message }, { status: 500 });
-  }
+  // Ambil current_odometer_km terbaru setelah recompute trigger
+  const { data: fresh } = await admin
+    .from("units")
+    .select("current_odometer_km")
+    .eq("id", id)
+    .maybeSingle();
 
-  return NextResponse.json({ ok: true, tanggal, km });
+  const current =
+    fresh?.current_odometer_km != null
+      ? typeof fresh.current_odometer_km === "number"
+        ? fresh.current_odometer_km
+        : Number(fresh.current_odometer_km)
+      : null;
+
+  return NextResponse.json({
+    ok: true,
+    km: syncRes.today_km,
+    current_odometer_km: current
+  });
 }

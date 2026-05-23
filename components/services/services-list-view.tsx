@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Search, Truck, Wrench } from "lucide-react";
+import { ChevronRight, RefreshCw, Search, Truck, Wrench } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { ServiceStatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { JenisUnit, ServiceStatus, UnitWithService } from "@/lib/types";
 import { deriveServiceStatus, formatKm } from "@/lib/service";
+
+const MILEAGE_POLL_MS = 5 * 60 * 1000; // 5 menit
 
 interface Props {
   units: UnitWithService[];
@@ -34,11 +36,50 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
   const [jenis, setJenis] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | ServiceStatus>("");
 
+  // Override odometer per unit dari hasil polling client-side. Awal kosong
+  // → pakai nilai dari prop. Setelah polling sukses, prefer angka fresh.
+  const [liveOdometer, setLiveOdometer] = useState<Record<string, number>>({});
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
+  const [polling, setPolling] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchMileage() {
+      setPolling(true);
+      try {
+        const res = await fetch("/api/units/mileage", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as {
+          odometers?: Record<string, number>;
+        };
+        if (!cancelled && body.odometers) {
+          setLiveOdometer(body.odometers);
+          setLastSyncAt(new Date());
+        }
+      } catch {
+        // Diam saja — retry di interval berikutnya
+      } finally {
+        if (!cancelled) setPolling(false);
+      }
+    }
+    fetchMileage();
+    const id = setInterval(fetchMileage, MILEAGE_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
   const rows: EnrichedRow[] = useMemo(() => {
     return units.map((u) => {
-      const d = deriveServiceStatus(u);
+      // Pakai angka odometer fresh dari polling kalau ada
+      const effective: UnitWithService = {
+        ...u,
+        current_odometer_km: liveOdometer[u.id] ?? u.current_odometer_km
+      };
+      const d = deriveServiceStatus(effective);
       return {
-        unit: u,
+        unit: effective,
         status: d.status,
         next_service_at_km: d.next_service_at_km,
         km_to_next_service: d.km_to_next_service,
@@ -46,7 +87,7 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
         progress_percent: d.progress_percent
       };
     });
-  }, [units]);
+  }, [units, liveOdometer]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -82,13 +123,24 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div>
-        <h1 className="h1" style={{ fontSize: 22, marginBottom: 4 }}>
-          Service Unit
-        </h1>
-        <p className="body-sm muted">
-          Pantau jadwal servis berkala tiap unit (per 10.000 km).
-        </p>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap"
+        }}
+      >
+        <div>
+          <h1 className="h1" style={{ fontSize: 22, marginBottom: 4 }}>
+            Service Unit
+          </h1>
+          <p className="body-sm muted">
+            Pantau jadwal servis berkala tiap unit (per 10.000 km).
+          </p>
+        </div>
+        <SyncIndicator polling={polling} lastSyncAt={lastSyncAt} />
       </div>
 
       {/* Stat row */}
@@ -181,9 +233,9 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
               <tr>
                 <th style={{ width: 140 }}>Kode</th>
                 <th>Jenis</th>
-                <th style={{ width: 130 }}>Odometer</th>
+                <th style={{ width: 130 }}>Sejak servis</th>
                 <th style={{ minWidth: 220 }}>Progress</th>
-                <th style={{ width: 130 }}>Servis berikutnya</th>
+                <th style={{ width: 130 }}>Sisa menuju</th>
                 <th style={{ width: 110 }}>Status</th>
                 <th style={{ width: 50 }}></th>
               </tr>
@@ -239,8 +291,18 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
                     </Link>
                   </td>
                   <td>{r.unit.jenis_unit_nama}</td>
-                  <td className="mono" style={{ fontSize: 13 }}>
-                    {formatKm(r.unit.current_odometer_km)}
+                  <td className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+                    {formatKm(r.km_since_last_service)}
+                    <div
+                      style={{
+                        fontSize: 10.5,
+                        color: "var(--text-tertiary)",
+                        marginTop: 2,
+                        fontWeight: 400
+                      }}
+                    >
+                      target {formatKm(r.unit.service_interval_km)}
+                    </div>
                   </td>
                   <td>
                     <ProgressCell
@@ -251,18 +313,9 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
                     />
                   </td>
                   <td className="mono" style={{ fontSize: 12.5 }}>
-                    {formatKm(r.next_service_at_km)}
-                    <div
-                      style={{
-                        fontSize: 10.5,
-                        color: "var(--text-tertiary)",
-                        marginTop: 2
-                      }}
-                    >
-                      {r.status === "overdue"
-                        ? `lewat ${formatKm(Math.abs(r.km_to_next_service))}`
-                        : `${formatKm(r.km_to_next_service)} lagi`}
-                    </div>
+                    {r.status === "overdue"
+                      ? `Lewat ${formatKm(Math.abs(r.km_to_next_service))}`
+                      : formatKm(r.km_to_next_service)}
                   </td>
                   <td>
                     <ServiceStatusBadge status={r.status} />
@@ -336,6 +389,63 @@ function StatCard({
       </span>
       <span style={{ fontSize: 22, fontWeight: 700, color }}>{value}</span>
     </button>
+  );
+}
+
+function SyncIndicator({
+  polling,
+  lastSyncAt
+}: {
+  polling: boolean;
+  lastSyncAt: Date | null;
+}) {
+  // Update label "X detik/menit lalu" tiap 30s tanpa re-fetch
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  let label = "Belum sinkron";
+  if (polling && !lastSyncAt) label = "Memuat data…";
+  else if (lastSyncAt) {
+    const sec = Math.floor((Date.now() - lastSyncAt.getTime()) / 1000);
+    if (sec < 60) label = "Baru saja";
+    else if (sec < 3600) label = `${Math.floor(sec / 60)} menit lalu`;
+    else label = `${Math.floor(sec / 3600)} jam lalu`;
+  }
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 11.5,
+        color: "var(--text-tertiary)",
+        padding: "6px 10px",
+        border: "0.5px solid var(--border-default)",
+        borderRadius: 99,
+        background: "white"
+      }}
+      title={
+        lastSyncAt
+          ? `Polling otomatis tiap 5 menit. Terakhir: ${lastSyncAt.toLocaleTimeString("id-ID")}`
+          : "Polling otomatis tiap 5 menit"
+      }
+    >
+      <RefreshCw
+        className={polling ? "animate-spin" : undefined}
+        style={{
+          width: 12,
+          height: 12,
+          color: polling
+            ? "var(--brand-primary)"
+            : "var(--text-tertiary)"
+        }}
+      />
+      Sinkron: {label}
+    </div>
   );
 }
 
