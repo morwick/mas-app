@@ -30,9 +30,9 @@ export default async function AdminLayout({
       <Sidebar user={user} counts={counts} />
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar />
-        <MobileHeader />
+        <MobileHeader user={user} counts={counts} />
         <main className="flex-1 pb-20 lg:pb-12">
-          <div className="mx-auto w-full max-w-page px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
+          <div className="mx-auto w-full max-w-page px-3 sm:px-6 lg:px-8 py-4 lg:py-6">
             {children}
           </div>
         </main>

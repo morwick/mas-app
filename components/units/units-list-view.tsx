@@ -88,14 +88,7 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center"
-        }}
-      >
+      <div className="toolbar">
         <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
           <Input
             value={q}
@@ -161,93 +154,201 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
           }
         />
       ) : (
-        <div className="card">
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: 130 }}>Kode</th>
-                <th>Jenis</th>
-                <th>No. Polisi</th>
-                <th style={{ minWidth: 220 }}>Alamat terkini</th>
-                <th style={{ width: 140 }}>Status</th>
-                <th>Driver default</th>
-                <th style={{ width: 50 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((u) => (
-                <tr key={u.id} className="row-link">
-                  <td>
-                    <Link
-                      href={`/units/${u.id}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        textDecoration: "none",
-                        color: "inherit"
-                      }}
-                    >
-                      <div
+        <>
+          {/* Desktop: tabel */}
+          <div className="card hidden lg:block">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th style={{ width: 130 }}>Kode</th>
+                  <th>Jenis</th>
+                  <th>No. Polisi</th>
+                  <th style={{ minWidth: 220 }}>Alamat terkini</th>
+                  <th style={{ width: 140 }}>Status</th>
+                  <th>Driver default</th>
+                  <th style={{ width: 50 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((u) => (
+                  <tr key={u.id} className="row-link">
+                    <td>
+                      <Link
+                        href={`/units/${u.id}`}
                         style={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: 6,
-                          background: "var(--bg-subtle)",
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--text-secondary)"
+                          gap: 8,
+                          textDecoration: "none",
+                          color: "inherit"
                         }}
                       >
-                        <Truck style={{ width: 14, height: 14 }} />
-                      </div>
-                      <span style={{ fontWeight: 600 }}>{u.kode_unit}</span>
-                      {!u.is_active && (
-                        <span
-                          className="badge"
-                          style={{ fontSize: 10, height: 18 }}
+                        <div
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 6,
+                            background: "var(--bg-subtle)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--text-secondary)"
+                          }}
                         >
-                          Nonaktif
-                        </span>
+                          <Truck style={{ width: 14, height: 14 }} />
+                        </div>
+                        <span style={{ fontWeight: 600 }}>{u.kode_unit}</span>
+                        {!u.is_active && (
+                          <span
+                            className="badge"
+                            style={{ fontSize: 10, height: 18 }}
+                          >
+                            Nonaktif
+                          </span>
+                        )}
+                      </Link>
+                    </td>
+                    <td>{u.jenis_unit_nama}</td>
+                    <td className="mono" style={{ fontSize: 13 }}>
+                      {u.no_polisi}
+                    </td>
+                    <td>
+                      <LocationCell
+                        hasImei={!!u.imei_gps}
+                        entry={locations[u.id]}
+                        loaded={locationsLoaded}
+                      />
+                    </td>
+                    <td>
+                      <StatusBadge status={u.status} />
+                    </td>
+                    <td className="muted" style={{ fontSize: 12.5 }}>
+                      {u.default_driver_nama ?? (
+                        <span style={{ color: "var(--text-tertiary)" }}>—</span>
                       )}
-                    </Link>
-                  </td>
-                  <td>{u.jenis_unit_nama}</td>
-                  <td className="mono" style={{ fontSize: 13 }}>
-                    {u.no_polisi}
-                  </td>
-                  <td>
-                    <LocationCell
-                      hasImei={!!u.imei_gps}
-                      entry={locations[u.id]}
-                      loaded={locationsLoaded}
-                    />
-                  </td>
-                  <td>
-                    <StatusBadge status={u.status} />
-                  </td>
-                  <td className="muted" style={{ fontSize: 12.5 }}>
-                    {u.default_driver_nama ?? (
-                      <span style={{ color: "var(--text-tertiary)" }}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <Link
-                      href={`/units/${u.id}`}
+                    </td>
+                    <td>
+                      <Link
+                        href={`/units/${u.id}`}
+                        style={{
+                          color: "var(--text-tertiary)",
+                          display: "inline-flex"
+                        }}
+                      >
+                        <ChevronRight style={{ width: 16, height: 16 }} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: card list */}
+          <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
+            {filtered.map((u) => (
+              <Link
+                key={u.id}
+                href={`/units/${u.id}`}
+                className="list-card"
+              >
+                <div className="list-card-row">
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      minWidth: 0,
+                      flex: 1
+                    }}
+                  >
+                    <div
                       style={{
-                        color: "var(--text-tertiary)",
-                        display: "inline-flex"
+                        width: 32,
+                        height: 32,
+                        borderRadius: 6,
+                        background: "var(--bg-subtle)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--text-secondary)",
+                        flexShrink: 0
                       }}
                     >
-                      <ChevronRight style={{ width: 16, height: 16 }} />
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      <Truck style={{ width: 16, height: 16 }} />
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 14.5,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {u.kode_unit}
+                      </div>
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: 12,
+                          color: "var(--text-tertiary)"
+                        }}
+                      >
+                        {u.no_polisi}
+                      </div>
+                    </div>
+                  </div>
+                  <StatusBadge status={u.status} />
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "4px 12px",
+                    fontSize: 12,
+                    color: "var(--text-secondary)"
+                  }}
+                >
+                  <span>{u.jenis_unit_nama}</span>
+                  {u.default_driver_nama && (
+                    <span>
+                      <span style={{ color: "var(--text-tertiary)" }}>
+                        Driver:
+                      </span>{" "}
+                      {u.default_driver_nama}
+                    </span>
+                  )}
+                  {!u.is_active && (
+                    <span
+                      className="badge"
+                      style={{ fontSize: 10, height: 18 }}
+                    >
+                      Nonaktif
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                  className="break-anywhere"
+                >
+                  <LocationCell
+                    hasImei={!!u.imei_gps}
+                    entry={locations[u.id]}
+                    loaded={locationsLoaded}
+                  />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </>
       )}
 
       <Fab href="/units/new" label="Tambah unit" />

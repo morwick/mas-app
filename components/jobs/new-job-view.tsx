@@ -162,13 +162,8 @@ export function NewJobView({
   return (
     <form
       onSubmit={onSubmit}
-      className="mx-auto"
-      style={{
-        maxWidth: 1000,
-        display: "grid",
-        gridTemplateColumns: "1fr 280px",
-        gap: 16
-      }}
+      className="mx-auto grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4"
+      style={{ maxWidth: 1000 }}
     >
       <div className="card card-pad-lg">
         <FormSection
@@ -176,8 +171,8 @@ export function NewJobView({
           subtitle="Pilih customer dari master data atau tambah baru"
         >
           <Field label="Customer" required>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ flex: 1 }}>
+            <div className="flex flex-wrap gap-2">
+              <div style={{ flex: 1, minWidth: 200 }}>
                 <Select
                   value={form.customer_id}
                   onChange={(e) => set("customer_id", e.target.value)}
@@ -202,8 +197,8 @@ export function NewJobView({
             </div>
           </Field>
           <div
-            className="grid"
-            style={{ gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}
+            className="grid grid-cols-1 sm:grid-cols-2"
+            style={{ gap: 12, marginTop: 12 }}
           >
             <Field label="PIC di lapangan">
               <Input
@@ -264,8 +259,8 @@ export function NewJobView({
           subtitle="Dropdown unit otomatis filter status Standby"
         >
           <div
-            className="grid"
-            style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}
+            className="grid grid-cols-1 sm:grid-cols-2"
+            style={{ gap: 12 }}
           >
             <Field
               label="Unit"

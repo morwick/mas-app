@@ -138,10 +138,7 @@ export function UnitDetailView({
   }
 
   return (
-    <div
-      className="grid gap-4"
-      style={{ gridTemplateColumns: "1.6fr 1fr" }}
-    >
+    <div className="grid gap-4 grid-cols-1 lg:grid-cols-[1.6fr_1fr]">
       {/* Left column */}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* Header card */}
@@ -215,8 +212,8 @@ export function UnitDetailView({
 
           <div className="divider" style={{ marginBottom: 14 }} />
           <div
-            className="grid"
-            style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}
+            className="grid grid-cols-2 sm:grid-cols-3"
+            style={{ gap: 16 }}
           >
             <DetailField label="Jenis unit" value={unit.jenis_unit_nama} />
             <DetailField label="No. polisi" value={unit.no_polisi} mono />

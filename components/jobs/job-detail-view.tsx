@@ -244,10 +244,7 @@ export function JobDetailView({ job, unit, driver, history }: Props) {
         </div>
       )}
 
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "1.6fr 1fr" }}
-      >
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-[1.6fr_1fr]">
         {/* Left column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Detail pengiriman */}
@@ -256,8 +253,8 @@ export function JobDetailView({ job, unit, driver, history }: Props) {
               Detail pengiriman
             </div>
             <div
-              className="grid"
-              style={{ gridTemplateColumns: "1fr 1fr", gap: 16 }}
+              className="grid grid-cols-1 sm:grid-cols-2"
+              style={{ gap: 16 }}
             >
               <DetailField label="Alat diangkut" value={job.alat_diangkut} />
               <DetailField

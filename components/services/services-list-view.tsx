@@ -144,13 +144,7 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
       </div>
 
       {/* Stat row */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 10
-        }}
-      >
+      <div className="stat-grid stat-grid-3">
         <StatCard
           label="Overdue"
           value={counts.overdue}
@@ -177,14 +171,7 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
       </div>
 
       {/* Toolbar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center"
-        }}
-      >
+      <div className="toolbar">
         <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
           <Input
             value={q}
@@ -227,8 +214,10 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
           description="Coba ubah filter atau hapus kata kunci pencarian."
         />
       ) : (
-        <div className="card">
-          <table className="table">
+        <>
+          {/* Desktop: tabel */}
+          <div className="card hidden lg:block">
+            <table className="table">
             <thead>
               <tr>
                 <th style={{ width: 140 }}>Kode</th>
@@ -335,7 +324,99 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+
+          {/* Mobile: card list */}
+          <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
+            {filtered.map((r) => (
+              <Link
+                key={r.unit.id}
+                href={`/units/${r.unit.id}?tab=service`}
+                className="list-card"
+              >
+                <div className="list-card-row">
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      minWidth: 0,
+                      flex: 1
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 6,
+                        background: "var(--bg-subtle)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--text-secondary)",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Truck style={{ width: 16, height: 16 }} />
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 14,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {r.unit.kode_unit}
+                      </div>
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: 11.5,
+                          color: "var(--text-tertiary)"
+                        }}
+                      >
+                        {r.unit.no_polisi} · {r.unit.jenis_unit_nama}
+                      </div>
+                    </div>
+                  </div>
+                  <ServiceStatusBadge status={r.status} />
+                </div>
+                <ProgressCell
+                  percent={r.progress_percent}
+                  status={r.status}
+                  sinceLast={r.km_since_last_service}
+                  interval={r.unit.service_interval_km}
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 12,
+                    color: "var(--text-secondary)",
+                    paddingTop: 4
+                  }}
+                >
+                  <span>
+                    <span style={{ color: "var(--text-tertiary)" }}>
+                      Sejak servis:{" "}
+                    </span>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                      {formatKm(r.km_since_last_service)}
+                    </span>
+                  </span>
+                  <span className="mono">
+                    {r.status === "overdue"
+                      ? `Lewat ${formatKm(Math.abs(r.km_to_next_service))}`
+                      : `Sisa ${formatKm(r.km_to_next_service)}`}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

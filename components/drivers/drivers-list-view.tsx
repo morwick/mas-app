@@ -55,14 +55,7 @@ export function DriversListView({ drivers }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center"
-        }}
-      >
+      <div className="toolbar">
         <div style={{ flex: 1, minWidth: 260 }}>
           <Input
             value={q}

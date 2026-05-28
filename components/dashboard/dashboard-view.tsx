@@ -51,7 +51,7 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
   return (
     <div className="flex flex-col" style={{ gap: 20 }}>
       {/* Stat cards */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="stat-grid">
         <StatCard
           label="Total armada"
           value={total}
@@ -94,10 +94,7 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
         />
       </div>
 
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "1.4fr 1fr" }}
-      >
+      <div className="split-2">
         {/* Left — unit status */}
         <div className="card">
           <div
@@ -119,7 +116,16 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
                 {filtered.length} dari {total} unit
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div
+              className="scrollbar-thin"
+              style={{
+                display: "flex",
+                gap: 6,
+                flexWrap: "wrap",
+                maxWidth: "100%",
+                minWidth: 0
+              }}
+            >
               {(
                 [
                   { k: "semua", l: "Semua", c: total },
@@ -133,6 +139,7 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
                   type="button"
                   className={`chip ${filter === f.k ? "active" : ""}`}
                   onClick={() => setFilter(f.k)}
+                  style={{ flexShrink: 0 }}
                 >
                   {f.l}
                   <span className="chip-count">{f.c}</span>
@@ -140,14 +147,7 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
               ))}
             </div>
           </div>
-          <div
-            style={{
-              padding: 12,
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 10
-            }}
-          >
+          <div className="card-grid-3" style={{ padding: 12 }}>
             {filtered.map((u) => {
               const job = jobByUnit.get(u.id);
               return (

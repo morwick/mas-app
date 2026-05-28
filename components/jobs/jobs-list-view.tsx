@@ -92,38 +92,31 @@ export function JobsListView({
           flexWrap: "wrap"
         }}
       >
-        <Tabs
-          variant="pill"
-          value={tab}
-          onChange={(k) => setTab(k as TabKey)}
-          items={[
-            { key: "aktif", label: "Aktif", count: counts.aktif },
-            { key: "selesai", label: "Selesai", count: counts.selesai },
-            { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
-          ]}
-        />
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            flex: 1,
-            justifyContent: "flex-end",
-            alignItems: "center"
-          }}
-        >
-          <div style={{ width: 280 }}>
+        <div className="overflow-x-auto scrollbar-thin" style={{ maxWidth: "100%" }}>
+          <Tabs
+            variant="pill"
+            value={tab}
+            onChange={(k) => setTab(k as TabKey)}
+            items={[
+              { key: "aktif", label: "Aktif", count: counts.aktif },
+              { key: "selesai", label: "Selesai", count: counts.selesai },
+              { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
+            ]}
+          />
+        </div>
+        <div className="toolbar" style={{ flex: 1, justifyContent: "flex-end" }}>
+          <div style={{ flex: 1, maxWidth: 280, minWidth: 0 }}>
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Cari job, customer, alat…"
               leftIcon={<Search style={{ width: 15, height: 15 }} />}
-              style={{ height: 36 }}
             />
           </div>
           <Select
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            style={{ width: 200, height: 36 }}
+            style={{ width: 200 }}
           >
             <option value="">Semua customer</option>
             {customers
@@ -172,8 +165,10 @@ export function JobsListView({
           />
         </div>
       ) : (
-        <div className="card">
-          <table className="table">
+        <>
+          {/* Desktop: tabel */}
+          <div className="card hidden lg:block">
+            <table className="table">
             <thead>
               <tr>
                 <th style={{ width: 140 }}>Job ID</th>
@@ -312,7 +307,153 @@ export function JobsListView({
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+
+          {/* Mobile: card list */}
+          <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
+            {filtered.map((j) => {
+              const u = unitMap[j.unit_id];
+              const driverNama = driverMap[j.driver_id];
+              return (
+                <Link
+                  key={j.id}
+                  href={`/jobs/${j.id}`}
+                  className="list-card"
+                >
+                  <div className="list-card-row">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        className="mono"
+                        style={{
+                          fontWeight: 600,
+                          fontSize: 12.5,
+                          color: "var(--text-primary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {j.job_number}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          marginTop: 2,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {j.customer_nama}
+                      </div>
+                    </div>
+                    <StatusBadge status={j.status} />
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--text-secondary)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {j.alat_diangkut}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 3,
+                      fontSize: 12,
+                      color: "var(--text-secondary)"
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}
+                    >
+                      <MapPin
+                        style={{
+                          width: 11,
+                          height: 11,
+                          color: "var(--text-tertiary)",
+                          flexShrink: 0
+                        }}
+                      />
+                      <span
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {takeLastSegment(j.asal)}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        color: "var(--brand-primary-dark)"
+                      }}
+                    >
+                      <Flag
+                        style={{
+                          width: 11,
+                          height: 11,
+                          flexShrink: 0
+                        }}
+                      />
+                      <span
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {takeLastSegment(j.tujuan)}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 11.5,
+                      color: "var(--text-tertiary)",
+                      paddingTop: 6,
+                      borderTop: "0.5px dashed var(--border-default)"
+                    }}
+                  >
+                    <span>
+                      <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                        {u?.kode_unit ?? "—"}
+                      </span>
+                      {driverNama && (
+                        <>
+                          {" · "}
+                          {driverNama.split(" ").slice(0, 2).join(" ")}
+                        </>
+                      )}
+                    </span>
+                    <span className="mono">
+                      {formatTime(j.etd)}
+                      {j.eta ? ` → ${formatTime(j.eta)}` : ""}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <Fab href="/jobs/new" label="Job baru" />

@@ -220,6 +220,7 @@ export function UtilizationView({
           >
             <div className="h3">Detail per unit</div>
           </div>
+          <div className="table-scroll">
           <table className="table">
             <thead>
               <tr>
@@ -300,6 +301,7 @@ export function UtilizationView({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

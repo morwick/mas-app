@@ -139,6 +139,7 @@ export function CustomerReportView({
             Tidak ada data untuk filter yang dipilih.
           </div>
         ) : (
+          <div className="table-scroll">
           <table className="table">
             <thead>
               <tr>
@@ -192,6 +193,7 @@ export function CustomerReportView({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

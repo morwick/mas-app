@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, Bell } from "lucide-react";
 import { Logo } from "./logo";
+import { MobileDrawer } from "./mobile-drawer";
 import { navItems } from "./nav-items";
 
 function getPageTitle(pathname: string) {
@@ -23,7 +24,16 @@ function getPageTitle(pathname: string) {
   return `Detail ${root.label.toLowerCase()}`;
 }
 
-export function MobileHeader() {
+interface MobileHeaderProps {
+  user: { nama: string; email: string; initials: string } | null;
+  counts?: {
+    units?: number;
+    jobsActive?: number;
+    driversAvailable?: number;
+  };
+}
+
+export function MobileHeader({ user, counts }: MobileHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const isRoot = ["/dashboard"].includes(pathname);
@@ -36,47 +46,55 @@ export function MobileHeader() {
     >
       <div
         className="flex items-center justify-between"
-        style={{ height: 56, padding: "0 12px" }}
+        style={{ height: 56, padding: "0 8px 0 4px", gap: 4 }}
       >
-        {isRoot ? (
-          <Logo size="sm" />
-        ) : (
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              aria-label="Kembali"
-              className="btn-ghost"
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 6,
-                background: "transparent",
-                border: "none",
-                color: "var(--text-primary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-              }}
-            >
-              <ArrowLeft style={{ width: 20, height: 20 }} />
-            </button>
-            <h1
-              style={{
-                fontSize: 16,
-                fontWeight: 600,
-                color: "var(--text-primary)",
-                margin: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
-              }}
-            >
-              {title}
-            </h1>
-          </div>
-        )}
-        <div className="flex items-center gap-1">
+        <div
+          className="flex items-center min-w-0"
+          style={{ gap: 4, flex: 1, minWidth: 0 }}
+        >
+          <MobileDrawer user={user} counts={counts} />
+          {isRoot ? (
+            <Logo size="sm" />
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => router.back()}
+                aria-label="Kembali"
+                className="btn-ghost"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 6,
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-primary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0
+                }}
+              >
+                <ArrowLeft style={{ width: 20, height: 20 }} />
+              </button>
+              <h1
+                style={{
+                  fontSize: 16,
+                  fontWeight: 600,
+                  color: "var(--text-primary)",
+                  margin: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  minWidth: 0
+                }}
+              >
+                {title}
+              </h1>
+            </>
+          )}
+        </div>
+        <div className="flex items-center" style={{ flexShrink: 0 }}>
           <Link
             href="/dashboard"
             aria-label="Notifikasi"

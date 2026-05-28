@@ -745,3 +745,175 @@ select {
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+/* ============================================
+   Responsive helpers (mobile-first additions)
+   ============================================ */
+
+/* Prevent accidental horizontal overflow on mobile.
+   Using `clip` (not `hidden`) so sticky descendants keep working — `hidden`
+   creates a new scroll/containing context that breaks position:sticky on
+   sidebar & topbar. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* Toolbar pattern — desktop: row, mobile: stacked & full-width children */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+@media (max-width: 767px) {
+  .toolbar {
+    gap: 8px;
+  }
+  .toolbar > * {
+    flex: 1 1 100%;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .toolbar > .toolbar-half {
+    flex: 1 1 calc(50% - 4px);
+    width: auto !important;
+  }
+}
+
+/* Wrap any <table> in this on mobile to allow horizontal scroll
+   without blowing out the page width. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll > table {
+  min-width: 640px;
+}
+
+/* Responsive stat grid — auto-collapse on small screens */
+.stat-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+}
+.stat-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 767px) {
+  .stat-grid,
+  .stat-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Two-column layout that stacks on mobile */
+.split-2 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1.4fr 1fr;
+}
+@media (max-width: 1023px) {
+  .split-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Card grid that adapts (e.g. unit cards) */
+.card-grid-3 {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 767px) {
+  .card-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 479px) {
+  .card-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Mobile-friendly tap targets for buttons & inputs */
+@media (max-width: 767px) {
+  .input,
+  .select {
+    height: 44px;
+    font-size: 15px;
+  }
+  .btn {
+    height: 44px;
+  }
+  .btn-sm {
+    height: 38px;
+    font-size: 13.5px;
+  }
+}
+
+/* Mobile card list (replacement for desktop tables) */
+.list-card {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.list-card:active {
+  background: var(--bg-muted);
+}
+.list-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.list-card-row > span {
+  min-width: 0;
+}
+.list-card-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.list-card-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Visibility helpers (use sparingly — prefer Tailwind lg:hidden / hidden lg:block) */
+.mobile-only {
+  display: block;
+}
+.desktop-only {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .mobile-only {
+    display: none;
+  }
+  .desktop-only {
+    display: block;
+  }
+}
+
+/* Long text break in tight cells (alamat, dll) */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

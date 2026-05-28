@@ -162,11 +162,8 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
 
       {/* Ringkasan */}
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 12
-        }}
+        className="grid grid-cols-1 sm:grid-cols-3"
+        style={{ gap: 12 }}
       >
         <SummaryCell
           icon={<Gauge style={{ width: 16, height: 16 }} />}

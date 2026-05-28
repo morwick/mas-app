@@ -134,10 +134,7 @@ export function JobConfirmationView({ job, driverNama, driverNoHp }: Props) {
         </div>
       </div>
 
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "1.4fr 1fr" }}
-      >
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-[1.4fr_1fr]">
         {/* Share link + WhatsApp */}
         <div className="card card-pad-lg">
           <div className="h3" style={{ marginBottom: 4 }}>
