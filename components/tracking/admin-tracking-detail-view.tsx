@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { TrackSolidEmbed } from "@/components/tracking/tracksolid-embed";
 import { EtaCard } from "@/components/tracking/eta-card";
+import { GpsHealthBadge } from "@/components/tracking/gps-health-badge";
+import { QuickStatusBar } from "@/components/tracking/quick-status-bar";
 import { JobStepper } from "@/components/jobs/job-stepper";
 import { formatDateTime } from "@/lib/utils";
 import type { Job, JobStatus, Unit, Driver } from "@/lib/types";
@@ -115,6 +117,9 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
         <JobStepper status={job.status} />
       </div>
 
+      {/* Quick status actions */}
+      <QuickStatusBar jobId={job.id} status={job.status} />
+
       {/* Map */}
       <div
         className="card"
@@ -129,13 +134,19 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
             alignItems: "center"
           }}
         >
-          <div>
-            <div className="h3" style={{ fontSize: 14, marginBottom: 2 }}>
-              Lokasi real-time
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div>
+              <div className="h3" style={{ fontSize: 14, marginBottom: 2 }}>
+                Lokasi real-time
+              </div>
+              <div className="caption" style={{ fontSize: 10.5 }}>
+                TrackSolid · update tiap 30 detik
+              </div>
             </div>
-            <div className="caption" style={{ fontSize: 10.5 }}>
-              TrackSolid · update tiap 30 detik
-            </div>
+            <GpsHealthBadge
+              jobToken={job.share_token}
+              jobEnded={job.status === "selesai" || job.status === "cancelled"}
+            />
           </div>
           {unit?.tracksolid_share_link && (
             <a
