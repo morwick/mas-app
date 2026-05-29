@@ -7,6 +7,7 @@ import {
   BarChart3,
   Settings,
   Wrench,
+  Map,
   type LucideIcon
 } from "lucide-react";
 
@@ -35,6 +36,12 @@ export const navItems: NavItem[] = [
     label: "Job",
     icon: PackageCheck,
     match: (p) => p.startsWith("/jobs")
+  },
+  {
+    href: "/tracking",
+    label: "Pantau",
+    icon: Map,
+    match: (p) => p.startsWith("/tracking")
   },
   {
     href: "/drivers",
@@ -69,9 +76,9 @@ export const navItems: NavItem[] = [
 ];
 
 export const mobileNavItems: NavItem[] = [
-  navItems[0],
-  navItems[1],
-  navItems[2],
-  navItems[3],
-  navItems[6]
+  navItems[0], // Dashboard
+  navItems[1], // Unit
+  navItems[2], // Job
+  navItems[3], // Pantau
+  navItems[7]  // Laporan
 ];

@@ -1,0 +1,266 @@
+import Link from "next/link";
+import { MapPin, Truck, ArrowRight, Activity } from "lucide-react";
+import type { Job, JobStatus, Unit } from "@/lib/types";
+
+const STATUS_LABEL: Record<JobStatus, string> = {
+  menunggu_pickup: "Menunggu pickup",
+  loading: "Loading",
+  dalam_perjalanan: "Dalam perjalanan",
+  unloading: "Unloading",
+  selesai: "Selesai",
+  cancelled: "Dibatalkan"
+};
+
+interface Props {
+  jobs: Job[];
+  unitsMap: Map<string, Unit>;
+}
+
+const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
+  menunggu_pickup: { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" },
+  loading: { bg: "#fff4e0", fg: "#8a5a00" },
+  dalam_perjalanan: {
+    bg: "var(--brand-primary-light)",
+    fg: "var(--brand-primary-dark)"
+  },
+  unloading: { bg: "#efeafe", fg: "#4a2bb0" }
+};
+
+export function AdminTrackingListView({ jobs, unitsMap }: Props) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <div className="h1" style={{ marginBottom: 4 }}>
+          Pantau Job Aktif
+        </div>
+        <div className="caption">
+          Klik salah satu untuk lihat peta rute + posisi truk real-time.
+        </div>
+      </div>
+
+      {jobs.length === 0 ? (
+        <div
+          className="card card-pad-lg"
+          style={{ textAlign: "center", padding: 48 }}
+        >
+          <Activity
+            style={{
+              width: 36,
+              height: 36,
+              color: "var(--text-tertiary)",
+              margin: "0 auto"
+            }}
+          />
+          <div style={{ marginTop: 10, fontSize: 13, color: "var(--text-secondary)" }}>
+            Tidak ada job aktif saat ini.
+          </div>
+          <Link
+            href="/jobs/new"
+            className="btn btn-primary"
+            style={{ marginTop: 16, textDecoration: "none" }}
+          >
+            Buat job baru
+          </Link>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gap: 12
+          }}
+        >
+          {jobs.map((job) => {
+            const unit = unitsMap.get(job.unit_id);
+            const statusColor = STATUS_COLOR[job.status] ?? {
+              bg: "var(--bg-muted)",
+              fg: "var(--text-secondary)"
+            };
+            const hasRoute =
+              job.asal_lat != null &&
+              job.asal_lng != null &&
+              job.tujuan_lat != null &&
+              job.tujuan_lng != null;
+            return (
+              <Link
+                key={job.id}
+                href={`/tracking/${job.id}`}
+                className="card card-pad"
+                style={{
+                  textDecoration: "none",
+                  color: "inherit",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  transition: "transform 0.15s, box-shadow 0.15s"
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 8
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      className="mono"
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-tertiary)",
+                        marginBottom: 2
+                      }}
+                    >
+                      {job.job_number}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        lineHeight: 1.3,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {job.customer_nama}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      background: statusColor.bg,
+                      color: statusColor.fg,
+                      whiteSpace: "nowrap",
+                      fontWeight: 600
+                    }}
+                  >
+                    {STATUS_LABEL[job.status]}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      alignItems: "flex-start",
+                      lineHeight: 1.4
+                    }}
+                  >
+                    <MapPin
+                      style={{
+                        width: 12,
+                        height: 12,
+                        color: "var(--brand-primary)",
+                        flexShrink: 0,
+                        marginTop: 2
+                      }}
+                    />
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 1,
+                        WebkitBoxOrient: "vertical"
+                      }}
+                    >
+                      {job.asal}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      alignItems: "flex-start",
+                      lineHeight: 1.4
+                    }}
+                  >
+                    <ArrowRight
+                      style={{
+                        width: 12,
+                        height: 12,
+                        color: "var(--text-tertiary)",
+                        flexShrink: 0,
+                        marginTop: 2
+                      }}
+                    />
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 1,
+                        WebkitBoxOrient: "vertical"
+                      }}
+                    >
+                      {job.tujuan}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    borderTop: "0.5px solid var(--border-default)",
+                    paddingTop: 8,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: 11.5,
+                    color: "var(--text-tertiary)"
+                  }}
+                >
+                  <span
+                    style={{ display: "inline-flex", gap: 4, alignItems: "center" }}
+                  >
+                    <Truck style={{ width: 11, height: 11 }} />
+                    {unit?.kode_unit ?? "—"}
+                  </span>
+                  <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    {hasRoute && job.route_distance_km != null && (
+                      <span>{job.route_distance_km.toFixed(0)} km</span>
+                    )}
+                    {unit?.imei_gps ? (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          gap: 3,
+                          alignItems: "center",
+                          color: "var(--brand-primary-dark)"
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 999,
+                            background: "var(--brand-primary)"
+                          }}
+                        />
+                        GPS aktif
+                      </span>
+                    ) : (
+                      <span>Tanpa GPS</span>
+                    )}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
