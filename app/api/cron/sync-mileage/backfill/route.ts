@@ -55,7 +55,15 @@ function verifyCronSecret(req: Request): boolean {
   return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 
+export async function GET(req: Request) {
+  return handleBackfill(req);
+}
+
 export async function POST(req: Request) {
+  return handleBackfill(req);
+}
+
+async function handleBackfill(req: Request) {
   if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
