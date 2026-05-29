@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Info, Plus, Sparkles } from "lucide-react";
+import { Info, Plus, Sparkles, Truck } from "lucide-react";
 import { Input, Select, Textarea, Field } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
@@ -65,6 +65,7 @@ export function NewJobView({
   const [loading, setLoading] = useState(false);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [localCustomers, setLocalCustomers] = useState(customers);
+  const [fetchingUnitLoc, setFetchingUnitLoc] = useState(false);
   const [form, setForm] = useState({
     customer_id: "",
     pic_nama: "",
@@ -88,6 +89,40 @@ export function NewJobView({
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function useUnitLocationAsAsal() {
+    if (!form.unit_id) {
+      toast.error("Pilih unit dulu");
+      return;
+    }
+    setFetchingUnitLoc(true);
+    try {
+      const res = await fetch(`/api/units/${form.unit_id}/location`, {
+        cache: "no-store"
+      });
+      const data = (await res.json()) as {
+        lat?: number;
+        lng?: number;
+        address?: string | null;
+        error?: string;
+      };
+      if (!res.ok || data.lat == null || data.lng == null) {
+        toast.error(data.error ?? "Gagal ambil lokasi unit");
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        asal: data.address ?? f.asal,
+        asal_lat: data.lat ?? null,
+        asal_lng: data.lng ?? null
+      }));
+      toast.success("Lokasi asal di-set ke posisi unit sekarang");
+    } catch {
+      toast.error("Tidak bisa hubungi server");
+    } finally {
+      setFetchingUnitLoc(false);
+    }
   }
 
   function onUnitChange(unitId: string) {
@@ -255,6 +290,16 @@ export function NewJobView({
                 }
                 placeholder="Alamat lengkap titik pickup"
                 error={error.asal}
+                extraAction={{
+                  label: "Pakai lokasi unit",
+                  icon: <Truck style={{ width: 12, height: 12 }} />,
+                  onClick: useUnitLocationAsAsal,
+                  loading: fetchingUnitLoc,
+                  disabled: !form.unit_id,
+                  hint: form.unit_id
+                    ? "Ambil posisi GPS terkini unit yang dipilih"
+                    : "Pilih unit dulu di bawah"
+                }}
               />
             </Field>
             <Field label="Lokasi tujuan" required>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { MapPin, Pencil } from "lucide-react";
+import { MapPin, Pencil, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/input";
 
 /**
@@ -22,18 +22,29 @@ export interface LocationValue {
   lng: number | null;
 }
 
+export interface LocationPickerExtraAction {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void | Promise<void>;
+  loading?: boolean;
+  disabled?: boolean;
+  hint?: string;
+}
+
 interface Props {
   value: LocationValue;
   onChange: (v: LocationValue) => void;
   placeholder?: string;
   error?: string;
+  extraAction?: LocationPickerExtraAction;
 }
 
 export function LocationPicker({
   value,
   onChange,
   placeholder,
-  error
+  error,
+  extraAction
 }: Props) {
   const [open, setOpen] = useState(false);
   const hasPin = value.lat !== null && value.lng !== null;
@@ -73,6 +84,29 @@ export function LocationPicker({
             </>
           )}
         </button>
+        {extraAction && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => extraAction.onClick()}
+            disabled={extraAction.disabled || extraAction.loading}
+            title={extraAction.hint}
+            style={{ fontSize: 12 }}
+          >
+            {extraAction.loading ? (
+              <Loader2
+                style={{
+                  width: 12,
+                  height: 12,
+                  animation: "spin 0.8s linear infinite"
+                }}
+              />
+            ) : (
+              extraAction.icon
+            )}
+            {extraAction.label}
+          </button>
+        )}
         {hasPin && value.lat !== null && value.lng !== null && (
           <span
             style={{
