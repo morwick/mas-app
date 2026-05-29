@@ -3,17 +3,19 @@ import "server-only";
 /**
  * OpenRouteService wrapper untuk fetch rute jalan antara 2 titik.
  *
- * Pakai endpoint Directions v2 dengan profile "driving-hgv" (heavy goods
- * vehicle) — lebih relevan untuk lowbed/self-loader yang sering kena restriksi
- * jalan provinsi/tol. Response geometry dalam encoded polyline (Google format),
- * hemat tempat saat disimpan ke DB.
+ * Pakai endpoint Directions v2 dengan profile "driving-car" — coverage jalan
+ * paling lengkap di Indonesia (data OSM untuk hgv banyak gap di luar Jawa).
+ * Truk lowbed/self-loader umumnya pakai jalan yang sama dengan mobil di
+ * rute antar kota (negara/provinsi/tol), jadi driving-car cukup akurat
+ * untuk visualisasi rute customer. Response geometry dalam encoded polyline
+ * (Google format), hemat tempat saat disimpan ke DB.
  *
  * API key gratis di https://openrouteservice.org/dev/#/signup, 2000 req/hari.
  * Set env var `OPENROUTESERVICE_API_KEY` di Vercel + .env.local.
  */
 
 const ENDPOINT =
-  "https://api.openrouteservice.org/v2/directions/driving-hgv";
+  "https://api.openrouteservice.org/v2/directions/driving-car";
 const TIMEOUT_MS = 10_000;
 
 export interface RoutePoint {
