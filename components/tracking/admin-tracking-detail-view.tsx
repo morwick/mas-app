@@ -13,6 +13,8 @@ import { TrackSolidEmbed } from "@/components/tracking/tracksolid-embed";
 import { EtaCard } from "@/components/tracking/eta-card";
 import { GpsHealthBadge } from "@/components/tracking/gps-health-badge";
 import { QuickStatusBar } from "@/components/tracking/quick-status-bar";
+import { AnomalyAlerts } from "@/components/tracking/anomaly-alerts";
+import { MapFullscreenButton } from "@/components/tracking/map-fullscreen-button";
 import { JobStepper } from "@/components/jobs/job-stepper";
 import { formatDateTime } from "@/lib/utils";
 import type { Job, JobStatus, Unit, Driver } from "@/lib/types";
@@ -112,6 +114,9 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
         </div>
       </div>
 
+      {/* Anomaly alerts (banner kuning/merah, hanya muncul kalau ada anomali) */}
+      <AnomalyAlerts jobToken={job.share_token} jobStatus={job.status} />
+
       {/* Stepper */}
       <div className="card card-pad">
         <JobStepper status={job.status} />
@@ -121,9 +126,10 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
       <QuickStatusBar jobId={job.id} status={job.status} />
 
       {/* Map */}
+      <MapFullscreenButton>
       <div
         className="card"
-        style={{ overflow: "hidden", borderRadius: 14 }}
+        style={{ overflow: "hidden", borderRadius: 14, height: "100%", display: "flex", flexDirection: "column" }}
       >
         <div
           style={{
@@ -161,22 +167,25 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
             </a>
           )}
         </div>
-        <TrackSolidEmbed
-          jobToken={job.share_token}
-          externalLink={unit?.tracksolid_share_link ?? null}
-          jobStatus={job.status}
-          route={
-            hasRoute
-              ? {
-                  asal: { lat: job.asal_lat!, lng: job.asal_lng! },
-                  tujuan: { lat: job.tujuan_lat!, lng: job.tujuan_lng! },
-                  polyline: job.route_polyline ?? null,
-                  distance_km: job.route_distance_km ?? null
-                }
-              : null
-          }
-        />
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <TrackSolidEmbed
+            jobToken={job.share_token}
+            externalLink={unit?.tracksolid_share_link ?? null}
+            jobStatus={job.status}
+            route={
+              hasRoute
+                ? {
+                    asal: { lat: job.asal_lat!, lng: job.asal_lng! },
+                    tujuan: { lat: job.tujuan_lat!, lng: job.tujuan_lng! },
+                    polyline: job.route_polyline ?? null,
+                    distance_km: job.route_distance_km ?? null
+                  }
+                : null
+            }
+          />
+        </div>
       </div>
+      </MapFullscreenButton>
 
       {/* Info grid */}
       <div
