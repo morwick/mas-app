@@ -359,6 +359,19 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
             jobToken={job.share_token}
             externalLink={unit?.tracksolid_share_link ?? null}
             jobStatus={job.status}
+            route={
+              job.asal_lat != null &&
+              job.asal_lng != null &&
+              job.tujuan_lat != null &&
+              job.tujuan_lng != null
+                ? {
+                    asal: { lat: job.asal_lat, lng: job.asal_lng },
+                    tujuan: { lat: job.tujuan_lat, lng: job.tujuan_lng },
+                    polyline: job.route_polyline ?? null,
+                    distance_km: job.route_distance_km ?? null
+                  }
+                : null
+            }
           />
         </div>
 

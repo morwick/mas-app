@@ -9,6 +9,7 @@ import { Input, Select, Textarea, Field } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { ConflictWarning } from "@/components/jobs/conflict-warning";
+import { LocationPicker } from "@/components/jobs/location-picker";
 import { updateJobAction } from "@/lib/actions/jobs";
 import {
   findJobConflicts,
@@ -51,6 +52,10 @@ export function EditJobView({
     alat_diangkut: job.alat_diangkut,
     asal: job.asal,
     tujuan: job.tujuan,
+    asal_lat: job.asal_lat ?? null,
+    asal_lng: job.asal_lng ?? null,
+    tujuan_lat: job.tujuan_lat ?? null,
+    tujuan_lng: job.tujuan_lng ?? null,
     unit_id: job.unit_id,
     driver_id: job.driver_id,
     etd: toLocalDateTime(job.etd),
@@ -139,10 +144,40 @@ export function EditJobView({
             />
           </Field>
           <Field label="Asal" required className="sm:col-span-2">
-            <Textarea value={form.asal} onChange={(e) => set("asal", e.target.value)} />
+            <LocationPicker
+              value={{
+                address: form.asal,
+                lat: form.asal_lat,
+                lng: form.asal_lng
+              }}
+              onChange={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  asal: v.address,
+                  asal_lat: v.lat,
+                  asal_lng: v.lng
+                }))
+              }
+              placeholder="Alamat lengkap titik pickup"
+            />
           </Field>
           <Field label="Tujuan" required className="sm:col-span-2">
-            <Textarea value={form.tujuan} onChange={(e) => set("tujuan", e.target.value)} />
+            <LocationPicker
+              value={{
+                address: form.tujuan,
+                lat: form.tujuan_lat,
+                lng: form.tujuan_lng
+              }}
+              onChange={(v) =>
+                setForm((f) => ({
+                  ...f,
+                  tujuan: v.address,
+                  tujuan_lat: v.lat,
+                  tujuan_lng: v.lng
+                }))
+              }
+              placeholder="Alamat lengkap titik drop"
+            />
           </Field>
           <Field label="Unit" required>
             <Select

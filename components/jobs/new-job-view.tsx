@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { NewCustomerInline } from "@/components/jobs/new-customer-inline";
 import { ConflictWarning } from "@/components/jobs/conflict-warning";
 import { JobStepper } from "@/components/jobs/job-stepper";
+import { LocationPicker } from "@/components/jobs/location-picker";
 import { createJobAction } from "@/lib/actions/jobs";
 import { createCustomerAction } from "@/lib/actions/customers";
 import {
@@ -71,6 +72,10 @@ export function NewJobView({
     alat_diangkut: "",
     asal: "",
     tujuan: "",
+    asal_lat: null as number | null,
+    asal_lng: null as number | null,
+    tujuan_lat: null as number | null,
+    tujuan_lng: null as number | null,
     unit_id: "",
     driver_id: "",
     etd: "",
@@ -234,20 +239,40 @@ export function NewJobView({
               />
             </Field>
             <Field label="Lokasi asal" required>
-              <Textarea
-                rows={2}
+              <LocationPicker
+                value={{
+                  address: form.asal,
+                  lat: form.asal_lat,
+                  lng: form.asal_lng
+                }}
+                onChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    asal: v.address,
+                    asal_lat: v.lat,
+                    asal_lng: v.lng
+                  }))
+                }
                 placeholder="Alamat lengkap titik pickup"
-                value={form.asal}
-                onChange={(e) => set("asal", e.target.value)}
                 error={error.asal}
               />
             </Field>
             <Field label="Lokasi tujuan" required>
-              <Textarea
-                rows={2}
+              <LocationPicker
+                value={{
+                  address: form.tujuan,
+                  lat: form.tujuan_lat,
+                  lng: form.tujuan_lng
+                }}
+                onChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    tujuan: v.address,
+                    tujuan_lat: v.lat,
+                    tujuan_lng: v.lng
+                  }))
+                }
                 placeholder="Alamat lengkap titik drop"
-                value={form.tujuan}
-                onChange={(e) => set("tujuan", e.target.value)}
                 error={error.tujuan}
               />
             </Field>

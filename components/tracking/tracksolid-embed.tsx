@@ -33,10 +33,18 @@ const MAX_CONSECUTIVE_ERRORS = 2;
 // fetch pertama hang / lama). Mencegah user stuck di spinner tanpa info.
 const LOADING_TIMEOUT_MS = 12_000;
 
+interface RouteData {
+  asal: { lat: number; lng: number };
+  tujuan: { lat: number; lng: number };
+  polyline: string | null;
+  distance_km: number | null;
+}
+
 interface Props {
   jobToken: string;
   externalLink: string | null;
   jobStatus: JobStatus;
+  route: RouteData | null;
 }
 
 interface LocationData {
@@ -58,7 +66,12 @@ const MapInner = dynamic(() => import("./tracking-map").then((m) => m.TrackingMa
   loading: () => <MapPlaceholder text="Memuat peta…" />
 });
 
-export function TrackSolidEmbed({ jobToken, externalLink, jobStatus }: Props) {
+export function TrackSolidEmbed({
+  jobToken,
+  externalLink,
+  jobStatus,
+  route
+}: Props) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const errorCountRef = useRef(0);
   const jobEnded = jobStatus === "selesai" || jobStatus === "cancelled";
@@ -151,6 +164,7 @@ export function TrackSolidEmbed({ jobToken, externalLink, jobStatus }: Props) {
             lat={state.data.lat}
             lng={state.data.lng}
             address={state.data.address}
+            route={route}
           />
         </div>
         {state.data.address && (
@@ -175,6 +189,18 @@ export function TrackSolidEmbed({ jobToken, externalLink, jobStatus }: Props) {
               }}
             />
             {state.data.address}
+            {route?.distance_km != null && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  paddingLeft: 8,
+                  borderLeft: "0.5px solid var(--border-default)",
+                  color: "var(--text-tertiary)"
+                }}
+              >
+                Jarak rute: {route.distance_km.toFixed(1)} km
+              </span>
+            )}
           </div>
         )}
       </div>

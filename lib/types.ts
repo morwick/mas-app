@@ -100,6 +100,12 @@ export interface Job {
   alat_diangkut: string;
   asal: string;
   tujuan: string;
+  asal_lat?: number | null;
+  asal_lng?: number | null;
+  tujuan_lat?: number | null;
+  tujuan_lng?: number | null;
+  route_polyline?: string | null;
+  route_distance_km?: number | null;
   unit_id: string;
   driver_id: string;
   etd: string;

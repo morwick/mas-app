@@ -3,20 +3,32 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { decodePolyline } from "@/lib/routing/polyline";
 
 /**
- * Leaflet map untuk halaman customer tracking. Sengaja TIDAK pakai react-leaflet
- * karena kita perlu re-center marker tanpa unmount + lifecycle yang tight.
+ * Leaflet map untuk halaman customer tracking.
  *
- * Icon truk inline SVG → tidak bergantung asset Leaflet bawaan yang path-nya
- * pecah di Next.js build.
+ * - Marker truk = posisi real-time dari TrackSolid (update tiap poll).
+ * - Marker asal (hijau) + tujuan (merah) = static dari data job.
+ * - Polyline biru = rute jalan (decoded dari encoded polyline DB).
+ *
+ * Sengaja TIDAK pakai react-leaflet karena update marker tanpa unmount
+ * lebih mudah dengan API Leaflet murni. Icon inline SVG → tidak bergantung
+ * asset Leaflet bawaan yang path-nya pecah di Next.js build.
  */
+
+interface RouteData {
+  asal: { lat: number; lng: number };
+  tujuan: { lat: number; lng: number };
+  polyline: string | null;
+  distance_km: number | null;
+}
 
 interface Props {
   lat: number;
   lng: number;
-  /** Address dipakai sebagai title accessibility marker */
   address: string | null;
+  route: RouteData | null;
 }
 
 const TRUCK_ICON = L.divIcon({
@@ -42,12 +54,35 @@ const TRUCK_ICON = L.divIcon({
   iconAnchor: [18, 18]
 });
 
-export function TrackingMap({ lat, lng, address }: Props) {
+function pinIcon(color: string, letter: string): L.DivIcon {
+  return L.divIcon({
+    className: "endpoint-pin",
+    html: `<div style="
+      width:28px;height:36px;
+      display:flex;align-items:flex-start;justify-content:center;
+    ">
+      <svg width="28" height="36" viewBox="0 0 32 40" fill="none">
+        <path d="M16 0 C7 0 0 7 0 16 C0 26 16 40 16 40 C16 40 32 26 32 16 C32 7 25 0 16 0 Z"
+          fill="${color}" stroke="white" stroke-width="2"/>
+        <text x="16" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="white"
+          font-family="system-ui, sans-serif">${letter}</text>
+      </svg>
+    </div>`,
+    iconSize: [28, 36],
+    iconAnchor: [14, 36]
+  });
+}
+
+const ASAL_ICON = pinIcon("#1C9600", "A");
+const TUJUAN_ICON = pinIcon("#D33B3B", "B");
+
+export function TrackingMap({ lat, lng, address, route }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
+  const truckMarkerRef = useRef<L.Marker | null>(null);
+  const fittedRef = useRef(false);
 
-  // Init map sekali saat mount
+  // Init map sekali
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current, {
@@ -60,35 +95,72 @@ export function TrackingMap({ lat, lng, address }: Props) {
       attribution: "© OpenStreetMap",
       maxZoom: 19
     }).addTo(map);
-    mapRef.current = map;
 
+    // Static layer: polyline + endpoint markers (hanya kalau route ada)
+    if (route) {
+      L.marker([route.asal.lat, route.asal.lng], {
+        icon: ASAL_ICON,
+        title: "Lokasi asal"
+      }).addTo(map);
+      L.marker([route.tujuan.lat, route.tujuan.lng], {
+        icon: TUJUAN_ICON,
+        title: "Lokasi tujuan"
+      }).addTo(map);
+
+      const points: Array<[number, number]> = route.polyline
+        ? decodePolyline(route.polyline)
+        : [
+            [route.asal.lat, route.asal.lng],
+            [route.tujuan.lat, route.tujuan.lng]
+          ];
+      L.polyline(points, {
+        color: "#1C9600",
+        weight: 4,
+        opacity: 0.75,
+        dashArray: route.polyline ? undefined : "8,8" // dash kalau fallback straight-line
+      }).addTo(map);
+    }
+
+    mapRef.current = map;
     return () => {
       map.remove();
       mapRef.current = null;
-      markerRef.current = null;
+      truckMarkerRef.current = null;
+      fittedRef.current = false;
     };
-    // Sengaja hanya jalan sekali; perubahan lat/lng di-handle oleh efek berikutnya.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update marker + recenter saat koordinat berubah
+  // Update truck marker saat lat/lng berubah
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    if (!markerRef.current) {
-      markerRef.current = L.marker([lat, lng], {
+    if (!truckMarkerRef.current) {
+      truckMarkerRef.current = L.marker([lat, lng], {
         icon: TRUCK_ICON,
         title: address ?? "Posisi truk"
       }).addTo(map);
     } else {
-      markerRef.current.setLatLng([lat, lng]);
-      if (address) markerRef.current.options.title = address;
+      truckMarkerRef.current.setLatLng([lat, lng]);
+      if (address) truckMarkerRef.current.options.title = address;
     }
 
-    // Pan halus ke koordinat baru, jangan zoom-out paksa
-    map.panTo([lat, lng], { animate: true });
-  }, [lat, lng, address]);
+    // Pertama kali truck muncul: fit bounds semua titik (asal, tujuan, truck).
+    // Selanjutnya cuma pan halus ke truck supaya rute tetap kelihatan tanpa
+    // user kehilangan konteks.
+    if (route && !fittedRef.current) {
+      const bounds = L.latLngBounds([
+        [route.asal.lat, route.asal.lng],
+        [route.tujuan.lat, route.tujuan.lng],
+        [lat, lng]
+      ]);
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      fittedRef.current = true;
+    } else {
+      map.panTo([lat, lng], { animate: true });
+    }
+  }, [lat, lng, address, route]);
 
   return (
     <div

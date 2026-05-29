@@ -9,7 +9,10 @@ import type {
 
 const JOB_SELECT = `
   id, job_number, share_token, customer_id, pic_nama, pic_no_hp,
-  alat_diangkut, asal, tujuan, unit_id, driver_id, etd, eta,
+  alat_diangkut, asal, tujuan,
+  asal_lat, asal_lng, tujuan_lat, tujuan_lng,
+  route_polyline, route_distance_km,
+  unit_id, driver_id, etd, eta,
   status, catatan, cancelled_reason,
   created_at, completed_at,
   customer:customers(nama_perusahaan),
@@ -26,6 +29,12 @@ interface JobRow {
   alat_diangkut: string;
   asal: string;
   tujuan: string;
+  asal_lat: number | string | null;
+  asal_lng: number | string | null;
+  tujuan_lat: number | string | null;
+  tujuan_lng: number | string | null;
+  route_polyline: string | null;
+  route_distance_km: number | string | null;
   unit_id: string;
   driver_id: string;
   etd: string;
@@ -42,6 +51,12 @@ interface JobRow {
     file_path: string;
     uploaded_at: string;
   }> | null;
+}
+
+function toNum(v: number | string | null): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 function publicUrlFor(path: string): string {
@@ -69,6 +84,12 @@ function mapJob(row: JobRow): Job {
     alat_diangkut: row.alat_diangkut,
     asal: row.asal,
     tujuan: row.tujuan,
+    asal_lat: toNum(row.asal_lat),
+    asal_lng: toNum(row.asal_lng),
+    tujuan_lat: toNum(row.tujuan_lat),
+    tujuan_lng: toNum(row.tujuan_lng),
+    route_polyline: row.route_polyline,
+    route_distance_km: toNum(row.route_distance_km),
     unit_id: row.unit_id,
     driver_id: row.driver_id,
     etd: row.etd,

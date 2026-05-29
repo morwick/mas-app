@@ -8,6 +8,7 @@ import {
   findJobConflicts,
   type ConflictCheckResult
 } from "@/lib/queries/job-conflicts";
+import { getRoute } from "@/lib/routing/openrouteservice";
 import type { ActionResult } from "./auth";
 import type { JobStatus } from "@/lib/types";
 
@@ -18,11 +19,45 @@ interface JobInput {
   alat_diangkut: string;
   asal: string;
   tujuan: string;
+  asal_lat?: number | null;
+  asal_lng?: number | null;
+  tujuan_lat?: number | null;
+  tujuan_lng?: number | null;
   unit_id: string;
   driver_id: string;
   etd: string;
   eta?: string | null;
   catatan?: string | null;
+}
+
+/**
+ * Fetch rute dari ORS — non-fatal kalau gagal. Job tetap di-save tanpa polyline,
+ * admin bisa re-edit untuk retry. Polyline cuma visual enhancement.
+ */
+async function tryFetchRoute(
+  asalLat: number | null | undefined,
+  asalLng: number | null | undefined,
+  tujuanLat: number | null | undefined,
+  tujuanLng: number | null | undefined
+): Promise<{ polyline: string; distance_km: number } | null> {
+  if (
+    typeof asalLat !== "number" ||
+    typeof asalLng !== "number" ||
+    typeof tujuanLat !== "number" ||
+    typeof tujuanLng !== "number"
+  ) {
+    return null;
+  }
+  try {
+    const r = await getRoute(
+      { lat: asalLat, lng: asalLng },
+      { lat: tujuanLat, lng: tujuanLng }
+    );
+    return { polyline: r.polyline, distance_km: r.distance_km };
+  } catch (e) {
+    console.warn("[ORS] fetch route failed:", e);
+    return null;
+  }
 }
 
 interface MutationOptions {
@@ -93,6 +128,13 @@ export async function createJobAction(
     data: { user }
   } = await supabase.auth.getUser();
 
+  const route = await tryFetchRoute(
+    input.asal_lat,
+    input.asal_lng,
+    input.tujuan_lat,
+    input.tujuan_lng
+  );
+
   const { data, error } = await supabase
     .from("jobs")
     .insert({
@@ -102,6 +144,12 @@ export async function createJobAction(
       alat_diangkut: input.alat_diangkut.trim(),
       asal: input.asal.trim(),
       tujuan: input.tujuan.trim(),
+      asal_lat: input.asal_lat ?? null,
+      asal_lng: input.asal_lng ?? null,
+      tujuan_lat: input.tujuan_lat ?? null,
+      tujuan_lng: input.tujuan_lng ?? null,
+      route_polyline: route?.polyline ?? null,
+      route_distance_km: route?.distance_km ?? null,
       unit_id: input.unit_id,
       driver_id: input.driver_id,
       etd: new Date(input.etd).toISOString(),
@@ -177,6 +225,49 @@ export async function updateJobAction(
     payload.eta = input.eta ? new Date(input.eta).toISOString() : null;
   if (input.catatan !== undefined)
     payload.catatan = input.catatan?.trim() || null;
+
+  // Kalau ada perubahan koordinat asal atau tujuan → re-fetch polyline.
+  // Pakai nilai existing untuk titik yang tidak diubah.
+  const coordsChanged =
+    input.asal_lat !== undefined ||
+    input.asal_lng !== undefined ||
+    input.tujuan_lat !== undefined ||
+    input.tujuan_lng !== undefined;
+  if (coordsChanged) {
+    const { data: existing } = await supabase
+      .from("jobs")
+      .select("asal_lat, asal_lng, tujuan_lat, tujuan_lng")
+      .eq("id", id)
+      .maybeSingle();
+    const cur = existing as {
+      asal_lat: number | string | null;
+      asal_lng: number | string | null;
+      tujuan_lat: number | string | null;
+      tujuan_lng: number | string | null;
+    } | null;
+    const toNum = (v: number | string | null | undefined): number | null => {
+      if (v === null || v === undefined) return null;
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const asalLat =
+      input.asal_lat !== undefined ? input.asal_lat : toNum(cur?.asal_lat);
+    const asalLng =
+      input.asal_lng !== undefined ? input.asal_lng : toNum(cur?.asal_lng);
+    const tujuanLat =
+      input.tujuan_lat !== undefined ? input.tujuan_lat : toNum(cur?.tujuan_lat);
+    const tujuanLng =
+      input.tujuan_lng !== undefined ? input.tujuan_lng : toNum(cur?.tujuan_lng);
+
+    payload.asal_lat = asalLat;
+    payload.asal_lng = asalLng;
+    payload.tujuan_lat = tujuanLat;
+    payload.tujuan_lng = tujuanLng;
+
+    const route = await tryFetchRoute(asalLat, asalLng, tujuanLat, tujuanLng);
+    payload.route_polyline = route?.polyline ?? null;
+    payload.route_distance_km = route?.distance_km ?? null;
+  }
 
   const { error } = await supabase.from("jobs").update(payload).eq("id", id);
   if (error) return { ok: false, error: error.message };
