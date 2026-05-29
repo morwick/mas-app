@@ -39,7 +39,11 @@ async function tryFetchRoute(
   asalLng: number | null | undefined,
   tujuanLat: number | null | undefined,
   tujuanLng: number | null | undefined
-): Promise<{ polyline: string; distance_km: number } | null> {
+): Promise<{
+  polyline: string;
+  distance_km: number;
+  duration_min: number;
+} | null> {
   if (
     typeof asalLat !== "number" ||
     typeof asalLng !== "number" ||
@@ -53,7 +57,11 @@ async function tryFetchRoute(
       { lat: asalLat, lng: asalLng },
       { lat: tujuanLat, lng: tujuanLng }
     );
-    return { polyline: r.polyline, distance_km: r.distance_km };
+    return {
+      polyline: r.polyline,
+      distance_km: r.distance_km,
+      duration_min: r.duration_min
+    };
   } catch (e) {
     console.warn("[ORS] fetch route failed:", e);
     return null;
@@ -150,6 +158,7 @@ export async function createJobAction(
       tujuan_lng: input.tujuan_lng ?? null,
       route_polyline: route?.polyline ?? null,
       route_distance_km: route?.distance_km ?? null,
+      route_duration_min: route?.duration_min ?? null,
       unit_id: input.unit_id,
       driver_id: input.driver_id,
       etd: new Date(input.etd).toISOString(),
@@ -267,6 +276,7 @@ export async function updateJobAction(
     const route = await tryFetchRoute(asalLat, asalLng, tujuanLat, tujuanLng);
     payload.route_polyline = route?.polyline ?? null;
     payload.route_distance_km = route?.distance_km ?? null;
+    payload.route_duration_min = route?.duration_min ?? null;
   }
 
   const { error } = await supabase.from("jobs").update(payload).eq("id", id);

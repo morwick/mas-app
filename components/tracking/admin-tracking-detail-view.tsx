@@ -10,6 +10,7 @@ import {
   ArrowRight
 } from "lucide-react";
 import { TrackSolidEmbed } from "@/components/tracking/tracksolid-embed";
+import { EtaCard } from "@/components/tracking/eta-card";
 import { JobStepper } from "@/components/jobs/job-stepper";
 import { formatDateTime } from "@/lib/utils";
 import type { Job, JobStatus, Unit, Driver } from "@/lib/types";
@@ -174,6 +175,18 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
           gap: 12
         }}
       >
+        {/* ETA prediction */}
+        {hasRoute && job.route_polyline && (
+          <EtaCard
+            jobToken={job.share_token}
+            polyline={job.route_polyline}
+            routeDistanceKm={job.route_distance_km ?? null}
+            routeDurationMin={job.route_duration_min ?? null}
+            plannedEta={job.eta ?? null}
+            active={job.status === "dalam_perjalanan"}
+          />
+        )}
+
         {/* Rute */}
         <div className="card card-pad">
           <div className="eyebrow" style={{ marginBottom: 10 }}>

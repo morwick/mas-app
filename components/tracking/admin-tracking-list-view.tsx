@@ -1,5 +1,16 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { MapPin, Truck, ArrowRight, Activity } from "lucide-react";
+import {
+  MapPin,
+  Truck,
+  ArrowRight,
+  Activity,
+  Clock,
+  AlertTriangle
+} from "lucide-react";
+import { computeEta, compareEta } from "@/lib/routing/eta";
 import type { Job, JobStatus, Unit } from "@/lib/types";
 
 const STATUS_LABEL: Record<JobStatus, string> = {
@@ -11,11 +22,6 @@ const STATUS_LABEL: Record<JobStatus, string> = {
   cancelled: "Dibatalkan"
 };
 
-interface Props {
-  jobs: Job[];
-  unitsMap: Map<string, Unit>;
-}
-
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
   menunggu_pickup: { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" },
   loading: { bg: "#fff4e0", fg: "#8a5a00" },
@@ -26,7 +32,94 @@ const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
   unloading: { bg: "#efeafe", fg: "#4a2bb0" }
 };
 
-export function AdminTrackingListView({ jobs, unitsMap }: Props) {
+const ETA_COLOR: Record<string, { bg: string; fg: string; icon: string }> = {
+  ontime: {
+    bg: "var(--brand-primary-light)",
+    fg: "var(--brand-primary-dark)",
+    icon: "var(--brand-primary)"
+  },
+  early: {
+    bg: "var(--brand-primary-light)",
+    fg: "var(--brand-primary-dark)",
+    icon: "var(--brand-primary)"
+  },
+  warn: { bg: "#fff4e0", fg: "#8a5a00", icon: "#c97900" },
+  late: { bg: "#fcebeb", fg: "#791f1f", icon: "#c93030" }
+};
+
+const POLL_INTERVAL_MS = 30_000;
+
+interface LocationEntry {
+  lat: number;
+  lng: number;
+  address: string | null;
+  fetchedAt: string;
+}
+
+interface Props {
+  jobs: Job[];
+  units: Unit[];
+}
+
+export function AdminTrackingListView({ jobs, units }: Props) {
+  const unitsMap = useMemo(() => {
+    const m = new Map<string, Unit>();
+    for (const u of units) m.set(u.id, u);
+    return m;
+  }, [units]);
+  const [locations, setLocations] = useState<
+    Record<string, LocationEntry | null>
+  >({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchOnce() {
+      try {
+        const res = await fetch("/api/units/locations", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          locations: Record<string, LocationEntry | null>;
+        };
+        if (!cancelled) setLocations(data.locations ?? {});
+      } catch {
+        // silent fail — coba lagi di poll berikutnya
+      }
+    }
+
+    fetchOnce();
+    const id = setInterval(fetchOnce, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // Pre-compute ETA per job — cached oleh jobs/locations dependency
+  const etaByJob = useMemo(() => {
+    const map = new Map<
+      string,
+      { label: string; severity: "ontime" | "warn" | "late" | "early" }
+    >();
+    for (const job of jobs) {
+      if (job.status !== "dalam_perjalanan") continue; // ETA cuma relevan saat truk jalan
+      if (!job.route_polyline) continue;
+      const loc = locations[job.unit_id];
+      if (!loc) continue;
+      const eta = computeEta({
+        truckLat: loc.lat,
+        truckLng: loc.lng,
+        polyline: job.route_polyline,
+        routeDistanceKm: job.route_distance_km ?? null,
+        routeDurationMin: job.route_duration_min ?? null
+      });
+      if (!eta) continue;
+      const planned = job.eta ? new Date(job.eta) : null;
+      map.set(job.id, compareEta(eta.predicted_arrival, planned));
+    }
+    return map;
+  }, [jobs, locations]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
@@ -81,6 +174,7 @@ export function AdminTrackingListView({ jobs, unitsMap }: Props) {
               job.asal_lng != null &&
               job.tujuan_lat != null &&
               job.tujuan_lng != null;
+            const eta = etaByJob.get(job.id);
             return (
               <Link
                 key={job.id}
@@ -210,6 +304,43 @@ export function AdminTrackingListView({ jobs, unitsMap }: Props) {
                     </span>
                   </div>
                 </div>
+
+                {eta && (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      alignItems: "center",
+                      padding: "6px 8px",
+                      borderRadius: 6,
+                      background: ETA_COLOR[eta.severity].bg,
+                      color: ETA_COLOR[eta.severity].fg,
+                      fontSize: 11.5,
+                      fontWeight: 500
+                    }}
+                  >
+                    {eta.severity === "late" || eta.severity === "warn" ? (
+                      <AlertTriangle
+                        style={{
+                          width: 12,
+                          height: 12,
+                          color: ETA_COLOR[eta.severity].icon,
+                          flexShrink: 0
+                        }}
+                      />
+                    ) : (
+                      <Clock
+                        style={{
+                          width: 12,
+                          height: 12,
+                          color: ETA_COLOR[eta.severity].icon,
+                          flexShrink: 0
+                        }}
+                      />
+                    )}
+                    Prediksi sampai {eta.label}
+                  </div>
+                )}
 
                 <div
                   style={{

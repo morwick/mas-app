@@ -26,6 +26,7 @@ export interface RoutePoint {
 export interface RouteResult {
   polyline: string;
   distance_km: number;
+  duration_min: number;
 }
 
 interface OrsRoute {
@@ -99,7 +100,8 @@ export async function getRoute(
 
   return {
     polyline: route.geometry,
-    distance_km: Math.round(route.summary.distance / 100) / 10
+    distance_km: Math.round(route.summary.distance / 100) / 10,
+    duration_min: Math.round((route.summary.duration / 60) * 10) / 10
   };
 }
 

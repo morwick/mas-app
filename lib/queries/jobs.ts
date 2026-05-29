@@ -11,7 +11,7 @@ const JOB_SELECT = `
   id, job_number, share_token, customer_id, pic_nama, pic_no_hp,
   alat_diangkut, asal, tujuan,
   asal_lat, asal_lng, tujuan_lat, tujuan_lng,
-  route_polyline, route_distance_km,
+  route_polyline, route_distance_km, route_duration_min,
   unit_id, driver_id, etd, eta,
   status, catatan, cancelled_reason,
   created_at, completed_at,
@@ -35,6 +35,7 @@ interface JobRow {
   tujuan_lng: number | string | null;
   route_polyline: string | null;
   route_distance_km: number | string | null;
+  route_duration_min: number | string | null;
   unit_id: string;
   driver_id: string;
   etd: string;
@@ -90,6 +91,7 @@ function mapJob(row: JobRow): Job {
     tujuan_lng: toNum(row.tujuan_lng),
     route_polyline: row.route_polyline,
     route_distance_km: toNum(row.route_distance_km),
+    route_duration_min: toNum(row.route_duration_min),
     unit_id: row.unit_id,
     driver_id: row.driver_id,
     etd: row.etd,

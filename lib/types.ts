@@ -106,6 +106,7 @@ export interface Job {
   tujuan_lng?: number | null;
   route_polyline?: string | null;
   route_distance_km?: number | null;
+  route_duration_min?: number | null;
   unit_id: string;
   driver_id: string;
   etd: string;
