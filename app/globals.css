@@ -918,17 +918,14 @@ body {
   word-break: break-word;
 }
 
-/* Map full-screen wrapper — sisakan area top-bar + sidebar supaya nav tetap visible. */
+/* Map full-screen wrapper — cover seluruh viewport. */
 .map-fullscreen-active {
   position: fixed;
-  top: var(--topbar-h);
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 20; /* di bawah top-bar (z-30) supaya overlap-free, side-by-side */
+  inset: 0;
+  z-index: 1000;
 }
-@media (min-width: 1024px) {
-  .map-fullscreen-active {
-    left: var(--sidebar-w);
-  }
+/* Normal mode wrapper — isolation:isolate bikin stacking context baru supaya
+   z-index Leaflet (controls 1000, panes 200-800) tidak tembus ke top-bar/sidebar. */
+.map-isolated {
+  isolation: isolate;
 }

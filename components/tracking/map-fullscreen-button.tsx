@@ -37,7 +37,7 @@ export function MapFullscreenButton({ children }: Props) {
 
   return (
     <div
-      className={fullscreen ? "map-fullscreen-active" : ""}
+      className={fullscreen ? "map-fullscreen-active" : "map-isolated"}
       style={
         fullscreen
           ? {
