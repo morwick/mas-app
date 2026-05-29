@@ -37,12 +37,10 @@ export function MapFullscreenButton({ children }: Props) {
 
   return (
     <div
+      className={fullscreen ? "map-fullscreen-active" : ""}
       style={
         fullscreen
           ? {
-              position: "fixed",
-              inset: 0,
-              zIndex: 1000,
               background: "white",
               display: "flex",
               flexDirection: "column",

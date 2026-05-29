@@ -917,3 +917,18 @@ body {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+/* Map full-screen wrapper — sisakan area top-bar + sidebar supaya nav tetap visible. */
+.map-fullscreen-active {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20; /* di bawah top-bar (z-30) supaya overlap-free, side-by-side */
+}
+@media (min-width: 1024px) {
+  .map-fullscreen-active {
+    left: var(--sidebar-w);
+  }
+}
