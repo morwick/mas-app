@@ -8,13 +8,13 @@ import { syncUnitMileage } from "@/lib/services/mileage-sync";
  *   - Tombol "Sync sekarang" di tab Service
  *   - Polling 5 menit dari tab Service (component-level)
  *
- * Logic sync sama dengan endpoint batch: hari ini + lazy backfill kemarin.
+ * Logic sync sama dengan endpoint batch: hari ini + gap-fill up to 30 hari.
  *
  * Auth: user session (RLS-aware).
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(
   _req: Request,

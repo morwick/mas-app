@@ -6,30 +6,34 @@ import { getDailyMileage } from "@/lib/tracksolid/client";
  * Helper sync mileage per unit. Dipanggil dari endpoint polling
  * (/api/units/mileage batch & /api/units/[id]/sync-mileage per-unit).
  *
- * Logic:
+ * Logic gap-fill on-open:
  *   1. Fetch totalMileage hari ini → UPSERT snapshot hari ini
- *   2. Smart backfill kemarin: HANYA kalau snapshot kemarin sudah ada di DB
- *      (artinya: sistem sudah aktif kemarin) DAN belum di-finalize.
- *      Tujuan: pastikan snapshot kemarin = nilai final 23:59, bukan
- *      mid-day kalau admin tutup laptop sebelum tengah malam.
+ *   2. Cari tanggal snapshot terbaru SEBELUM hari ini (lastDate).
+ *   3. Kalau ada lastDate → loop dari lastDate s/d kemarin:
+ *      - Snapshot sudah finalized (fetched_at >= hari berikutnya 00:00 WIB) → skip
+ *      - Belum / tidak ada → fetch range full hari itu & UPSERT
+ *   4. Cap MAX_BACKFILL_DAYS (30) untuk batasi call ke TrackSolid.
  *
- *   Backfill TIDAK akan create row baru untuk tanggal yang belum pernah
- *   ke-snapshot — supaya data sebelum sistem aktif tidak ikut tertarik.
+ *   Kalau tidak ada snapshot lampau sama sekali → sistem baru aktif,
+ *   skip backfill (jangan tarik data sebelum sistem aktif).
  *
- * "Finalized" = snapshot.fetched_at >= hari ini 00:00 WIB. Polling pertama
- * di hari baru akan finalize kemarin sekali, lalu skip seterusnya.
+ * "Finalized" = snapshot.fetched_at >= (tanggal + 1 hari) 00:00 WIB.
+ * Artinya: snapshot di-fetch atau di-update di hari setelah tanggalnya,
+ * sehingga nilai totalMileage sudah final (TrackSolid reset counter di hari baru).
  */
 
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_BACKFILL_DAYS = 30;
+const BACKFILL_PAUSE_MS = 150;
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
 interface MileageWindow {
-  tanggal: string;     // YYYY-MM-DD (WIB)
-  startTime: string;   // "YYYY-MM-DD HH:mm:ss"
+  tanggal: string;
+  startTime: string;
   endTime: string;
 }
 
@@ -41,9 +45,7 @@ function todayWindow(now: Date): MileageWindow {
   return { tanggal, startTime, endTime };
 }
 
-function yesterdayWindow(now: Date): MileageWindow {
-  const wib = new Date(now.getTime() + WIB_OFFSET_MS - DAY_MS);
-  const tanggal = `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth() + 1)}-${pad(wib.getUTCDate())}`;
+function fullDayWindow(tanggal: string): MileageWindow {
   return {
     tanggal,
     startTime: `${tanggal} 00:00:00`,
@@ -51,19 +53,40 @@ function yesterdayWindow(now: Date): MileageWindow {
   };
 }
 
-/** Hari ini WIB 00:00:00 dalam ISO UTC (untuk perbandingan dengan fetched_at). */
-function todayWibMidnightIso(now: Date): string {
-  const wib = new Date(now.getTime() + WIB_OFFSET_MS);
-  const y = wib.getUTCFullYear();
-  const m = wib.getUTCMonth();
-  const d = wib.getUTCDate();
-  return new Date(Date.UTC(y, m, d, -7, 0, 0)).toISOString();
+/** (tanggal + 1 hari) 00:00 WIB sebagai UTC ISO string. */
+function nextDayMidnightUtcIso(tanggal: string): string {
+  const [y, m, d] = tanggal.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1, -7, 0, 0)).toISOString();
+}
+
+/** Build daftar tanggal WIB inklusif dari `fromInclusive` s/d `toInclusive`. */
+function buildDateRange(fromInclusive: string, toInclusive: string): string[] {
+  const [fy, fm, fd] = fromInclusive.split("-").map(Number);
+  const [ty, tm, td] = toInclusive.split("-").map(Number);
+  const start = Date.UTC(fy, fm - 1, fd);
+  const end = Date.UTC(ty, tm - 1, td);
+  const out: string[] = [];
+  for (let t = start; t <= end; t += DAY_MS) {
+    const dt = new Date(t);
+    out.push(`${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`);
+  }
+  return out;
+}
+
+/** Kurangi N hari dari tanggal WIB YYYY-MM-DD. */
+function subDays(tanggal: string, n: number): string {
+  const [y, m, d] = tanggal.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d) - n * DAY_MS;
+  const dt = new Date(t);
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
 
 export interface SyncResult {
   today_km: number;
   yesterday_finalized: boolean;
   yesterday_km?: number;
+  backfilled_dates: string[];
+  capped: boolean;
 }
 
 export async function syncUnitMileage(
@@ -94,57 +117,93 @@ export async function syncUnitMileage(
     );
   if (todayErr) throw new Error(todayErr.message);
 
-  // 2. Smart backfill kemarin — HANYA kalau snapshot kemarin sudah ada
-  const yesterday = yesterdayWindow(now);
-  const { data: yRow } = await admin
+  const empty: SyncResult = {
+    today_km: todayResult.km,
+    yesterday_finalized: false,
+    backfilled_dates: [],
+    capped: false
+  };
+
+  // 2. Cari snapshot terbaru SEBELUM hari ini
+  const { data: lastRow } = await admin
     .from("unit_odometer_snapshots")
-    .select("daily_km, fetched_at")
+    .select("tanggal")
     .eq("unit_id", unitId)
-    .eq("tanggal", yesterday.tanggal)
+    .lt("tanggal", today.tanggal)
+    .order("tanggal", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  // Snapshot kemarin tidak ada → sistem belum aktif kemarin → SKIP
-  if (yRow == null) {
-    return { today_km: todayResult.km, yesterday_finalized: false };
+  if (!lastRow?.tanggal) {
+    return empty;
   }
 
-  // Snapshot ada, cek apakah sudah finalized
-  const todayMidnightUtc = todayWibMidnightIso(now);
-  const alreadyFinalized =
-    typeof yRow.fetched_at === "string" &&
-    yRow.fetched_at >= todayMidnightUtc;
-  if (alreadyFinalized) {
-    return { today_km: todayResult.km, yesterday_finalized: false };
+  // 3. Hitung range backfill: dari lastDate s/d kemarin, cap MAX_BACKFILL_DAYS
+  const yesterday = subDays(today.tanggal, 1);
+  if (lastRow.tanggal > yesterday) {
+    return empty;
+  }
+  const earliest = subDays(today.tanggal, MAX_BACKFILL_DAYS);
+  const fromDate = lastRow.tanggal < earliest ? earliest : lastRow.tanggal;
+  const capped = lastRow.tanggal < earliest;
+  const targetDates = buildDateRange(fromDate, yesterday);
+
+  // 4. Ambil existing snapshot di range untuk cek finalization
+  const { data: existing } = await admin
+    .from("unit_odometer_snapshots")
+    .select("tanggal, fetched_at")
+    .eq("unit_id", unitId)
+    .in("tanggal", targetDates);
+
+  const fetchedAtMap = new Map<string, string>();
+  for (const r of (existing ?? []) as Array<{
+    tanggal: string;
+    fetched_at: string;
+  }>) {
+    fetchedAtMap.set(r.tanggal, r.fetched_at);
   }
 
-  // 3. Re-fetch kemarin pakai range penuh untuk dapat nilai final
-  try {
-    const ymResult = await getDailyMileage(
-      imei,
-      yesterday.startTime,
-      yesterday.endTime
-    );
-    const { error: yErr } = await admin
-      .from("unit_odometer_snapshots")
-      .upsert(
-        {
-          unit_id: unitId,
-          tanggal: yesterday.tanggal,
-          daily_km: ymResult.km,
-          source: "tracksolid",
-          fetched_at: new Date().toISOString()
-        },
-        { onConflict: "unit_id,tanggal" }
-      );
-    if (yErr) throw new Error(yErr.message);
-    return {
-      today_km: todayResult.km,
-      yesterday_finalized: true,
-      yesterday_km: ymResult.km
-    };
-  } catch {
-    // Backfill gagal → tidak fatal. Hari ini tetap ter-sync, polling
-    // berikutnya akan coba lagi.
-    return { today_km: todayResult.km, yesterday_finalized: false };
+  // 5. Loop fetch missing / non-finalized
+  const backfilled: string[] = [];
+  let yesterdayKm: number | undefined;
+  for (const tgl of targetDates) {
+    const fetchedAt = fetchedAtMap.get(tgl);
+    const finalized =
+      typeof fetchedAt === "string" &&
+      fetchedAt >= nextDayMidnightUtcIso(tgl);
+    if (finalized) continue;
+
+    const win = fullDayWindow(tgl);
+    try {
+      const r = await getDailyMileage(imei, win.startTime, win.endTime);
+      const { error: upErr } = await admin
+        .from("unit_odometer_snapshots")
+        .upsert(
+          {
+            unit_id: unitId,
+            tanggal: tgl,
+            daily_km: r.km,
+            source: "tracksolid",
+            fetched_at: new Date().toISOString()
+          },
+          { onConflict: "unit_id,tanggal" }
+        );
+      if (upErr) throw new Error(upErr.message);
+      backfilled.push(tgl);
+      if (tgl === yesterday) yesterdayKm = r.km;
+    } catch {
+      // Tanggal ini gagal — lanjut. Polling berikutnya akan retry.
+    }
+    if (BACKFILL_PAUSE_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, BACKFILL_PAUSE_MS));
+    }
   }
+
+  return {
+    today_km: todayResult.km,
+    yesterday_finalized: backfilled.includes(yesterday),
+    yesterday_km: yesterdayKm,
+    backfilled_dates: backfilled,
+    capped
+  };
 }

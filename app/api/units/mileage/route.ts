@@ -9,7 +9,9 @@ import { syncUnitMileage } from "@/lib/services/mileage-sync";
  *
  * Per unit:
  *   - Fetch totalMileage hari ini, UPSERT snapshot
- *   - Lazy backfill snapshot kemarin kalau belum di-finalize
+ *   - Gap-fill: deteksi snapshot terbaru sebelum hari ini, lalu backfill
+ *     semua tanggal di antaranya (max 30 hari). Cocok saat admin tidak buka
+ *     aplikasi beberapa hari — polling pertama akan tarik semua gap.
  *
  * Auth: user session (RLS-aware). UPSERT snapshot via admin client
  * (snapshot table read-only untuk authenticated, service-role bypass).
@@ -18,7 +20,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const PER_UNIT_TIMEOUT_MS = 12000; // 2x getDailyMileage worst case
+const PER_UNIT_TIMEOUT_MS = 50000; // accomodate gap-fill up to 30 hari
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {

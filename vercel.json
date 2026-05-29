@@ -1,10 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["sin1"],
-  "crons": [
-    {
-      "path": "/api/cron/sync-mileage/backfill?days=2",
-      "schedule": "30 17 * * *"
-    }
-  ]
+  "regions": ["sin1"]
 }
