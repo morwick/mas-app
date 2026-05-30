@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { MapPin, RefreshCw, Truck, WifiOff } from "lucide-react";
 import { TrackingTabs } from "./tracking-tabs";
+import { MapFullscreenButton } from "./map-fullscreen-button";
 import type { Unit, UnitStatus } from "@/lib/types";
 
 const FleetMap = dynamic(
@@ -220,26 +221,28 @@ export function FleetMapView({ units }: Props) {
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) 320px",
           gap: 12,
-          alignItems: "stretch"
+          alignItems: "stretch",
+          height: "calc(100vh - 280px)",
+          minHeight: 420
         }}
         className="fleet-grid"
       >
-        <div
-          className="card"
-          style={{
-            height: "calc(100vh - 280px)",
-            minHeight: 420,
-            overflow: "hidden",
-            position: "relative"
-          }}
-        >
-          <FleetMap units={mapUnits} focusUnitId={focusUnitId} />
-        </div>
+        <MapFullscreenButton>
+          <div
+            className="card"
+            style={{
+              height: "100%",
+              overflow: "hidden",
+              position: "relative"
+            }}
+          >
+            <FleetMap units={mapUnits} focusUnitId={focusUnitId} />
+          </div>
+        </MapFullscreenButton>
         <div
           className="card card-pad"
           style={{
-            height: "calc(100vh - 280px)",
-            minHeight: 420,
+            height: "100%",
             display: "flex",
             flexDirection: "column",
             gap: 10
@@ -427,8 +430,9 @@ export function FleetMapView({ units }: Props) {
         @media (max-width: 900px) {
           :global(.fleet-grid) {
             grid-template-columns: 1fr !important;
+            height: auto !important;
           }
-          :global(.fleet-grid > .card) {
+          :global(.fleet-grid > *) {
             height: 50vh !important;
             min-height: 320px !important;
           }

@@ -123,7 +123,8 @@ export function FleetMap({ units, focusUnitId }: Props) {
   // Init map sekali
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, {
+    const container = containerRef.current;
+    const map = L.map(container, {
       center: INDONESIA_CENTER,
       zoom: INDONESIA_ZOOM,
       zoomControl: true
@@ -133,7 +134,17 @@ export function FleetMap({ units, focusUnitId }: Props) {
       maxZoom: 19
     }).addTo(map);
     mapRef.current = map;
+
+    // Resize observer → wajib untuk fullscreen toggle. Leaflet butuh
+    // invalidateSize tiap container berubah dimensi, jika tidak tiles
+    // tidak ter-render di area baru.
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    ro.observe(container);
+
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
       markersRef.current.clear();
