@@ -16,6 +16,8 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   match?: (pathname: string) => boolean;
+  /** Kalau true, menu ini hanya tampil untuk role 'owner'. */
+  ownerOnly?: boolean;
 }
 
 export const navItems: NavItem[] = [
@@ -59,13 +61,15 @@ export const navItems: NavItem[] = [
     href: "/services",
     label: "Service",
     icon: Wrench,
-    match: (p) => p.startsWith("/services")
+    match: (p) => p.startsWith("/services"),
+    ownerOnly: true
   },
   {
     href: "/reports",
     label: "Laporan",
     icon: BarChart3,
-    match: (p) => p.startsWith("/reports")
+    match: (p) => p.startsWith("/reports"),
+    ownerOnly: true
   },
   {
     href: "/settings",
@@ -80,5 +84,15 @@ export const mobileNavItems: NavItem[] = [
   navItems[1], // Unit
   navItems[2], // Job
   navItems[3], // Pantau
-  navItems[7]  // Laporan
+  navItems[7]  // Laporan (owner-only — di-filter saat render)
 ];
+
+export type UserRoleLike = "owner" | "operator";
+
+export function visibleNavItems(
+  items: NavItem[],
+  role: UserRoleLike | null | undefined
+): NavItem[] {
+  if (role === "operator") return items.filter((i) => !i.ownerOnly);
+  return items;
+}

@@ -4,12 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { navItems } from "./nav-items";
+import { navItems, visibleNavItems } from "./nav-items";
 import { Logo } from "./logo";
 import { LogoutButton } from "@/components/auth/logout-button";
 
 interface MobileDrawerProps {
-  user: { nama: string; email: string; initials: string } | null;
+  user: {
+    nama: string;
+    email: string;
+    initials: string;
+    role?: "owner" | "operator";
+  } | null;
   counts?: {
     units?: number;
     jobsActive?: number;
@@ -133,7 +138,7 @@ export function MobileDrawer({ user, counts }: MobileDrawerProps) {
               <div className="eyebrow" style={{ padding: "8px 10px 6px" }}>
                 Menu
               </div>
-              {navItems.map((item) => {
+              {visibleNavItems(navItems, user?.role).map((item) => {
                 const active = item.match
                   ? item.match(pathname)
                   : pathname.startsWith(item.href);
@@ -218,14 +223,46 @@ export function MobileDrawer({ user, counts }: MobileDrawerProps) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        marginBottom: 1
                       }}
                     >
-                      {user.nama}
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          flex: 1,
+                          minWidth: 0
+                        }}
+                      >
+                        {user.nama}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          background:
+                            user.role === "operator"
+                              ? "#fff4e0"
+                              : "var(--brand-primary-light)",
+                          color:
+                            user.role === "operator"
+                              ? "#8a5a00"
+                              : "var(--brand-primary-dark)",
+                          letterSpacing: 0.4,
+                          textTransform: "uppercase",
+                          flexShrink: 0
+                        }}
+                      >
+                        {user.role === "operator" ? "Operator" : "Owner"}
+                      </span>
                     </div>
                     <div
                       style={{

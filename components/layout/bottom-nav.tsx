@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { mobileNavItems } from "./nav-items";
+import { mobileNavItems, visibleNavItems } from "./nav-items";
 
-export function BottomNav() {
+interface BottomNavProps {
+  role?: "owner" | "operator";
+}
+
+export function BottomNav({ role }: BottomNavProps = {}) {
   const pathname = usePathname();
+  const items = visibleNavItems(mobileNavItems, role);
   return (
     <nav
       className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white"
@@ -15,7 +20,7 @@ export function BottomNav() {
       }}
     >
       <ul className="flex items-stretch">
-        {mobileNavItems.map((item) => {
+        {items.map((item) => {
           const active = item.match
             ? item.match(pathname)
             : pathname.startsWith(item.href);

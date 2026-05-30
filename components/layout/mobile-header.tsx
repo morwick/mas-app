@@ -25,7 +25,12 @@ function getPageTitle(pathname: string) {
 }
 
 interface MobileHeaderProps {
-  user: { nama: string; email: string; initials: string } | null;
+  user: {
+    nama: string;
+    email: string;
+    initials: string;
+    role?: "owner" | "operator";
+  } | null;
   counts?: {
     units?: number;
     jobsActive?: number;

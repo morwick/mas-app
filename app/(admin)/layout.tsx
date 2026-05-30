@@ -36,7 +36,7 @@ export default async function AdminLayout({
             {children}
           </div>
         </main>
-        <BottomNav />
+        <BottomNav role={user?.role} />
       </div>
     </div>
   );

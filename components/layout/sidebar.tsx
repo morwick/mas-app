@@ -4,11 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Settings } from "lucide-react";
 import { Logo } from "./logo";
-import { navItems } from "./nav-items";
+import { navItems, visibleNavItems } from "./nav-items";
 import { LogoutButton } from "@/components/auth/logout-button";
 
 interface SidebarProps {
-  user: { nama: string; email: string; initials: string } | null;
+  user: {
+    nama: string;
+    email: string;
+    initials: string;
+    role?: "owner" | "operator";
+  } | null;
   counts?: {
     units?: number;
     jobsActive?: number;
@@ -26,8 +31,15 @@ const BADGE_KEYS = new Set(["/jobs"]);
 
 export function Sidebar({ user, counts }: SidebarProps) {
   const pathname = usePathname();
-  const mainItems = navItems.filter((n) => n.href !== "/settings");
+  const mainItems = visibleNavItems(navItems, user?.role).filter(
+    (n) => n.href !== "/settings"
+  );
   const settingsActive = pathname.startsWith("/settings");
+  const roleBadgeLabel = user?.role === "operator" ? "Operator" : "Owner";
+  const roleBadgeColor =
+    user?.role === "operator"
+      ? { bg: "#fff4e0", fg: "#8a5a00" }
+      : { bg: "var(--brand-primary-light)", fg: "var(--brand-primary-dark)" };
 
   return (
     <aside
@@ -168,14 +180,42 @@ export function Sidebar({ user, counts }: SidebarProps) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontSize: 13,
-              fontWeight: 600,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 1
             }}
           >
-            {user?.nama ?? "Tamu"}
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                flex: 1,
+                minWidth: 0
+              }}
+            >
+              {user?.nama ?? "Tamu"}
+            </span>
+            {user && (
+              <span
+                style={{
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  background: roleBadgeColor.bg,
+                  color: roleBadgeColor.fg,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  flexShrink: 0
+                }}
+              >
+                {roleBadgeLabel}
+              </span>
+            )}
           </div>
           <div
             style={{

@@ -1,8 +1,15 @@
 import Link from "next/link";
-import { User, Tags, ArrowRight } from "lucide-react";
+import { User, Tags, ArrowRight, Users as UsersIcon } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { getCurrentUser } from "@/lib/queries/profile";
 
-const items = [
+const items: Array<{
+  href: string;
+  icon: typeof User;
+  title: string;
+  description: string;
+  ownerOnly?: boolean;
+}> = [
   {
     href: "/settings/profile",
     icon: User,
@@ -10,21 +17,32 @@ const items = [
     description: "Update nama dan password Anda"
   },
   {
+    href: "/settings/users",
+    icon: UsersIcon,
+    title: "Pengguna",
+    description: "Kelola role & scope akses jenis unit",
+    ownerOnly: true
+  },
+  {
     href: "/settings/jenis-unit",
     icon: Tags,
     title: "Jenis unit",
-    description: "Master data jenis armada (lowbed, highbed, dst)"
+    description: "Master data jenis armada (lowbed, highbed, dst)",
+    ownerOnly: true
   }
 ];
 
-export default function SettingsIndexPage() {
+export default async function SettingsIndexPage() {
+  const user = await getCurrentUser();
+  const visible = items.filter((it) => !it.ownerOnly || user?.role === "owner");
+
   return (
     <div className="flex flex-col gap-4 max-w-[640px]">
       <div>
         <h1 className="text-h1">Pengaturan</h1>
       </div>
       <div className="flex flex-col gap-2">
-        {items.map((it) => (
+        {visible.map((it) => (
           <Link
             key={it.href}
             href={it.href}
