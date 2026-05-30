@@ -18,25 +18,41 @@ export interface CurrentUser {
   allowedJenisUnitIds: string[] | null;
 }
 
+interface ProfileRow {
+  nama: string;
+  email: string;
+  role: string | null;
+  allowed_jenis_unit_ids?: string[] | null;
+}
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const supabase = await createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data: profile } = await supabase
+
+  // Coba load dengan kolom role-scope baru. Kalau migrasi belum di-apply
+  // (kolom belum ada), fallback ke schema lama supaya app tetap jalan.
+  let profile: ProfileRow | null = null;
+  const fresh = await supabase
     .from("profiles")
     .select("nama, email, role, allowed_jenis_unit_ids")
     .eq("id", user.id)
     .maybeSingle();
-  const p = profile as {
-    nama: string;
-    email: string;
-    role: string | null;
-    allowed_jenis_unit_ids: string[] | null;
-  } | null;
-  const nama: string = p?.nama ?? user.email?.split("@")[0] ?? "Admin";
-  const email: string = p?.email ?? user.email ?? "";
+  if (fresh.error) {
+    const legacy = await supabase
+      .from("profiles")
+      .select("nama, email, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    profile = (legacy.data as ProfileRow | null) ?? null;
+  } else {
+    profile = (fresh.data as ProfileRow | null) ?? null;
+  }
+
+  const nama: string = profile?.nama ?? user.email?.split("@")[0] ?? "Admin";
+  const email: string = profile?.email ?? user.email ?? "";
   const initials =
     nama
       .split(" ")
@@ -45,12 +61,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       .map((s: string) => s[0]!)
       .join("")
       .toUpperCase() || "A";
-  const role: UserRole = p?.role === "operator" ? "operator" : "owner";
+  const role: UserRole = profile?.role === "operator" ? "operator" : "owner";
   const allowedJenisUnitIds =
     role === "owner"
       ? null
-      : Array.isArray(p?.allowed_jenis_unit_ids)
-        ? p.allowed_jenis_unit_ids
+      : Array.isArray(profile?.allowed_jenis_unit_ids)
+        ? profile.allowed_jenis_unit_ids
         : null;
   return {
     id: user.id,
