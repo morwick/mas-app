@@ -354,9 +354,27 @@ export function AdminTrackingListView({ jobs, units }: Props) {
                   }}
                 >
                   <span
-                    style={{ display: "inline-flex", gap: 4, alignItems: "center" }}
+                    style={{
+                      display: "inline-flex",
+                      gap: 5,
+                      alignItems: "center",
+                      padding: "4px 9px",
+                      borderRadius: 6,
+                      background: "var(--brand-primary-light)",
+                      color: "var(--brand-primary-dark)",
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      letterSpacing: 0.3,
+                      border: "0.5px solid var(--brand-primary)"
+                    }}
                   >
-                    <Truck style={{ width: 11, height: 11 }} />
+                    <Truck
+                      style={{
+                        width: 13,
+                        height: 13,
+                        color: "var(--brand-primary)"
+                      }}
+                    />
                     {unit?.kode_unit ?? "—"}
                   </span>
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
