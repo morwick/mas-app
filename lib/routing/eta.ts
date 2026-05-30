@@ -148,12 +148,33 @@ export function compareEta(
   return { label: formatTime(predicted), severity: "ontime" };
 }
 
+const TZ = "Asia/Jakarta";
+
+/** YYYY-MM-DD versi WIB, agar bisa dibandingkan antar Date dengan andal. */
+function wibDateKey(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: TZ });
+}
+
 function formatTime(d: Date): string {
-  return d.toLocaleTimeString("id-ID", {
+  const now = new Date();
+  const target = wibDateKey(d);
+  const today = wibDateKey(now);
+  const tomorrow = wibDateKey(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+
+  const time = d.toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Asia/Jakarta"
+    timeZone: TZ
   });
+
+  if (target === today) return time;
+  if (target === tomorrow) return `Besok ${time}`;
+  const dateLabel = d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    timeZone: TZ
+  });
+  return `${dateLabel} ${time}`;
 }
 
 function formatDuration(min: number): string {
