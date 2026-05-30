@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { MapPin, RefreshCw, Truck, WifiOff } from "lucide-react";
+import { MapPin, RefreshCw, Search, Truck, WifiOff, X } from "lucide-react";
 import { TrackingTabs } from "./tracking-tabs";
 import { MapFullscreenButton } from "./map-fullscreen-button";
 import type { Unit, UnitStatus } from "@/lib/types";
@@ -69,6 +69,7 @@ export function FleetMapView({ units }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [focusUnitId, setFocusUnitId] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("");
+  const [query, setQuery] = useState("");
 
   const activeUnits = useMemo(
     () => units.filter((u) => u.is_active),
@@ -120,10 +121,17 @@ export function FleetMapView({ units }: Props) {
     return { standby, bertugas, perbaikan, gpsActive, total: activeUnits.length };
   }, [activeUnits, locations]);
 
-  const filteredUnits = useMemo(
-    () => activeUnits.filter((u) => !filter || u.status === filter),
-    [activeUnits, filter]
-  );
+  const filteredUnits = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return activeUnits.filter((u) => {
+      if (filter && u.status !== filter) return false;
+      if (term) {
+        const haystack = `${u.kode_unit} ${u.no_polisi} ${u.jenis_unit_nama}`.toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      return true;
+    });
+  }, [activeUnits, filter, query]);
 
   const mapUnits = useMemo(
     () =>
@@ -262,6 +270,61 @@ export function FleetMapView({ units }: Props) {
           </div>
           <div
             style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center"
+            }}
+          >
+            <Search
+              style={{
+                position: "absolute",
+                left: 9,
+                width: 13,
+                height: 13,
+                color: "var(--text-tertiary)",
+                pointerEvents: "none"
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Cari kode, plat, atau jenis"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "7px 28px 7px 28px",
+                border: "0.5px solid var(--border-default)",
+                borderRadius: 8,
+                fontSize: 12.5,
+                background: "white"
+              }}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                title="Bersihkan"
+                style={{
+                  position: "absolute",
+                  right: 6,
+                  width: 20,
+                  height: 20,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  color: "var(--text-tertiary)"
+                }}
+              >
+                <X style={{ width: 13, height: 13 }} />
+              </button>
+            )}
+          </div>
+          <div
+            style={{
               flex: 1,
               overflowY: "auto",
               display: "flex",
@@ -280,7 +343,9 @@ export function FleetMapView({ units }: Props) {
                   textAlign: "center"
                 }}
               >
-                Tidak ada unit di filter ini.
+                {query
+                  ? `Tidak ada unit cocok dengan "${query}".`
+                  : "Tidak ada unit di filter ini."}
               </div>
             ) : (
               filteredUnits.map((u) => {
