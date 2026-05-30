@@ -319,6 +319,7 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
 
         {/* Map */}
         <div
+          className="map-isolated"
           style={{
             borderRadius: 14,
             overflow: "hidden",
