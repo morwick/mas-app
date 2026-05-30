@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Bell } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Logo } from "./logo";
 import { MobileDrawer } from "./mobile-drawer";
+import { NotificationBell } from "./notification-bell";
 import { navItems } from "./nav-items";
 
 function getPageTitle(pathname: string) {
@@ -95,36 +95,7 @@ export function MobileHeader({ user, counts }: MobileHeaderProps) {
           )}
         </div>
         <div className="flex items-center" style={{ flexShrink: 0 }}>
-          <Link
-            href="/dashboard"
-            aria-label="Notifikasi"
-            className="btn-ghost"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 6,
-              background: "transparent",
-              color: "var(--text-tertiary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative"
-            }}
-          >
-            <Bell style={{ width: 18, height: 18 }} />
-            <span
-              style={{
-                position: "absolute",
-                top: 8,
-                right: 8,
-                width: 7,
-                height: 7,
-                borderRadius: 99,
-                background: "#c13838",
-                border: "1.5px solid white"
-              }}
-            />
-          </Link>
+          <NotificationBell variant="mobile" />
         </div>
       </div>
     </header>

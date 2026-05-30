@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import { navItems } from "./nav-items";
+import { NotificationBell } from "./notification-bell";
 
 function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
   const root = navItems.find((n) => n.match?.(pathname));
@@ -135,26 +136,7 @@ export function TopBar() {
             <span className="kbd">K</span>
           </div>
         </div>
-        <button
-          type="button"
-          aria-label="Notifikasi"
-          className="btn btn-secondary btn-sm btn-icon"
-          style={{ position: "relative" }}
-        >
-          <Bell style={{ width: 16, height: 16 }} />
-          <span
-            style={{
-              position: "absolute",
-              top: 4,
-              right: 5,
-              width: 7,
-              height: 7,
-              borderRadius: 99,
-              background: "#c13838",
-              border: "1.5px solid white"
-            }}
-          />
-        </button>
+        <NotificationBell variant="desktop" />
       </div>
     </header>
   );
