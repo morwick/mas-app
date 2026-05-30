@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { decodePolyline } from "@/lib/routing/polyline";
 import type { UnitStatus } from "@/lib/types";
 
 /**
@@ -13,6 +14,18 @@ import type { UnitStatus } from "@/lib/types";
  * di-fit-bounds tanpa interferensi dengan pin lokasi job.
  */
 
+export interface FleetMapUnitJob {
+  id: string;
+  number: string;
+  customer_nama: string;
+  tujuan: string;
+  route: {
+    asal: { lat: number; lng: number };
+    tujuan: { lat: number; lng: number };
+    polyline: string | null;
+  } | null;
+}
+
 export interface FleetMapUnit {
   id: string;
   kode_unit: string;
@@ -21,11 +34,13 @@ export interface FleetMapUnit {
   lat: number;
   lng: number;
   address: string | null;
+  job: FleetMapUnitJob | null;
 }
 
 interface Props {
   units: FleetMapUnit[];
   focusUnitId: string | null;
+  onUnitClick?: (id: string) => void;
 }
 
 const STATUS_COLOR: Record<UnitStatus, string> = {
@@ -97,7 +112,25 @@ function popupHtml(u: FleetMapUnit): string {
   const addr = u.address
     ? `<div style="margin-top:6px;font-size:11px;color:#555;line-height:1.4">${escapeHtml(u.address)}</div>`
     : "";
-  return `<div style="font-size:12px;line-height:1.4;min-width:160px;font-family:system-ui,sans-serif">
+  const jobBlock = u.job
+    ? `<div style="
+        margin-top:8px;padding-top:8px;
+        border-top:0.5px dashed #d0d4d9;
+      ">
+        <div style="font-size:10.5px;color:#888;font-weight:600;letter-spacing:0.3px;text-transform:uppercase">Job aktif</div>
+        <div style="font-size:11.5px;color:#333;margin-top:2px;font-weight:600">${escapeHtml(u.job.customer_nama)}</div>
+        <div style="font-size:10.5px;color:#666;margin-top:1px">→ ${escapeHtml(u.job.tujuan)}</div>
+        <a href="/tracking/${escapeHtml(u.job.id)}"
+          style="
+            display:inline-block;margin-top:6px;
+            padding:5px 10px;border-radius:6px;
+            background:#1C9600;color:white;
+            font-size:11px;font-weight:600;
+            text-decoration:none;
+          ">Pantau job →</a>
+      </div>`
+    : "";
+  return `<div style="font-size:12px;line-height:1.4;min-width:180px;font-family:system-ui,sans-serif">
     <div style="font-weight:700;color:#222;font-size:13px">${kode}</div>
     <div style="color:#666">${jenis}</div>
     <div style="margin-top:4px">
@@ -108,17 +141,46 @@ function popupHtml(u: FleetMapUnit): string {
       ">${label}</span>
     </div>
     ${addr}
+    ${jobBlock}
   </div>`;
 }
+
+function endpointPinIcon(color: string, letter: string): L.DivIcon {
+  return L.divIcon({
+    className: "fleet-route-pin",
+    html: `<div style="width:22px;height:28px;display:flex;align-items:flex-start;justify-content:center;">
+      <svg width="22" height="28" viewBox="0 0 32 40" fill="none">
+        <path d="M16 0 C7 0 0 7 0 16 C0 26 16 40 16 40 C16 40 32 26 32 16 C32 7 25 0 16 0 Z"
+          fill="${color}" stroke="white" stroke-width="2"/>
+        <text x="16" y="20" text-anchor="middle" font-size="13" font-weight="700" fill="white"
+          font-family="system-ui, sans-serif">${letter}</text>
+      </svg>
+    </div>`,
+    iconSize: [22, 28],
+    iconAnchor: [11, 28]
+  });
+}
+
+const ASAL_PIN = endpointPinIcon("#1C9600", "A");
+const TUJUAN_PIN = endpointPinIcon("#D33B3B", "B");
 
 const INDONESIA_CENTER: [number, number] = [-2.5, 118];
 const INDONESIA_ZOOM = 5;
 
-export function FleetMap({ units, focusUnitId }: Props) {
+export function FleetMap({ units, focusUnitId, onUnitClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const fittedRef = useRef(false);
+  // Layer untuk polyline + endpoint pin job aktif unit yang difokus.
+  // Disimpan terpisah supaya gampang di-clear saat fokus berubah.
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
+  // Callback terbaru — disimpan di ref supaya effect marker sync tidak
+  // perlu re-run cuma karena identitas function berubah.
+  const onUnitClickRef = useRef(onUnitClick);
+  useEffect(() => {
+    onUnitClickRef.current = onUnitClick;
+  }, [onUnitClick]);
 
   // Init map sekali
   useEffect(() => {
@@ -148,6 +210,7 @@ export function FleetMap({ units, focusUnitId }: Props) {
       map.remove();
       mapRef.current = null;
       markersRef.current.clear();
+      routeLayerRef.current = null;
       fittedRef.current = false;
     };
   }, []);
@@ -182,6 +245,9 @@ export function FleetMap({ units, focusUnitId }: Props) {
           title: `${u.kode_unit} — ${STATUS_LABEL[u.status]}`
         }).addTo(map);
         m.bindPopup(popupHtml(u));
+        m.on("click", () => {
+          onUnitClickRef.current?.(u.id);
+        });
         current.set(u.id, m);
       }
     }
@@ -196,17 +262,72 @@ export function FleetMap({ units, focusUnitId }: Props) {
     }
   }, [units]);
 
-  // Focus unit dari side panel → pan + open popup
+  // Focus unit → pan + open popup + render polyline rute job-nya
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear rute lama dulu — tiap fokus baru = layer route fresh
+    if (routeLayerRef.current) {
+      routeLayerRef.current.remove();
+      routeLayerRef.current = null;
+    }
+
     if (!focusUnitId) return;
     const m = markersRef.current.get(focusUnitId);
-    const map = mapRef.current;
-    if (!m || !map) return;
-    map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 15), {
-      duration: 0.7
-    });
+    if (!m) return;
+
+    // Render polyline + endpoint pins kalau unit ini punya job dgn rute
+    const focusedUnit = units.find((u) => u.id === focusUnitId);
+    const route = focusedUnit?.job?.route;
+
+    if (route) {
+      // Fit bounds rute + posisi unit supaya seluruh trip terlihat
+      const bounds = L.latLngBounds([
+        m.getLatLng(),
+        [route.asal.lat, route.asal.lng],
+        [route.tujuan.lat, route.tujuan.lng]
+      ]);
+      map.flyToBounds(bounds, {
+        padding: [60, 60],
+        maxZoom: 14,
+        duration: 0.7
+      });
+    } else {
+      map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 13), {
+        duration: 0.7
+      });
+    }
     m.openPopup();
-  }, [focusUnitId]);
+
+    if (route) {
+      const group = L.layerGroup();
+      L.marker([route.asal.lat, route.asal.lng], {
+        icon: ASAL_PIN,
+        title: "Lokasi asal",
+        interactive: false
+      }).addTo(group);
+      L.marker([route.tujuan.lat, route.tujuan.lng], {
+        icon: TUJUAN_PIN,
+        title: "Lokasi tujuan",
+        interactive: false
+      }).addTo(group);
+      const points: Array<[number, number]> = route.polyline
+        ? decodePolyline(route.polyline)
+        : [
+            [route.asal.lat, route.asal.lng],
+            [route.tujuan.lat, route.tujuan.lng]
+          ];
+      L.polyline(points, {
+        color: "#1C9600",
+        weight: 4,
+        opacity: 0.7,
+        dashArray: route.polyline ? undefined : "8,8"
+      }).addTo(group);
+      group.addTo(map);
+      routeLayerRef.current = group;
+    }
+  }, [focusUnitId, units]);
 
   return (
     <div

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { MapPin, RefreshCw, Search, Truck, WifiOff, X } from "lucide-react";
 import { TrackingTabs } from "./tracking-tabs";
 import { MapFullscreenButton } from "./map-fullscreen-button";
-import type { Unit, UnitStatus } from "@/lib/types";
+import type { Job, Unit, UnitStatus } from "@/lib/types";
 
 const FleetMap = dynamic(
   () => import("./fleet-map").then((m) => m.FleetMap),
@@ -32,6 +32,7 @@ const FleetMap = dynamic(
 
 interface Props {
   units: Unit[];
+  activeJobs: Job[];
 }
 
 interface LocationEntry {
@@ -61,7 +62,15 @@ const STATUS_LABEL: Record<UnitStatus, string> = {
 
 type StatusFilter = "" | UnitStatus;
 
-export function FleetMapView({ units }: Props) {
+export function FleetMapView({ units, activeJobs }: Props) {
+  // unit_id → job aktif (kalau ada). Dipakai untuk popup quick-link dan
+  // render polyline rute saat user fokus ke unit yang sedang bertugas.
+  const jobsByUnit = useMemo(() => {
+    const m = new Map<string, Job>();
+    for (const j of activeJobs) m.set(j.unit_id, j);
+    return m;
+  }, [activeJobs]);
+
   const [locations, setLocations] = useState<
     Record<string, LocationEntry | null>
   >({});
@@ -137,16 +146,40 @@ export function FleetMapView({ units }: Props) {
     () =>
       filteredUnits
         .filter((u) => locations[u.id])
-        .map((u) => ({
-          id: u.id,
-          kode_unit: u.kode_unit,
-          jenis_unit_nama: u.jenis_unit_nama,
-          status: u.status,
-          lat: locations[u.id]!.lat,
-          lng: locations[u.id]!.lng,
-          address: locations[u.id]!.address
-        })),
-    [filteredUnits, locations]
+        .map((u) => {
+          const job = jobsByUnit.get(u.id);
+          const hasRoute =
+            job &&
+            job.asal_lat != null &&
+            job.asal_lng != null &&
+            job.tujuan_lat != null &&
+            job.tujuan_lng != null;
+          return {
+            id: u.id,
+            kode_unit: u.kode_unit,
+            jenis_unit_nama: u.jenis_unit_nama,
+            status: u.status,
+            lat: locations[u.id]!.lat,
+            lng: locations[u.id]!.lng,
+            address: locations[u.id]!.address,
+            job: job
+              ? {
+                  id: job.id,
+                  number: job.job_number,
+                  customer_nama: job.customer_nama,
+                  tujuan: job.tujuan,
+                  route: hasRoute
+                    ? {
+                        asal: { lat: job.asal_lat!, lng: job.asal_lng! },
+                        tujuan: { lat: job.tujuan_lat!, lng: job.tujuan_lng! },
+                        polyline: job.route_polyline ?? null
+                      }
+                    : null
+                }
+              : null
+          };
+        }),
+    [filteredUnits, locations, jobsByUnit]
   );
 
   return (
@@ -244,7 +277,11 @@ export function FleetMapView({ units }: Props) {
               position: "relative"
             }}
           >
-            <FleetMap units={mapUnits} focusUnitId={focusUnitId} />
+            <FleetMap
+              units={mapUnits}
+              focusUnitId={focusUnitId}
+              onUnitClick={(id) => setFocusUnitId(id)}
+            />
           </div>
         </MapFullscreenButton>
         <div
