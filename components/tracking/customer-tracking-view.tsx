@@ -17,6 +17,7 @@ import {
 import { Lightbox } from "@/components/ui/lightbox";
 import { JobStepper } from "@/components/jobs/job-stepper";
 import { TrackSolidEmbed } from "@/components/tracking/tracksolid-embed";
+import { MapFullscreenButton } from "@/components/tracking/map-fullscreen-button";
 import { createClient } from "@/lib/supabase/client";
 import { formatDateTime } from "@/lib/utils";
 import type { Job, JobStatus } from "@/lib/types";
@@ -318,63 +319,69 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
         </div>
 
         {/* Map */}
-        <div
-          className="map-isolated"
-          style={{
-            borderRadius: 14,
-            overflow: "hidden",
-            border: "0.5px solid var(--border-default)",
-            background: "white"
-          }}
-        >
+        <MapFullscreenButton>
           <div
             style={{
-              padding: "12px 14px",
+              borderRadius: 14,
+              overflow: "hidden",
+              border: "0.5px solid var(--border-default)",
+              background: "white",
+              height: "100%",
               display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              borderBottom: "0.5px solid var(--border-default)"
+              flexDirection: "column"
             }}
           >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>
-                Lokasi real-time
+            <div
+              style={{
+                padding: "12px 14px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottom: "0.5px solid var(--border-default)"
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  Lokasi real-time
+                </div>
+                <div className="caption" style={{ fontSize: 10.5 }}>
+                  TrackSolid · update tiap 30 detik
+                </div>
               </div>
-              <div className="caption" style={{ fontSize: 10.5 }}>
-                TrackSolid · update tiap 30 detik
-              </div>
+              {unit?.tracksolid_share_link && (
+                <a
+                  href={unit.tracksolid_share_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-primary btn-sm"
+                  style={{ textDecoration: "none" }}
+                >
+                  Buka peta <ArrowUpRight style={{ width: 11, height: 11 }} />
+                </a>
+              )}
             </div>
-            {unit?.tracksolid_share_link && (
-              <a
-                href={unit.tracksolid_share_link}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-primary btn-sm"
-                style={{ textDecoration: "none" }}
-              >
-                Buka peta <ArrowUpRight style={{ width: 11, height: 11 }} />
-              </a>
-            )}
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <TrackSolidEmbed
+                jobToken={job.share_token}
+                externalLink={unit?.tracksolid_share_link ?? null}
+                jobStatus={job.status}
+                route={
+                  job.asal_lat != null &&
+                  job.asal_lng != null &&
+                  job.tujuan_lat != null &&
+                  job.tujuan_lng != null
+                    ? {
+                        asal: { lat: job.asal_lat, lng: job.asal_lng },
+                        tujuan: { lat: job.tujuan_lat, lng: job.tujuan_lng },
+                        polyline: job.route_polyline ?? null,
+                        distance_km: job.route_distance_km ?? null
+                      }
+                    : null
+                }
+              />
+            </div>
           </div>
-          <TrackSolidEmbed
-            jobToken={job.share_token}
-            externalLink={unit?.tracksolid_share_link ?? null}
-            jobStatus={job.status}
-            route={
-              job.asal_lat != null &&
-              job.asal_lng != null &&
-              job.tujuan_lat != null &&
-              job.tujuan_lng != null
-                ? {
-                    asal: { lat: job.asal_lat, lng: job.asal_lng },
-                    tujuan: { lat: job.tujuan_lat, lng: job.tujuan_lng },
-                    polyline: job.route_polyline ?? null,
-                    distance_km: job.route_distance_km ?? null
-                  }
-                : null
-            }
-          />
-        </div>
+        </MapFullscreenButton>
 
         {/* Unit & alat */}
         {unit && (
