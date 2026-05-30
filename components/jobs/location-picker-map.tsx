@@ -56,29 +56,6 @@ const PIN_ICON = L.divIcon({
   iconAnchor: [16, 40]
 });
 
-const UNIT_ICON = L.divIcon({
-  className: "unit-pin",
-  html: `<div style="
-    width:28px;height:28px;border-radius:14px;
-    background:#3B5773;
-    border:2.5px solid white;
-    box-shadow:0 1px 4px rgba(0,0,0,0.25);
-    display:flex;align-items:center;justify-content:center;
-    color:white;
-  ">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
-      <path d="M15 18H9"/>
-      <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
-      <circle cx="17" cy="18" r="2"/>
-      <circle cx="7" cy="18" r="2"/>
-    </svg>
-  </div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14]
-});
-
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -86,6 +63,47 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function makeUnitIcon(kode: string): L.DivIcon {
+  const label = escapeHtml(kode);
+  return L.divIcon({
+    className: "unit-pin",
+    html: `<div style="
+      display:flex;flex-direction:column;align-items:center;gap:2px;
+      font-family:system-ui,-apple-system,sans-serif;
+    ">
+      <div style="
+        font-size:10.5px;font-weight:700;color:white;
+        background:#3B5773;
+        padding:2px 7px;border-radius:10px;
+        border:1.5px solid white;
+        box-shadow:0 1px 3px rgba(0,0,0,0.25);
+        line-height:1;letter-spacing:0.3px;
+        white-space:nowrap;
+      ">${label}</div>
+      <div style="
+        width:28px;height:28px;border-radius:14px;
+        background:#3B5773;
+        border:2.5px solid white;
+        box-shadow:0 1px 4px rgba(0,0,0,0.25);
+        display:flex;align-items:center;justify-content:center;
+        color:white;
+      ">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+          <path d="M15 18H9"/>
+          <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
+          <circle cx="17" cy="18" r="2"/>
+          <circle cx="7" cy="18" r="2"/>
+        </svg>
+      </div>
+    </div>`,
+    iconSize: [80, 48],
+    // Anchor di tengah-circle truk: label (~16px) + gap 2px + radius 14px = y 32
+    iconAnchor: [40, 34]
+  });
 }
 
 function unitPopupHtml(
@@ -238,7 +256,7 @@ export function LocationPickerMap({
         existing.setPopupContent(unitPopupHtml(u, pin));
       } else {
         const m = L.marker([u.lat, u.lng], {
-          icon: UNIT_ICON,
+          icon: makeUnitIcon(u.kode_unit),
           title: `${u.kode_unit} — ${u.jenis_unit_nama}`,
           zIndexOffset: -100 // di bawah pin lokasi utama
         }).addTo(map);
