@@ -11,6 +11,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { computeEta, compareEta } from "@/lib/routing/eta";
+import { TrackingTabs } from "@/components/tracking/tracking-tabs";
 import type { Job, JobStatus, Unit } from "@/lib/types";
 
 const STATUS_LABEL: Record<JobStatus, string> = {
@@ -122,6 +123,7 @@ export function AdminTrackingListView({ jobs, units }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <TrackingTabs />
       <div>
         <div className="h1" style={{ marginBottom: 4 }}>
           Pantau Job Aktif
