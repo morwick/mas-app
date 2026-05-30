@@ -412,6 +412,7 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
         unitId={unit.id}
         unitKode={unit.kode_unit}
         currentOdometerKm={effectiveUnit.current_odometer_km}
+        serviceIntervalKm={effectiveUnit.service_interval_km}
       />
       <CalibrateBaselineModal
         open={calibrateOpen}
