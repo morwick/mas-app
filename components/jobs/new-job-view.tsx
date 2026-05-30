@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Info, Plus, Sparkles, Truck } from "lucide-react";
@@ -10,7 +10,10 @@ import { useToast } from "@/components/ui/toast";
 import { NewCustomerInline } from "@/components/jobs/new-customer-inline";
 import { ConflictWarning } from "@/components/jobs/conflict-warning";
 import { JobStepper } from "@/components/jobs/job-stepper";
-import { LocationPicker } from "@/components/jobs/location-picker";
+import {
+  LocationPicker,
+  type LocationPickerAvailableUnit
+} from "@/components/jobs/location-picker";
 import { createJobAction } from "@/lib/actions/jobs";
 import { createCustomerAction } from "@/lib/actions/customers";
 import {
@@ -86,6 +89,45 @@ export function NewJobView({
   const [error, setError] = useState<Record<string, string>>({});
   const [confirmConflict, setConfirmConflict] =
     useState<ConflictCheckResult | null>(null);
+  const [unitLocations, setUnitLocations] = useState<
+    Record<string, { lat: number; lng: number } | null>
+  >({});
+
+  // Fetch posisi GPS unit aktif sekali saat mount. Dipakai untuk render
+  // marker unit-unit standby di dalam modal pin lokasi (asal & tujuan)
+  // — admin bisa langsung lihat unit mana yang paling dekat ke titik
+  // yang lagi di-pin.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/units/locations", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setUnitLocations(data.locations ?? {});
+      })
+      .catch(() => {
+        // diam — modal tetap berfungsi tanpa marker unit
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const mapUnits = useMemo<LocationPickerAvailableUnit[]>(() => {
+    const out: LocationPickerAvailableUnit[] = [];
+    for (const u of standbyUnits) {
+      const loc = unitLocations[u.id];
+      if (!loc) continue;
+      out.push({
+        id: u.id,
+        kode_unit: u.kode_unit,
+        jenis_unit_nama: u.jenis_unit_nama,
+        lat: loc.lat,
+        lng: loc.lng
+      });
+    }
+    return out;
+  }, [standbyUnits, unitLocations]);
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -290,6 +332,7 @@ export function NewJobView({
                 }
                 placeholder="Alamat lengkap titik pickup"
                 error={error.asal}
+                availableUnits={mapUnits}
                 extraAction={{
                   label: "Pakai lokasi unit",
                   icon: <Truck style={{ width: 12, height: 12 }} />,
@@ -319,6 +362,7 @@ export function NewJobView({
                 }
                 placeholder="Alamat lengkap titik drop"
                 error={error.tujuan}
+                availableUnits={mapUnits}
               />
             </Field>
           </div>

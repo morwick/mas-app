@@ -31,12 +31,21 @@ export interface LocationPickerExtraAction {
   hint?: string;
 }
 
+export interface LocationPickerAvailableUnit {
+  id: string;
+  kode_unit: string;
+  jenis_unit_nama: string;
+  lat: number;
+  lng: number;
+}
+
 interface Props {
   value: LocationValue;
   onChange: (v: LocationValue) => void;
   placeholder?: string;
   error?: string;
   extraAction?: LocationPickerExtraAction;
+  availableUnits?: LocationPickerAvailableUnit[];
 }
 
 export function LocationPicker({
@@ -44,7 +53,8 @@ export function LocationPicker({
   onChange,
   placeholder,
   error,
-  extraAction
+  extraAction,
+  availableUnits
 }: Props) {
   const [open, setOpen] = useState(false);
   const hasPin = value.lat !== null && value.lng !== null;
@@ -151,6 +161,7 @@ export function LocationPicker({
               initialLat={value.lat}
               initialLng={value.lng}
               initialAddress={value.address}
+              availableUnits={availableUnits}
               onConfirm={(data) => {
                 onChange({
                   address: data.address || value.address,

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapPin, Loader2, Search, Locate } from "lucide-react";
+import { haversineKm } from "@/lib/routing/eta";
 
 /**
  * Inner map untuk LocationPicker modal. Di-isolasi supaya bisa lazy-load
@@ -13,10 +14,19 @@ import { MapPin, Loader2, Search, Locate } from "lucide-react";
  * Untuk pencarian alamat → search forward Nominatim juga.
  */
 
+export interface AvailableUnitPin {
+  id: string;
+  kode_unit: string;
+  jenis_unit_nama: string;
+  lat: number;
+  lng: number;
+}
+
 interface Props {
   initialLat: number | null;
   initialLng: number | null;
   initialAddress: string;
+  availableUnits?: AvailableUnitPin[];
   onConfirm: (data: { lat: number; lng: number; address: string }) => void;
   onCancel: () => void;
 }
@@ -45,6 +55,57 @@ const PIN_ICON = L.divIcon({
   iconSize: [32, 40],
   iconAnchor: [16, 40]
 });
+
+const UNIT_ICON = L.divIcon({
+  className: "unit-pin",
+  html: `<div style="
+    width:28px;height:28px;border-radius:14px;
+    background:#3B5773;
+    border:2.5px solid white;
+    box-shadow:0 1px 4px rgba(0,0,0,0.25);
+    display:flex;align-items:center;justify-content:center;
+    color:white;
+  ">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+      <path d="M15 18H9"/>
+      <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
+      <circle cx="17" cy="18" r="2"/>
+      <circle cx="7" cy="18" r="2"/>
+    </svg>
+  </div>`,
+  iconSize: [28, 28],
+  iconAnchor: [14, 14]
+});
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function unitPopupHtml(
+  u: AvailableUnitPin,
+  pin: { lat: number; lng: number } | null
+): string {
+  const kode = escapeHtml(u.kode_unit);
+  const jenis = escapeHtml(u.jenis_unit_nama);
+  const dist =
+    pin !== null
+      ? `<div style="margin-top:4px;font-size:11px;color:#0a5500;font-weight:600">
+           ${haversineKm(pin.lat, pin.lng, u.lat, u.lng).toFixed(1)} km dari pin
+         </div>`
+      : `<div style="margin-top:4px;font-size:11px;color:#888">Pin lokasi dulu untuk lihat jarak</div>`;
+  return `<div style="font-size:12px;line-height:1.4;min-width:140px">
+    <div style="font-weight:700;color:#0a5500">${kode}</div>
+    <div style="color:#555">${jenis}</div>
+    ${dist}
+  </div>`;
+}
 
 async function reverseGeocode(
   lat: number,
@@ -80,12 +141,14 @@ export function LocationPickerMap({
   initialLat,
   initialLng,
   initialAddress,
+  availableUnits,
   onConfirm,
   onCancel
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const unitMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(
     initialLat !== null && initialLng !== null
       ? { lat: initialLat, lng: initialLng }
@@ -150,6 +213,52 @@ export function LocationPickerMap({
       })
       .finally(() => setGeocoding(false));
   }, [pin]);
+
+  // Sync marker unit standby ke peta. Re-render saat list berubah.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const current = unitMarkersRef.current;
+    const nextIds = new Set((availableUnits ?? []).map((u) => u.id));
+
+    // Buang marker untuk unit yang tidak ada di list baru
+    for (const [id, marker] of current) {
+      if (!nextIds.has(id)) {
+        marker.remove();
+        current.delete(id);
+      }
+    }
+
+    // Tambah / update marker
+    for (const u of availableUnits ?? []) {
+      const existing = current.get(u.id);
+      if (existing) {
+        existing.setLatLng([u.lat, u.lng]);
+        existing.setPopupContent(unitPopupHtml(u, pin));
+      } else {
+        const m = L.marker([u.lat, u.lng], {
+          icon: UNIT_ICON,
+          title: `${u.kode_unit} — ${u.jenis_unit_nama}`,
+          zIndexOffset: -100 // di bawah pin lokasi utama
+        }).addTo(map);
+        m.bindPopup(unitPopupHtml(u, pin));
+        current.set(u.id, m);
+      }
+    }
+    // pin tidak masuk deps di sini — popup di-update di effect berikutnya
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableUnits]);
+
+  // Update isi popup tiap marker saat pin user berpindah → jarak ikut update
+  useEffect(() => {
+    if (!availableUnits) return;
+    const current = unitMarkersRef.current;
+    for (const u of availableUnits) {
+      const m = current.get(u.id);
+      if (m) m.setPopupContent(unitPopupHtml(u, pin));
+    }
+  }, [pin, availableUnits]);
 
   function useMyLocation() {
     if (!("geolocation" in navigator)) return;
@@ -400,6 +509,32 @@ export function LocationPickerMap({
             }}
           >
             Klik di peta untuk pin lokasi, atau cari alamat di atas.
+          </div>
+        )}
+        {availableUnits && availableUnits.length > 0 && (
+          <div
+            style={{
+              fontSize: 11.5,
+              color: "var(--text-secondary)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "2px 2px"
+            }}
+          >
+            <span
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                background: "#3B5773",
+                border: "1.5px solid white",
+                boxShadow: "0 0 0 0.5px #3B5773",
+                flexShrink: 0
+              }}
+            />
+            {availableUnits.length} unit standby ber-GPS tampil di peta — klik
+            untuk lihat jarak ke pin.
           </div>
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
