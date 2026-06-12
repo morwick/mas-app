@@ -127,6 +127,13 @@ export function JobsListView({
                 </option>
               ))}
           </Select>
+          <Link
+            href="/orders/baru"
+            className="hidden lg:inline-flex"
+            title="Wizard 4 tahap: order → rute → harga → assign kendaraan"
+          >
+            <Button variant="secondary">Order via Wizard</Button>
+          </Link>
           <Link href="/jobs/new" className="hidden lg:inline-flex">
             <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
               Job baru
