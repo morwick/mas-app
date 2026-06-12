@@ -1,6 +1,90 @@
-node_modules
-.next
-.env*.local
+```
+# Dependencies
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
 .DS_Store
-*.tsbuildinfo
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+.eggs/
+.installed.cfg
+lib/python*/site-packages/
+.sass-cache/
+.rpt2_cache/
+.nyc_output/
+coverage/
+cov-int/
+*.gcda
+*.gcno
+*.gcov
+lcov.info
+*.lcov
+
+# TypeScript/JavaScript
 next-env.d.ts
+.nuxt/
+*.tsbuildinfo
+.eslintcache
+.prettierignore
+.next/
+out/
+public/dist/
+*.min.js
+*.min.css
+
+# Database
+*.db
+*.db-journal
+
+# Supabase
+supabase/.temp/
+supabase/logs/
+supabase/config.toml
+supabase/migrations/*.sql
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Thumbs.db:encryptable
+```

@@ -83,6 +83,80 @@ export async function logoutAction() {
   redirect("/login");
 }
 
+export async function driverLoginAction(
+  _: ActionResult<void> | null,
+  formData: FormData
+): Promise<ActionResult<void>> {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  if (!email || !password) {
+    return { ok: false, error: "Email dan password wajib diisi" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password
+  });
+  if (error) {
+    const msg = error.message?.toLowerCase() ?? "";
+    if (msg.includes("invalid login credentials")) {
+      return { ok: false, error: "Email atau password salah." };
+    }
+    if (msg.includes("email not confirmed")) {
+      return {
+        ok: false,
+        error:
+          "Email belum terkonfirmasi. Hubungi admin untuk mengaktifkan akun Anda."
+      };
+    }
+    if (msg.includes("rate limit") || msg.includes("too many")) {
+      return {
+        ok: false,
+        error:
+          "Terlalu banyak percobaan login. Tunggu beberapa menit lalu coba lagi."
+      };
+    }
+    console.error("[driverLoginAction] Supabase error:", error);
+    return { ok: false, error: `Login gagal: ${error.message}` };
+  }
+
+  // Cek apakah user adalah driver
+  if (data.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, is_active")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    
+    if (!profile) {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        error: "Profile driver tidak ditemukan. Hubungi admin."
+      };
+    }
+    
+    if (!(profile as { role: string; is_active: boolean }).is_active) {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        error: "Akun driver Anda dinonaktifkan. Hubungi admin."
+      };
+    }
+    
+    if ((profile as { role: string; is_active: boolean }).role !== "driver") {
+      await supabase.auth.signOut();
+      return {
+        ok: false,
+        error: "Akun ini bukan akun driver. Gunakan login admin/operator."
+      };
+    }
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/driver");
+}
+
 export async function requestPasswordResetAction(
   _: ActionResult<void> | null,
   formData: FormData
