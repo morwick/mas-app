@@ -1,0 +1,931 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   MAS — Mitra Angkutan Sejati
+   Design tokens & global styles (ported from Claude Design)
+   ============================================ */
+
+:root {
+  /* Brand */
+  --brand-primary: #1c9600;
+  --brand-primary-hover: #178100;
+  --brand-primary-active: #126b00;
+  --brand-primary-light: #e8f7e0;
+  --brand-primary-dark: #145b00;
+  --brand-primary-ring: rgba(28, 150, 0, 0.18);
+
+  /* Surfaces */
+  --bg-default: #ffffff;
+  --bg-page: #f5f5f0;
+  --bg-card: #ffffff;
+  --bg-muted: #fafaf6;
+  --bg-subtle: #f1efe8;
+
+  /* Text */
+  --text-primary: #1a1a17;
+  --text-secondary: #5f5e5a;
+  --text-tertiary: #8a8983;
+  --text-on-brand: #ffffff;
+
+  /* Borders */
+  --border-default: rgba(0, 0, 0, 0.1);
+  --border-strong: rgba(0, 0, 0, 0.18);
+  --border-focus: var(--brand-primary);
+
+  /* Status — Unit */
+  --status-standby-bg: #f1efe8;
+  --status-standby-text: #5f5e5a;
+  --status-bertugas-bg: #e8f7e0;
+  --status-bertugas-text: #145b00;
+  --status-perbaikan-bg: #faeeda;
+  --status-perbaikan-text: #854f0b;
+  --status-cancelled-bg: #fcebeb;
+  --status-cancelled-text: #791f1f;
+
+  /* Job statuses */
+  --status-pickup-bg: #eaf2ff;
+  --status-pickup-text: #1f4fa8;
+  --status-perjalanan-bg: #e8f7e0;
+  --status-perjalanan-text: #145b00;
+  --status-selesai-bg: #e8f7e0;
+  --status-selesai-text: #145b00;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Type scale */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-popover: 0 8px 28px rgba(0, 0, 0, 0.12);
+
+  /* Layout */
+  --sidebar-w: 232px;
+  --topbar-h: 56px;
+
+  /* Legacy aliases */
+  --color-brand: var(--brand-primary);
+  --color-brand-light: var(--brand-primary-light);
+  --color-brand-dark: var(--brand-primary-dark);
+  --color-page: var(--bg-page);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01", "ss03";
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+@layer base {
+  *:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 1px;
+  }
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ============================================
+   Typography utilities
+   ============================================ */
+.h1 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.h2 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+}
+.h3 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.body {
+  font-size: 14px;
+  line-height: 1.55;
+}
+.body-sm {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.caption {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "ss01";
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  border: 0.5px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease,
+    transform 80ms ease, color 120ms ease;
+  white-space: nowrap;
+  user-select: none;
+}
+.btn:active {
+  transform: scale(0.985);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  gap: 6px;
+  border-radius: 6px;
+}
+.btn-lg {
+  height: 48px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+.btn-icon {
+  width: 32px;
+  padding: 0;
+}
+
+.btn-primary {
+  background: var(--brand-primary);
+  color: var(--text-on-brand);
+  border-color: var(--brand-primary);
+}
+.btn-primary:hover {
+  background: var(--brand-primary-hover);
+  border-color: var(--brand-primary-hover);
+}
+.btn-secondary {
+  background: var(--bg-default);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.btn-secondary:hover {
+  background: var(--bg-muted);
+  border-color: rgba(0, 0, 0, 0.32);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text-primary);
+}
+.btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.btn-danger {
+  background: #c13838;
+  color: white;
+  border-color: #c13838;
+}
+.btn-danger:hover {
+  background: #a82e2e;
+}
+.btn-link {
+  background: transparent;
+  color: var(--brand-primary);
+  height: auto;
+  padding: 0;
+  border: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-link:hover {
+  color: var(--brand-primary-hover);
+  text-decoration: underline;
+}
+
+/* ============================================
+   Inputs
+   ============================================ */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.field-label .req {
+  color: #c13838;
+  margin-left: 2px;
+}
+.field-helper {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.field-error {
+  font-size: 12px;
+  color: #c13838;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-strong);
+  background: var(--bg-default);
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.input:hover,
+.select:hover,
+.textarea:hover {
+  border-color: rgba(0, 0, 0, 0.32);
+}
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-primary-ring);
+}
+.textarea {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+.select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235F5E5A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 36px;
+}
+
+/* ============================================
+   Cards & containers
+   ============================================ */
+.card {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.card-pad {
+  padding: 16px;
+}
+.card-pad-lg {
+  padding: 20px;
+}
+.card-header {
+  padding: 14px 16px;
+  border-bottom: 0.5px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ============================================
+   Badges
+   ============================================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.badge-standby {
+  background: var(--status-standby-bg);
+  color: var(--status-standby-text);
+}
+.badge-bertugas {
+  background: var(--status-bertugas-bg);
+  color: var(--status-bertugas-text);
+}
+.badge-perbaikan {
+  background: var(--status-perbaikan-bg);
+  color: var(--status-perbaikan-text);
+}
+.badge-cancelled {
+  background: var(--status-cancelled-bg);
+  color: var(--status-cancelled-text);
+}
+.badge-pickup {
+  background: var(--status-pickup-bg);
+  color: var(--status-pickup-text);
+}
+.badge-loading {
+  background: #fff4e0;
+  color: #8a5a00;
+}
+.badge-perjalanan {
+  background: var(--status-perjalanan-bg);
+  color: var(--status-perjalanan-text);
+}
+.badge-unloading {
+  background: #efeafe;
+  color: #4a2bb0;
+}
+.badge-selesai {
+  background: var(--status-selesai-bg);
+  color: var(--status-selesai-text);
+}
+
+/* Light outlined chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  background: var(--bg-default);
+  border: 0.5px solid var(--border-strong);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.chip:hover {
+  border-color: rgba(0, 0, 0, 0.32);
+  color: var(--text-primary);
+}
+.chip.active {
+  background: var(--text-primary);
+  color: white;
+  border-color: var(--text-primary);
+}
+.chip-count {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.chip.active .chip-count {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ============================================
+   Tables
+   ============================================ */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--border-default);
+  background: var(--bg-muted);
+}
+.table td {
+  padding: 12px;
+  border-bottom: 0.5px solid var(--border-default);
+  vertical-align: middle;
+}
+.table tr:last-child td {
+  border-bottom: none;
+}
+.table tr.row-link {
+  cursor: pointer;
+}
+.table tr.row-link:hover {
+  background: var(--bg-muted);
+}
+
+/* ============================================
+   Misc
+   ============================================ */
+.divider {
+  height: 0.5px;
+  background: var(--border-default);
+  width: 100%;
+}
+.divider-vert {
+  width: 0.5px;
+  background: var(--border-default);
+  align-self: stretch;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: flex;
+  align-items: center;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.muted {
+  color: var(--text-secondary);
+}
+.tertiary {
+  color: var(--text-tertiary);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  background: var(--bg-default);
+  border: 0.5px solid var(--border-strong);
+  border-bottom-width: 1.5px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+/* Dense mode override */
+.dense .card-pad {
+  padding: 12px;
+}
+.dense .card-pad-lg {
+  padding: 14px;
+}
+.dense .table td {
+  padding: 8px 12px;
+}
+.dense .input,
+.dense .select {
+  height: 36px;
+}
+.dense .btn {
+  height: 36px;
+}
+
+/* Animation helpers */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.15);
+  }
+}
+.fade-in {
+  animation: fadeIn 160ms ease-out;
+}
+.slide-up {
+  animation: slideUp 200ms ease-out;
+}
+
+/* ============================================
+   Progress stepper
+   ============================================ */
+.stepper {
+  display: flex;
+  align-items: stretch;
+}
+.stepper-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  position: relative;
+}
+.stepper-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-default);
+  border: 1.5px solid var(--border-strong);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  position: relative;
+  z-index: 2;
+  transition: all 200ms ease;
+}
+.stepper-dot.done {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: white;
+}
+.stepper-dot.active {
+  background: white;
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  box-shadow: 0 0 0 4px var(--brand-primary-ring);
+}
+.stepper-label {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.stepper-label.active {
+  color: var(--brand-primary-dark);
+  font-weight: 600;
+}
+.stepper-connector {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  right: -50%;
+  height: 1.5px;
+  background: var(--border-default);
+  z-index: 1;
+}
+.stepper-connector.done {
+  background: var(--brand-primary);
+}
+.stepper-step:last-child .stepper-connector {
+  display: none;
+}
+
+/* ============================================
+   MAS Wordmark
+   ============================================ */
+.mas-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mas-mark-icon {
+  width: 28px;
+  height: 28px;
+  background: var(--brand-primary);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  position: relative;
+  flex-shrink: 0;
+}
+.mas-mark-icon::after {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  border-radius: 5.5px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+.mas-mark-text {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.mas-mark-sub {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  margin-top: -2px;
+}
+
+/* ============================================
+   Scrollbars
+   ============================================ */
+.scroll-region::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-region::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-region::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-region::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+  background-clip: padding-box;
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 999px;
+  }
+  .no-tap-highlight {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ============================================
+   Responsive helpers (mobile-first additions)
+   ============================================ */
+
+/* Prevent accidental horizontal overflow on mobile.
+   Using `clip` (not `hidden`) so sticky descendants keep working — `hidden`
+   creates a new scroll/containing context that breaks position:sticky on
+   sidebar & topbar. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* Toolbar pattern — desktop: row, mobile: stacked & full-width children */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+@media (max-width: 767px) {
+  .toolbar {
+    gap: 8px;
+  }
+  .toolbar > * {
+    flex: 1 1 100%;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .toolbar > .toolbar-half {
+    flex: 1 1 calc(50% - 4px);
+    width: auto !important;
+  }
+}
+
+/* Wrap any <table> in this on mobile to allow horizontal scroll
+   without blowing out the page width. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll > table {
+  min-width: 640px;
+}
+
+/* Responsive stat grid — auto-collapse on small screens */
+.stat-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+}
+.stat-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 767px) {
+  .stat-grid,
+  .stat-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Two-column layout that stacks on mobile */
+.split-2 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1.4fr 1fr;
+}
+@media (max-width: 1023px) {
+  .split-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Card grid that adapts (e.g. unit cards) */
+.card-grid-3 {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 767px) {
+  .card-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 479px) {
+  .card-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Mobile-friendly tap targets for buttons & inputs */
+@media (max-width: 767px) {
+  .input,
+  .select {
+    height: 44px;
+    font-size: 15px;
+  }
+  .btn {
+    height: 44px;
+  }
+  .btn-sm {
+    height: 38px;
+    font-size: 13.5px;
+  }
+}
+
+/* Mobile card list (replacement for desktop tables) */
+.list-card {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.list-card:active {
+  background: var(--bg-muted);
+}
+.list-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.list-card-row > span {
+  min-width: 0;
+}
+.list-card-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.list-card-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Visibility helpers (use sparingly — prefer Tailwind lg:hidden / hidden lg:block) */
+.mobile-only {
+  display: block;
+}
+.desktop-only {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .mobile-only {
+    display: none;
+  }
+  .desktop-only {
+    display: block;
+  }
+}
+
+/* Long text break in tight cells (alamat, dll) */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Map full-screen wrapper — cover seluruh viewport. */
+.map-fullscreen-active {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+/* Normal mode wrapper — isolation:isolate bikin stacking context baru supaya
+   z-index Leaflet (controls 1000, panes 200-800) tidak tembus ke top-bar/sidebar. */
+.map-isolated {
+  isolation: isolate;
+}
