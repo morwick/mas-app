@@ -4,9 +4,9 @@ Panduan setup awal aplikasi Manajemen Armada PT. Mitra Angkutan Sejati.
 
 ## Prasyarat
 
-- Node.js 18+ dan npm
+- Python 3.11+ (backend FastAPI)
+- Node.js 18+ dan npm (frontend React/Vite)
 - Akun Supabase ([daftar gratis](https://supabase.com))
-- Akun Vercel untuk deploy (opsional di tahap ini)
 
 ## 1. Buat Supabase Project
 
@@ -87,29 +87,29 @@ role `admin`. Cek di **Table Editor → profiles** untuk verifikasi.
 
 ## 4. Konfigurasi Environment Variables
 
-Copy `.env.local.example` jadi `.env.local`:
+Ada dua sisi yang perlu dikonfigurasi.
 
-```bash
-cp .env.local.example .env.local
-```
-
-Isi dengan kredensial Supabase Anda (dari **Settings → API**):
+**Backend** — salin `backend/.env.example` jadi `backend/.env`, lalu isi:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=...            # Settings → API → anon / publishable key
+SUPABASE_SERVICE_ROLE_KEY=...    # service role / secret key — hanya untuk cron & snapshot mileage
+TRACKSOLID_ACCOUNT=...
+TRACKSOLID_PASSWORD=...
+OPENROUTESERVICE_API_KEY=...
+CRON_SECRET=...                  # bebas; dipakai penjadwal eksternal memanggil /api/cron/*
+APP_URL=http://localhost:5173    # URL frontend, untuk tautan reset password
+CORS_ORIGINS=http://localhost:5173
 ```
 
-> ⚠️ `SUPABASE_SERVICE_ROLE_KEY` adalah secret. Jangan commit ke git, jangan
-> expose ke client. File `.env.local` sudah di-gitignore.
+> ⚠️ `SUPABASE_SERVICE_ROLE_KEY` menembus semua RLS. Jangan commit, jangan
+> pernah dikirim ke browser. File `.env` sudah di-gitignore.
 
-> ⚠️ File `.env` sempat ter-commit ke repositori (commit `d875c71`, `d53a1b6`,
-> dan `c8e9a2d`). Sekarang sudah di-untrack, tapi isinya tetap ada di riwayat
-> git — jadi **service role key, password TrackSolid, dan API key
-> OpenRouteService yang ada di sana harus dirotasi** di dashboard
-> masing-masing. Menghapus file dari commit terakhir tidak menghapusnya dari
-> riwayat.
+**Frontend** — saat pengembangan tidak perlu apa-apa: Vite mem-proxy `/api`
+ke `http://localhost:8000`. Untuk produksi, salin `frontend/.env.example` jadi
+`frontend/.env` dan isi `VITE_API_URL` dengan alamat backend (kosongkan bila
+frontend dan backend dilayani dari origin yang sama lewat reverse proxy).
 
 ## 4b. Portal Driver
 
@@ -130,12 +130,30 @@ terima, untuk penerima yang menolak tanda tangan digital.
 
 ## 5. Install Dependencies & Jalankan
 
-```bash
+Backend (terminal 1):
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[dev]"
+uvicorn app.main:app --reload --port 8000
+```
+
+Dokumentasi OpenAPI tersedia di <http://localhost:8000/docs>.
+
+Frontend (terminal 2):
+
+```powershell
+cd frontend
 npm install
 npm run dev
 ```
 
-Buka <http://localhost:3000/login> dan login dengan admin user yang Anda buat.
+Buka <http://localhost:5173/login> dan login dengan admin user yang Anda buat.
+
+Untuk mengakses dari HP di jaringan yang sama: `npm run dev:lan`, lalu
+tambahkan origin HP (mis. `http://192.168.1.10:5173`) ke `CORS_ORIGINS` backend.
 
 ## 6. (Opsional) Email SMTP untuk Reset Password
 
@@ -143,14 +161,18 @@ Untuk MVP, Supabase pakai SMTP bawaan dengan rate limit ketat. Untuk
 production, configure custom SMTP di **Authentication → Email Templates →
 SMTP Settings**.
 
-## 7. Deploy ke Vercel
+## 7. Deploy
 
-1. Push project ke GitHub repo (private)
-2. Import repo di Vercel
-3. Di **Project Settings → Environment Variables**, isi env yang sama dengan `.env.local`
-4. Deploy
-
-Vercel auto-deploy setiap push ke branch `main`.
+- **Backend**: jalankan `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+  (atau lewat Docker/systemd) di server mana pun yang punya Python 3.11+.
+  Set `ENVIRONMENT=production` supaya `/docs` dimatikan, dan isi `CORS_ORIGINS`
+  dengan domain frontend.
+- **Frontend**: `npm run build` menghasilkan `frontend/dist/` statis — bisa
+  di-host di Vercel/Netlify/Nginx. Karena ini SPA, semua path harus di-rewrite
+  ke `index.html`. Isi `VITE_API_URL` saat build bila backend beda origin.
+- **Cron mileage**: jadwalkan `POST https://<backend>/api/cron/sync-mileage/backfill`
+  dengan header `Authorization: Bearer <CRON_SECRET>` (mis. harian) untuk
+  mengisi snapshot mileage hari-hari yang terlewat.
 
 ---
 
@@ -190,6 +212,10 @@ VALUES ('<user-id-dari-auth>', '<email>', '<nama>', 'admin');
 **Upload foto gagal**
 → Cek bucket `job-photos` ada di Storage. Jalankan migration 04 bila belum.
 
+**Frontend tidak bisa memanggil API (error CORS / network)**
+→ Pastikan backend jalan di port 8000 dan origin frontend ada di `CORS_ORIGINS`.
+Saat dev, Vite mem-proxy `/api` sehingga CORS tidak diperlukan.
+
 **Customer page kosong / 404**
 → Pastikan migration 03 (RLS) sudah jalan dan share_token valid.
 
@@ -198,27 +224,21 @@ VALUES ('<user-id-dari-auth>', '<email>', '<nama>', 'admin');
 ## Struktur Folder
 
 ```
-app/
-├── (admin)/           Halaman dengan auth gating
-├── (auth)/            Login & reset password
-├── track/[token]/     Public customer tracking
-└── not-found.tsx      404
+backend/app/
+├── core/            config, auth Supabase, sesi driver, klien Supabase, error, storage
+├── domain/          fungsi murni (bentrok jadwal, status servis, uang jalan)
+├── integrations/    TrackSolid, OpenRouteService, polyline/ETA
+└── modules/<fitur>/ router.py · service.py · schemas.py
 
-components/
-├── ui/                Design system base components
-├── layout/            Sidebar, top bar, mobile header, FAB
-├── dashboard/         Stat card, unit card
-├── units/             Unit-specific components
-├── drivers/, customers/, jobs/
-
-lib/
-├── supabase/          Client / server / middleware setup
-├── types/             Database typings
-├── queries/           Server-side reads
-├── actions/           Server actions (mutations)
-└── utils.ts           Formatters & helpers
+frontend/src/
+├── app/             router, provider, layout, guard
+├── lib/             klien API, sesi, util
+├── types/           tipe domain
+├── components/      ui/ dan layout/
+└── features/<fitur>/ api.ts · queries.ts · components/ · pages/
 
 supabase/migrations/   SQL files (jalankan di Supabase SQL Editor)
+legacy/                versi Next.js lama — referensi saja
 ```
 
 ---

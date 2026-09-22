@@ -1,0 +1,329 @@
+import { useEffect, useRef, useState, Suspense, lazy } from "react";
+import { ExternalLink, MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import type { JobStatus } from "@/types";
+import { publicLocation } from "@/features/tracking/api";
+import { ApiError } from "@/lib/api/client";
+
+/**
+ * Card "Lokasi real-time" di halaman customer tracking.
+ *
+ * Sumber data: API route /api/tracking/[token] yang scrape TrackSolid
+ * getMonitorInfo. Poll tiap 30 detik selama job belum selesai/cancelled.
+ *
+ * State machine:
+ *   loading      → fetch pertama belum balik. Tampilkan spinner.
+ *   ok           → ada koordinat. Tampilkan peta Leaflet + marker truk.
+ *   no_imei      → unit belum punya IMEI. Fallback ke link-out / pesan.
+ *   error        → API gagal beberapa kali berturut. Tampilkan retry CTA.
+ *   ended        → job selesai/cancelled atau API kembalikan 410. Stop polling.
+ *
+ * Leaflet di-lazy-load supaya tidak ikut bundle awal. Marker icon default Leaflet
+ * punya path absolut yang pecah di bundler, jadi MapInner mengoverride dengan icon inline SVG.
+ */
+
+const POLL_INTERVAL_MS = 30_000;
+// Setelah berapa kali gagal berturut baru tampilkan error UI. Tidak terlalu
+// agresif (1× gagal langsung error terasa rapuh), tapi juga tidak harus
+// menunggu 60+ detik untuk feedback pertama.
+const MAX_CONSECUTIVE_ERRORS = 2;
+// Maks waktu di state "loading" sebelum paksa tampilkan error state (kalau
+// fetch pertama hang / lama). Mencegah user stuck di spinner tanpa info.
+const LOADING_TIMEOUT_MS = 12_000;
+
+interface RouteData {
+  asal: { lat: number; lng: number };
+  tujuan: { lat: number; lng: number };
+  polyline: string | null;
+  distance_km: number | null;
+}
+
+interface Props {
+  jobToken: string;
+  externalLink: string | null;
+  jobStatus: JobStatus;
+  route: RouteData | null;
+}
+
+interface LocationData {
+  lat: number;
+  lng: number;
+  address: string | null;
+  fetched_at: string;
+}
+
+type State =
+  | { kind: "loading" }
+  | { kind: "ok"; data: LocationData }
+  | { kind: "no_imei" }
+  | { kind: "error"; message: string }
+  | { kind: "ended" };
+
+const MapInner = lazy(() => import("./tracking-map").then((m) => ({ default: m.TrackingMap })));
+
+export function TrackSolidEmbed({
+  jobToken,
+  externalLink,
+  jobStatus,
+  route
+}: Props) {
+  const [state, setState] = useState<State>({ kind: "loading" });
+  const errorCountRef = useRef(0);
+  const jobEnded = jobStatus === "selesai" || jobStatus === "cancelled";
+
+  useEffect(() => {
+    if (jobEnded) {
+      setState({ kind: "ended" });
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchOnce() {
+      try {
+        const data = await publicLocation(jobToken);
+        if (cancelled) return;
+        errorCountRef.current = 0;
+        setState({ kind: "ok", data });
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError) {
+          if (err.status === 410 || err.status === 404) {
+            setState({ kind: "ended" });
+            return;
+          }
+          if (err.status === 422) {
+            setState({ kind: "no_imei" });
+            return;
+          }
+        }
+        errorCountRef.current += 1;
+        if (errorCountRef.current >= MAX_CONSECUTIVE_ERRORS) {
+          setState({
+            kind: "error",
+            message:
+              err instanceof ApiError
+                ? "Lokasi GPS belum bisa dimuat. Coba beberapa saat lagi."
+                : "Tidak bisa terhubung ke server. Periksa koneksi internet."
+          });
+        }
+      }
+    }
+
+    fetchOnce();
+    const id = setInterval(fetchOnce, POLL_INTERVAL_MS);
+    // Safety net: kalau masih loading setelah 12s, paksa tampilkan error.
+    // Polling tetap jalan di background — kalau berhasil nanti, state akan
+    // recover ke "ok".
+    const loadingTimeout = setTimeout(() => {
+      if (cancelled) return;
+      setState((s) =>
+        s.kind === "loading"
+          ? {
+              kind: "error",
+              message:
+                "Lokasi GPS belum bisa dimuat. Sistem masih mencoba di background."
+            }
+          : s
+      );
+    }, LOADING_TIMEOUT_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      clearTimeout(loadingTimeout);
+    };
+  }, [jobToken, jobEnded]);
+
+  if (state.kind === "loading") {
+    return <MapPlaceholder text="Memuat lokasi GPS truk…" spinner />;
+  }
+
+  if (state.kind === "ok") {
+    return (
+      <div style={{ position: "relative" }}>
+        <div className="aspect-video">
+          <Suspense fallback={<MapPlaceholder text="Memuat peta…" />}>
+            <MapInner
+              lat={state.data.lat}
+              lng={state.data.lng}
+              address={state.data.address}
+              route={route}
+            />
+          </Suspense>
+        </div>
+        {state.data.address && (
+          <div
+            style={{
+              padding: "8px 12px",
+              fontSize: 11.5,
+              color: "var(--text-secondary)",
+              background: "white",
+              borderTop: "0.5px solid var(--border-default)",
+              lineHeight: 1.45
+            }}
+          >
+            <MapPin
+              style={{
+                width: 12,
+                height: 12,
+                display: "inline-block",
+                marginRight: 4,
+                verticalAlign: "-2px",
+                color: "var(--brand-primary)"
+              }}
+            />
+            {state.data.address}
+            {route?.distance_km != null && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  paddingLeft: 8,
+                  borderLeft: "0.5px solid var(--border-default)",
+                  color: "var(--text-tertiary)"
+                }}
+              >
+                Jarak rute: {route.distance_km.toFixed(1)} km
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback states semua pakai layout yang sama: pesan + tombol link-out
+  return <Fallback state={state} externalLink={externalLink} />;
+}
+
+function MapPlaceholder({
+  text,
+  spinner
+}: {
+  text: string;
+  spinner?: boolean;
+}) {
+  return (
+    <div
+      className="aspect-video"
+      style={{
+        background: "var(--brand-primary-light)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 8,
+          background: "white",
+          padding: "12px 16px",
+          borderRadius: 8
+        }}
+      >
+        {spinner && (
+          <div
+            style={{
+              width: 20,
+              height: 20,
+              border: "2px solid var(--brand-primary)",
+              borderTopColor: "transparent",
+              borderRadius: 999,
+              animation: "spin 0.8s linear infinite"
+            }}
+          />
+        )}
+        <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: 0 }}>
+          {text}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Fallback({
+  state,
+  externalLink
+}: {
+  state: Exclude<State, { kind: "loading" } | { kind: "ok" }>;
+  externalLink: string | null;
+}) {
+  const messages: Record<typeof state.kind, { title: string; body: string }> = {
+    no_imei: {
+      title: "Tracking GPS belum tersedia",
+      body: "Admin akan menambahkan link tracking sebentar lagi."
+    },
+    error: {
+      title: "Peta tidak bisa dimuat",
+      body:
+        "message" in state
+          ? state.message
+          : "Terjadi kesalahan. Coba buka di TrackSolid langsung."
+    },
+    ended: {
+      title: "Pengiriman sudah selesai",
+      body: "Tracking real-time tidak aktif lagi."
+    }
+  };
+  const { title, body } = messages[state.kind];
+
+  return (
+    <div
+      className="aspect-video"
+      style={{
+        background: "var(--brand-primary-light)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }}
+    >
+      <div style={{ textAlign: "center", padding: "0 24px" }}>
+        <MapPin
+          style={{
+            width: 36,
+            height: 36,
+            color: "var(--brand-primary)",
+            margin: "0 auto"
+          }}
+        />
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--text-secondary)",
+            marginTop: 8,
+            fontWeight: 500
+          }}
+        >
+          {title}
+        </p>
+        <p
+          style={{
+            fontSize: 11,
+            color: "var(--text-tertiary)",
+            marginTop: 4,
+            maxWidth: 280,
+            margin: "4px auto 0",
+            lineHeight: 1.5
+          }}
+        >
+          {body}
+        </p>
+        {externalLink && state.kind !== "ended" && (
+          <a
+            href={externalLink}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex"
+            style={{ marginTop: 12 }}
+          >
+            <Button leftIcon={<ExternalLink className="w-4 h-4" />}>
+              Buka peta TrackSolid
+            </Button>
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
