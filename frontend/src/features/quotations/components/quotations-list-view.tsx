@@ -9,6 +9,7 @@ import { Fab } from "@/components/layout/fab";
 import { QuotationStatusBadge } from "./quotation-status-badge";
 import type { QuotationListRow, QuotationStatus } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 interface Props {
   quotations: QuotationListRow[];
@@ -102,6 +103,8 @@ export function QuotationsListView({ quotations }: Props) {
     [quotations]
   );
 
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}` });
+
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
       <div className="toolbar">
@@ -182,7 +185,7 @@ export function QuotationsListView({ quotations }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {pg.items.map((row) => (
                   <tr key={row.id} className="row-link">
                     <td>
                       <Link
@@ -280,7 +283,7 @@ export function QuotationsListView({ quotations }: Props) {
 
           {/* Mobile */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
-            {filtered.map((row) => (
+            {pg.items.map((row) => (
               <Link
                 key={row.id}
                 to={`/quotations/${row.id}`}
@@ -339,6 +342,8 @@ export function QuotationsListView({ quotations }: Props) {
               </Link>
             ))}
           </div>
+
+          <Pagination state={pg} label="penawaran" />
         </>
       )}
 

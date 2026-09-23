@@ -28,6 +28,7 @@ class DriverMeResponse(BaseModel):
 
 class DriverAcceptResponse(BaseModel):
     accepted_at: str
+    status: JobStatus
 
 
 class DriverUpdateStatusRequest(BaseModel):
@@ -39,12 +40,24 @@ class DriverUpdateStatusResponse(BaseModel):
     status: JobStatus
 
 
-class DriverPodRequest(BaseModel):
-    penerima_nama: str = Field(min_length=1)
-    penerima_jabatan: str | None = None
-    catatan: str | None = None
-    # PNG data URL dari kanvas tanda tangan di HP driver.
-    signature_data_url: str | None = None
+class DeviceRegisterRequest(BaseModel):
+    fcm_token: str = Field(min_length=10)
+    platform: Literal["android", "ios", "web"] = "android"
+
+
+class DriverNotification(BaseModel):
+    id: str
+    kind: str
+    title: str
+    body: str
+    href: str | None = None
+    job_id: str | None = None
+    read_at: str | None = None
+    created_at: str
+
+
+class MarkReadRequest(BaseModel):
+    ids: list[str] = Field(default_factory=list)
 
 
 DriverJobFilter = Literal["active", "all"]

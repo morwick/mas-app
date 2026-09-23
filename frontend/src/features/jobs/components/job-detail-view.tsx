@@ -30,6 +30,8 @@ import { useToast } from "@/components/ui/toast";
 import { JobStepper } from "@/features/jobs/components/job-stepper";
 import { UpdateStatusModal } from "@/features/jobs/components/update-status-modal";
 import { UploadPhotoModal } from "@/features/jobs/components/upload-photo-modal";
+import { PhotoSlots } from "@/features/jobs/components/photo-slots";
+import { ValidationPanel } from "@/features/jobs/components/validation-panel";
 import {
   cancelJob,
   updateJobStatus
@@ -40,8 +42,11 @@ import type {
   Job,
   JobStatus,
   JobStatusHistoryEntry,
+  PhotoSlot,
+  PhotoStage,
   SumberDana,
   UangJalan,
+  UangJalanRequest,
   UangJalanRingkasan,
   Unit
 } from "@/types";
@@ -56,6 +61,7 @@ interface Props {
   sumberDana: SumberDana[];
   uangJalan: UangJalan[];
   uangJalanRingkasan: UangJalanRingkasan;
+  uangJalanPengajuan?: UangJalanRequest[];
 }
 
 function driverInitials(nama: string) {
@@ -75,20 +81,19 @@ export function JobDetailView({
   history,
   sumberDana,
   uangJalan,
-  uangJalanRingkasan
+  uangJalanRingkasan,
+  uangJalanPengajuan = []
 }: Props) {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const loadingPhotos = (job.photos ?? []).filter((p) => p.type === "loading");
-  const unloadingPhotos = (job.photos ?? []).filter(
-    (p) => p.type === "unloading"
-  );
+  const photos = job.photos ?? [];
+  // Foto lama (sebelum v2) tanpa slot tetap ditampilkan sebagai arsip.
+  const legacyPhotos = photos.filter((p) => !p.slot);
+  const allPhotoUrls = photos.map((p) => p.file_url);
 
   const [statusOpen, setStatusOpen] = useState(false);
-  const [uploadType, setUploadType] = useState<"loading" | "unloading" | null>(
-    null
-  );
+  const [uploadTarget, setUploadTarget] = useState<{ stage: PhotoStage; slot: PhotoSlot | null } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [lightbox, setLightbox] = useState<{
     images: string[];
@@ -143,6 +148,22 @@ export function JobDetailView({
 
   return (
     <div className="flex flex-col gap-4">
+      {job.status === "menunggu_validasi" && (
+        <ValidationPanel
+          job={job}
+          uangJalan={{
+            pagu: uangJalanRingkasan.pagu,
+            cair: uangJalanRingkasan.cair,
+            pending: uangJalanPengajuan.filter((r) => r.status === "diajukan").length
+          }}
+        />
+      )}
+      {job.validation_note && job.status !== "menunggu_validasi" && job.status !== "selesai" && (
+        <div className="card card-pad" style={{ borderColor: "#e0c06a", background: "#fffaf0" }}>
+          <div className="caption">Dikembalikan ke driver dengan catatan</div>
+          <div className="text-[13px]">{job.validation_note}</div>
+        </div>
+      )}
       {/* Header card with stepper */}
       <div className="card">
         <div
@@ -375,41 +396,35 @@ export function JobDetailView({
             </div>
           )}
 
-          {/* Photos sections */}
-          <PhotoSection
-            title="Foto loading"
-            photos={loadingPhotos}
-            onUpload={() => setUploadType("loading")}
-            onOpen={(i) =>
-              setLightbox({
-                images: loadingPhotos.map((p) => p.file_url),
-                index: i
-              })
-            }
-            onDelete={(p) =>
-              setDeletePhoto({ id: p.id, path: p.file_path })
-            }
-            canUpload={!closed}
-            max={5}
-          />
-          <PhotoSection
-            title="Foto unloading"
-            photos={unloadingPhotos}
-            onUpload={() => setUploadType("unloading")}
-            onOpen={(i) =>
-              setLightbox({
-                images: unloadingPhotos.map((p) => p.file_url),
-                index: i
-              })
-            }
-            onDelete={(p) =>
-              setDeletePhoto({ id: p.id, path: p.file_path })
-            }
-            canUpload={
-              !closed && (job.status === "unloading" || job.status === "selesai")
-            }
-            max={5}
-          />
+          {/* Foto per slot (BR-06) */}
+          {(["loading", "unloading", "serah_terima"] as PhotoStage[]).map((stage) => (
+            <PhotoSlots
+              key={stage}
+              stage={stage}
+              photos={photos}
+              reference={
+                stage === "loading"
+                  ? { lat: job.asal_lat, lng: job.asal_lng }
+                  : stage === "unloading"
+                    ? { lat: job.tujuan_lat, lng: job.tujuan_lng }
+                    : undefined
+              }
+              onOpen={(p) => setLightbox({ images: allPhotoUrls, index: allPhotoUrls.indexOf(p.file_url) })}
+              onDelete={closed ? undefined : (p) => setDeletePhoto({ id: p.id, path: p.file_path })}
+              onUpload={closed ? undefined : (slot) => setUploadTarget({ stage, slot })}
+            />
+          ))}
+          {legacyPhotos.length > 0 && (
+            <PhotoSection
+              title="Foto arsip (tanpa slot)"
+              photos={legacyPhotos}
+              onUpload={() => setUploadTarget({ stage: "loading", slot: null })}
+              onOpen={(i) => setLightbox({ images: legacyPhotos.map((p) => p.file_url), index: i })}
+              onDelete={(p) => setDeletePhoto({ id: p.id, path: p.file_path })}
+              canUpload={!closed}
+              max={5}
+            />
+          )}
         </div>
 
         {/* Right column */}
@@ -691,6 +706,7 @@ export function JobDetailView({
             sumberDana={sumberDana}
             transaksi={uangJalan}
             ringkasan={uangJalanRingkasan}
+            pengajuan={uangJalanPengajuan}
           />
 
           {/* Audit log */}
@@ -801,9 +817,10 @@ export function JobDetailView({
         onConfirm={onUpdateStatus}
       />
       <UploadPhotoModal
-        open={uploadType !== null}
-        onClose={() => setUploadType(null)}
-        type={uploadType ?? "loading"}
+        open={uploadTarget !== null}
+        onClose={() => setUploadTarget(null)}
+        type={uploadTarget?.stage ?? "loading"}
+        slot={uploadTarget?.slot ?? null}
         jobId={job.id}
         onDone={() => queryClient.invalidateQueries()}
       />

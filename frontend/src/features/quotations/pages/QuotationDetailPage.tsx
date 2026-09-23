@@ -7,7 +7,7 @@ import { useQuotation, useQuotationJobs } from "../queries";
 
 export function QuotationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { isOwner } = useAuth();
+  const { isSuperadmin } = useAuth();
   const quotation = useQuotation(id);
   // Nomor WA diambil dari master (bukan snapshot) — untuk mengirim ulang,
   // nomor terbaru justru yang dibutuhkan.
@@ -20,7 +20,7 @@ export function QuotationDetailPage() {
       quotation={quotation.data}
       picNoHp={customer.data?.pic_no_hp ?? null}
       jobs={jobs.data ?? []}
-      canDelete={isOwner}
+      canDelete={isSuperadmin}
     />
   );
 }

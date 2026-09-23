@@ -9,6 +9,7 @@ import { Fab } from "@/components/layout/fab";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
 import type { InvoiceListRow, InvoiceTampilStatus } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 interface Props {
   invoices: InvoiceListRow[];
@@ -57,6 +58,8 @@ export function InvoicesListView({ invoices }: Props) {
         .reduce((sum, r) => sum + r.sisa, 0),
     [filtered]
   );
+
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}` });
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
@@ -128,7 +131,7 @@ export function InvoicesListView({ invoices }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {pg.items.map((row) => (
                   <tr key={row.id} className="row-link">
                     <td>
                       <Link
@@ -232,7 +235,7 @@ export function InvoicesListView({ invoices }: Props) {
 
           {/* Mobile */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
-            {filtered.map((row) => (
+            {pg.items.map((row) => (
               <Link
                 key={row.id}
                 to={`/invoices/${row.id}`}
@@ -288,6 +291,8 @@ export function InvoicesListView({ invoices }: Props) {
               </Link>
             ))}
           </div>
+
+          <Pagination state={pg} label="tagihan" />
         </>
       )}
 

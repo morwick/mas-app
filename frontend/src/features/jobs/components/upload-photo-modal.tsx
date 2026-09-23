@@ -4,11 +4,15 @@ import imageCompression from "browser-image-compression";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { uploadJobPhoto } from "@/features/jobs/api";
+import { SLOT_LABEL, STAGE_LABEL } from "@/lib/job-status";
+import type { PhotoSlot, PhotoStage } from "@/types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  type: "loading" | "unloading";
+  type: PhotoStage;
+  /** Bila diisi, hanya satu foto untuk slot itu (menggantikan yang lama). */
+  slot?: PhotoSlot | null;
   jobId: string;
   onDone: () => void;
 }
@@ -32,9 +36,11 @@ export function UploadPhotoModal({
   open,
   onClose,
   type,
+  slot,
   jobId,
   onDone
 }: Props) {
+  const maxFiles = slot ? 1 : 5;
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -43,7 +49,7 @@ export function UploadPhotoModal({
 
   function addFiles(files: FileList | null) {
     if (!files) return;
-    const arr = Array.from(files).slice(0, 5 - items.length);
+    const arr = Array.from(files).slice(0, maxFiles - items.length);
     const next: Item[] = arr.map((f) => ({
       id: `${Date.now()}-${Math.random()}`,
       file: f,
@@ -51,7 +57,7 @@ export function UploadPhotoModal({
       progress: 0,
       size: fmtSize(f.size)
     }));
-    setItems((prev) => [...prev, ...next].slice(0, 5));
+    setItems((prev) => [...prev, ...next].slice(0, maxFiles));
   }
 
   function remove(id: string) {
@@ -77,7 +83,7 @@ export function UploadPhotoModal({
           setItems((prev) =>
             prev.map((p) => (p.id === item.id ? { ...p, progress: 30 } : p))
           );
-          const res = await uploadJobPhoto(jobId, type, compressed, "foto.jpg");
+          const res = await uploadJobPhoto(jobId, type, compressed, "foto.jpg", slot ?? undefined);
           if (!res.ok) throw new Error(res.error);
           setItems((prev) =>
             prev.map((p) => (p.id === item.id ? { ...p, progress: 100 } : p))
@@ -119,8 +125,12 @@ export function UploadPhotoModal({
     <Modal
       open={open}
       onClose={uploading ? () => {} : onClose}
-      title={`Upload foto ${type === "loading" ? "loading" : "unloading"}`}
-      description="Maksimal 5 foto. Otomatis di-resize ke 1920px sebelum upload."
+      title={slot ? SLOT_LABEL[slot] : `Upload foto ${STAGE_LABEL[type].toLowerCase()}`}
+      description={
+        slot
+          ? "Satu foto untuk slot ini; foto lama akan diganti. Otomatis di-resize ke 1920px."
+          : "Maksimal 5 foto arsip tambahan. Otomatis di-resize ke 1920px sebelum upload."
+      }
       footer={
         <>
           <button

@@ -2,16 +2,21 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
-import { navItems, visibleNavItems } from "./nav-items";
+import {
+  isNavGroup,
+  navTree,
+  profileItem,
+  visibleNavTree,
+  type NavItem
+} from "./nav-items";
 import { Logo } from "./logo";
-import { LogoutButton } from "@/features/auth/components/logout-button";
 
 interface MobileDrawerProps {
   user: {
     nama: string;
     email: string;
     initials: string;
-    role?: "owner" | "operator";
+    role?: "superadmin" | "operator";
   } | null;
   counts?: {
     units?: number;
@@ -50,6 +55,59 @@ export function MobileDrawer({ user, counts }: MobileDrawerProps) {
       document.body.style.overflow = "";
     };
   }, [open]);
+
+  function renderItem(item: NavItem, nested = false) {
+    const active = item.match
+      ? item.match(pathname)
+      : pathname.startsWith(item.href);
+    const Icon = item.icon;
+    const countKey = COUNT_KEY[item.href];
+    const count = countKey ? counts?.[countKey] : undefined;
+    const badge = BADGE_KEYS.has(item.href);
+    return (
+      <Link
+        key={item.href}
+        to={item.href}
+        onClick={() => setOpen(false)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: nested ? "11px 12px 11px 14px" : "11px 12px",
+          // Submenu diberi garis & indentasi: tanpa ini item tingkat atas
+          // sesudah grup (Laporan) terbaca seolah bagian dari grup itu.
+          marginLeft: nested ? 12 : 0,
+          borderLeft: nested ? "1.5px solid var(--border-default)" : undefined,
+          borderRadius: nested ? "0 8px 8px 0" : 8,
+          background: active ? "var(--brand-primary-light)" : "transparent",
+          borderLeftColor: nested && active ? "var(--brand-primary)" : undefined,
+          color: active ? "var(--brand-primary-dark)" : "var(--text-primary)",
+          textDecoration: "none",
+          fontSize: 15,
+          fontWeight: active ? 600 : 500
+        }}
+      >
+        <Icon style={{ width: 20, height: 20 }} />
+        <span style={{ flex: 1 }}>{item.label}</span>
+        {count != null && (
+          <span
+            style={{
+              fontSize: 11.5,
+              fontWeight: 600,
+              padding: "2px 8px",
+              borderRadius: 99,
+              background: badge ? "var(--brand-primary)" : "rgba(0,0,0,0.06)",
+              color: badge ? "white" : "var(--text-secondary)",
+              minWidth: 22,
+              textAlign: "center"
+            }}
+          >
+            {count}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <>
@@ -133,151 +191,26 @@ export function MobileDrawer({ user, counts }: MobileDrawerProps) {
                 gap: 2
               }}
             >
-              <div className="eyebrow" style={{ padding: "8px 10px 6px" }}>
-                Menu
-              </div>
-              {visibleNavItems(navItems, user?.role).map((item) => {
-                const active = item.match
-                  ? item.match(pathname)
-                  : pathname.startsWith(item.href);
-                const Icon = item.icon;
-                const countKey = COUNT_KEY[item.href];
-                const count = countKey ? counts?.[countKey] : undefined;
-                const badge = BADGE_KEYS.has(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    onClick={() => setOpen(false)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "12px 12px",
-                      borderRadius: 8,
-                      background: active
-                        ? "var(--brand-primary-light)"
-                        : "transparent",
-                      color: active
-                        ? "var(--brand-primary-dark)"
-                        : "var(--text-primary)",
-                      textDecoration: "none",
-                      fontSize: 15,
-                      fontWeight: active ? 600 : 500
-                    }}
-                  >
-                    <Icon style={{ width: 20, height: 20 }} />
-                    <span style={{ flex: 1 }}>{item.label}</span>
-                    {count != null && (
-                      <span
-                        style={{
-                          fontSize: 11.5,
-                          fontWeight: 600,
-                          padding: "2px 8px",
-                          borderRadius: 99,
-                          background: badge
-                            ? "var(--brand-primary)"
-                            : "rgba(0,0,0,0.06)",
-                          color: badge ? "white" : "var(--text-secondary)",
-                          minWidth: 22,
-                          textAlign: "center"
-                        }}
-                      >
-                        {count}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+              {visibleNavTree(navTree, user?.role).map((entry) =>
+                isNavGroup(entry) ? (
+                  <div key={entry.key} style={{ display: "contents" }}>
+                    {/* Di laci mobile grup jadi label seksi, bukan tombol
+                        lipat — isinya langsung terlihat tanpa tap tambahan. */}
+                    <div
+                      className="eyebrow"
+                      style={{ padding: "14px 12px 4px" }}
+                    >
+                      {entry.label}
+                    </div>
+                    {entry.items.map((item) => renderItem(item, true))}
+                  </div>
+                ) : (
+                  renderItem(entry)
+                )
+              )}
+              <div className="divider" style={{ margin: "10px 0" }} />
+              {renderItem(profileItem)}
             </nav>
-            {user && (
-              <>
-                <div className="divider" />
-                <div
-                  style={{
-                    padding: "14px 14px 16px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 99,
-                      background: "var(--brand-primary)",
-                      color: "white",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      flexShrink: 0
-                    }}
-                  >
-                    {user.initials}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        marginBottom: 1
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 600,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          flex: 1,
-                          minWidth: 0
-                        }}
-                      >
-                        {user.nama}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 9.5,
-                          fontWeight: 700,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          background:
-                            user.role === "operator"
-                              ? "#fff4e0"
-                              : "var(--brand-primary-light)",
-                          color:
-                            user.role === "operator"
-                              ? "#8a5a00"
-                              : "var(--brand-primary-dark)",
-                          letterSpacing: 0.4,
-                          textTransform: "uppercase",
-                          flexShrink: 0
-                        }}
-                      >
-                        {user.role === "operator" ? "Operator" : "Owner"}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11.5,
-                        color: "var(--text-tertiary)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      {user.email}
-                    </div>
-                  </div>
-                  <LogoutButton variant="icon" />
-                </div>
-              </>
-            )}
           </aside>
         </div>
       )}

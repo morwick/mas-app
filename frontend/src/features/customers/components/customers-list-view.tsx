@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
 import type { Customer } from "@/types";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 interface Props {
   customers: Customer[];
@@ -48,11 +49,13 @@ export function CustomersListView({ customers, jobCounts }: Props) {
     });
   }, [customers, q, filter]);
 
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}` });
+
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
       <div className="toolbar">
-        <div style={{ flex: 1, minWidth: 260 }}>
+        <div className="toolbar-search">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -105,7 +108,7 @@ export function CustomersListView({ customers, jobCounts }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
+              {pg.items.map((c) => (
                 <tr key={c.id} className="row-link">
                   <td>
                     <Link
@@ -199,7 +202,7 @@ export function CustomersListView({ customers, jobCounts }: Props) {
 
           {/* Mobile: card list */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
-            {filtered.map((c) => (
+            {pg.items.map((c) => (
               <Link
                 key={c.id}
                 to={`/customers/${c.id}/edit`}
@@ -292,6 +295,8 @@ export function CustomersListView({ customers, jobCounts }: Props) {
               </Link>
             ))}
           </div>
+
+          <Pagination state={pg} label="customer" />
         </>
       )}
 

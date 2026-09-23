@@ -19,7 +19,7 @@ import type { CurrentUser } from "@/types";
 interface AuthApi {
   session: AdminSession | null;
   user: CurrentUser | null;
-  isOwner: boolean;
+  isSuperadmin: boolean;
   login: (email: string, password: string) => Promise<CurrentUser>;
   logout: () => Promise<void>;
   /** Muat ulang profil (setelah ganti nama, dsb). */
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       session,
       user: session?.user ?? null,
-      isOwner: session?.user.role === "owner",
+      isSuperadmin: session?.user.role === "superadmin",
       login,
       logout,
       refreshUser

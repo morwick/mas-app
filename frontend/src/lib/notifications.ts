@@ -15,7 +15,9 @@ import {
   Building2,
   AlertCircle,
   FileText,
-  Receipt
+  Receipt,
+  Wallet,
+  ClipboardCheck
 } from "lucide-react";
 
 export type NotificationKind =
@@ -27,7 +29,11 @@ export type NotificationKind =
   | "gps_offline"
   | "customer_new"
   | "document_expiring"
-  | "invoice_overdue";
+  | "invoice_overdue"
+  // Kejadian alur job v2 (tersimpan di database, dibaca per pengguna)
+  | "job_diterima"
+  | "uang_jalan_diajukan"
+  | "job_menunggu_validasi";
 
 export type NotificationSeverity = "info" | "warning" | "danger";
 
@@ -39,6 +45,9 @@ export interface AppNotification {
   body: string;
   href: string;
   created_at: string; // ISO
+  /** Kejadian tersimpan (status dibaca per pengguna di server). */
+  persistent?: boolean;
+  read?: boolean;
 }
 
 interface KindMeta {
@@ -55,7 +64,10 @@ export const KIND_META: Record<NotificationKind, KindMeta> = {
   gps_offline: { icon: WifiOff, label: "GPS offline" },
   customer_new: { icon: Building2, label: "Customer baru" },
   document_expiring: { icon: FileText, label: "Dokumen akan expired" },
-  invoice_overdue: { icon: Receipt, label: "Tagihan jatuh tempo" }
+  invoice_overdue: { icon: Receipt, label: "Tagihan jatuh tempo" },
+  job_diterima: { icon: PackageCheck, label: "Driver menerima job" },
+  uang_jalan_diajukan: { icon: Wallet, label: "Pengajuan uang jalan" },
+  job_menunggu_validasi: { icon: ClipboardCheck, label: "Menunggu validasi" }
 };
 
 const SEVERITY_TOKENS: Record<

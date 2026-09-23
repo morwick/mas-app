@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/layout/fab";
 import type { JenisUnit, Unit } from "@/types";
 import { fleetLocations } from "@/features/tracking/api";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 interface Props {
   units: Unit[];
@@ -80,11 +81,13 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
     });
   }, [units, q, jenis, status, showInactive]);
 
+  const pg = usePagination(filtered, { resetKey: `${q}|${jenis}|${status}|${showInactive}` });
+
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
       <div className="toolbar">
-        <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
+        <div className="toolbar-search">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -92,28 +95,30 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
             leftIcon={<Search style={{ width: 15, height: 15 }} />}
           />
         </div>
-        <Select
-          value={jenis}
-          onChange={(e) => setJenis(e.target.value)}
-          style={{ width: 160 }}
-        >
-          <option value="">Semua jenis</option>
-          {jenisUnitList.map((j) => (
-            <option key={j.id} value={j.id}>
-              {j.nama}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          style={{ width: 160 }}
-        >
-          <option value="">Semua status</option>
-          <option value="standby">Standby</option>
-          <option value="bertugas">Bertugas</option>
-          <option value="perbaikan">Perbaikan</option>
-        </Select>
+        <div className="toolbar-filter">
+          <Select
+            value={jenis}
+            onChange={(e) => setJenis(e.target.value)}
+          >
+            <option value="">Semua jenis</option>
+            {jenisUnitList.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.nama}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="toolbar-filter">
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="">Semua status</option>
+            <option value="standby">Standby</option>
+            <option value="bertugas">Bertugas</option>
+            <option value="perbaikan">Perbaikan</option>
+          </Select>
+        </div>
         <Link to="/units/new" className="hidden lg:inline-flex">
           <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
             Tambah unit
@@ -165,7 +170,7 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((u) => (
+                {pg.items.map((u) => (
                   <tr key={u.id} className="row-link">
                     <td>
                       <Link
@@ -241,7 +246,7 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
 
           {/* Mobile: card list */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
-            {filtered.map((u) => (
+            {pg.items.map((u) => (
               <Link
                 key={u.id}
                 to={`/units/${u.id}`}
@@ -343,6 +348,8 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
               </Link>
             ))}
           </div>
+
+          <Pagination state={pg} label="unit" />
         </>
       )}
 

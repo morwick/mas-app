@@ -18,13 +18,13 @@ export function deleteJenisUnit(id: string): Promise<ActionResult<unknown>> {
   return mutate(api.delete(`/jenis-unit/${id}`));
 }
 
-// ── Pengguna (owner) ────────────────────────────────────────────────────────
+// ── Pengguna (superadmin) ───────────────────────────────────────────────────
 
 export const listUsers = () => api.get<UserRow[]>("/users");
 
 export function updateUserRole(input: {
   user_id: string;
-  role: "owner" | "operator";
+  role: "superadmin" | "operator";
   allowed_jenis_unit_ids: string[];
 }): Promise<ActionResult<unknown>> {
   return mutate(

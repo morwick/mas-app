@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { mobileNavItems, visibleNavItems } from "./nav-items";
 
 interface BottomNavProps {
-  role?: "owner" | "operator";
+  role?: "superadmin" | "operator";
 }
 
 export function BottomNav({ role }: BottomNavProps = {}) {

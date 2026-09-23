@@ -11,8 +11,8 @@ export interface DriverInput {
   catatan?: string | null;
 }
 
-export const listDrivers = (includeInactive = false) =>
-  api.get<Driver[]>("/drivers", { include_inactive: includeInactive });
+export const listDrivers = (includeInactive = false, onlyStandBy = false) =>
+  api.get<Driver[]>("/drivers", { include_inactive: includeInactive, only_stand_by: onlyStandBy });
 
 export const getDriver = (id: string) => api.get<Driver>(`/drivers/${id}`);
 

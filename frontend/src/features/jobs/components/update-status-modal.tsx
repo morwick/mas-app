@@ -19,10 +19,11 @@ export function UpdateStatusModal({
   current,
   onConfirm
 }: Props) {
-  const idx = jobStatusOrder.findIndex((s) => s.key === current);
-  const recommended = idx >= 0 && idx < jobStatusOrder.length - 1
-    ? jobStatusOrder[idx + 1]
-    : null;
+  const currentKey: JobStatus = current === "menunggu_pickup" ? "ditugaskan" : current;
+  const idx = jobStatusOrder.findIndex((s) => s.key === currentKey);
+  const candidate = idx >= 0 && idx < jobStatusOrder.length - 1 ? jobStatusOrder[idx + 1] : null;
+  // `selesai` hanya lewat Approve/Validasi (BR-07) — tidak ditawarkan di sini.
+  const recommended = candidate && candidate.key !== "selesai" ? candidate : null;
 
   const options: {
     key: JobStatus;

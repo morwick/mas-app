@@ -8,6 +8,7 @@ from supabase import AsyncClient
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.pg import clean_text, first, num, rows, single
+from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
 from app.modules.units.schemas import (
     ChangeStatusRequest,
     DriverAssignment,
@@ -64,7 +65,32 @@ class UnitService:
 
     # ── Baca ────────────────────────────────────────────────────────────────
 
+    _SEARCH_COLUMNS = ["kode_unit", "no_polisi"]
+
+    def _list_query(self, *, include_inactive: bool, q: str | None, jenis_unit_id: str | None,
+                    status: str | None, select: str, count=None, head: bool = False):
+        query = (self._db.table("units").select(select, count=count, head=head)
+                 if count is not None else self._db.table("units").select(select))
+        if not include_inactive:
+            query = query.eq("is_active", True)
+        if jenis_unit_id:
+            query = query.eq("jenis_unit_id", jenis_unit_id)
+        if status:
+            query = query.eq("status", status)
+        if q and q.strip():
+            query = query.or_(ilike_any(self._SEARCH_COLUMNS, q))
+        return query
+
+    async def list_page(self, *, params: PageParams, include_inactive: bool = False,
+                        q: str | None = None, jenis_unit_id: str | None = None,
+                        status: str | None = None) -> Page[Unit]:
+        query = self._list_query(include_inactive=include_inactive, q=q, jenis_unit_id=jenis_unit_id,
+                                 status=status, select=UNIT_SELECT, count=CountMethod.exact)
+        res = await apply_window(query.order("kode_unit"), params).execute()
+        return build_page([to_unit(r) for r in rows(res)], res.count, params)
+
     async def list_all(self, *, include_inactive: bool = False) -> list[Unit]:
+        """Seluruh baris — dipakai dropdown form dan dashboard."""
         q = self._db.table("units").select(UNIT_SELECT).order("kode_unit")
         if not include_inactive:
             q = q.eq("is_active", True)

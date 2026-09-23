@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
+from app.core.paging import Page, PageParams, page_params
 from app.core.auth import user_client
 from app.modules.auth.schemas import OkResponse
 from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate, SetPinRequest
@@ -15,11 +16,31 @@ def get_service(client: AsyncClient = Depends(user_client)) -> DriverService:
     return DriverService(client)
 
 
+@router.get("/page", response_model=Page[Driver])
+async def list_drivers_page(
+    include_inactive: bool = Query(False),
+    q: str | None = Query(None, description="Cari nama, no HP, atau no SIM"),
+    params: PageParams = Depends(page_params),
+    svc: DriverService = Depends(get_service),
+) -> Page[Driver]:
+    return await svc.list_page(params=params, include_inactive=include_inactive, q=q)
+
+
+@router.get("/counts", response_model=dict[str, int])
+async def driver_counts(
+    q: str | None = Query(None), svc: DriverService = Depends(get_service)
+) -> dict[str, int]:
+    return await svc.count_by_active(q=q)
+
+
 @router.get("", response_model=list[Driver])
 async def list_drivers(
-    include_inactive: bool = Query(False), svc: DriverService = Depends(get_service)
+    include_inactive: bool = Query(False),
+    only_stand_by: bool = Query(False, description="Hanya driver yang tidak sedang In Job (BR-01)"),
+    svc: DriverService = Depends(get_service),
 ) -> list[Driver]:
-    return await svc.list_all(include_inactive=include_inactive)
+    """Tanpa potongan — untuk dropdown driver di form job."""
+    return await svc.list_all(include_inactive=include_inactive, only_stand_by=only_stand_by)
 
 
 @router.get("/{driver_id}", response_model=Driver)

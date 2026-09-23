@@ -26,7 +26,7 @@ from app.core.errors import ForbiddenError, UnauthorizedError
 from app.core.pg import single
 from app.core.supabase import SupabaseClientFactory, get_client_factory
 
-UserRole = Literal["owner", "operator"]
+UserRole = Literal["superadmin", "operator"]
 
 # Identitas per token disimpan 60 detik. Pencabutan sesi tetap efektif segera di
 # sisi data karena RLS memverifikasi JWT pada setiap query; yang tertunda paling
@@ -40,13 +40,13 @@ class CurrentUser(BaseModel):
     nama: str
     initials: str
     role: UserRole
-    # owner: None (akses semua). operator: daftar jenis_unit_id yang boleh diakses;
-    # None/kosong berarti belum diberi scope oleh owner.
+    # superadmin: None (akses semua). operator: daftar jenis_unit_id yang boleh
+    # diakses; None/kosong berarti belum diberi scope oleh superadmin.
     allowed_jenis_unit_ids: list[str] | None
 
     @property
-    def is_owner(self) -> bool:
-        return self.role == "owner"
+    def is_superadmin(self) -> bool:
+        return self.role == "superadmin"
 
 
 @dataclass(frozen=True)
@@ -64,9 +64,13 @@ def build_current_user(*, user_id: str, email: str | None, profile: dict[str, ob
     """Susun identitas dari row auth + row profiles (boleh None bila belum ada)."""
     profile = profile or {}
     nama = str(profile.get("nama") or (email or "").split("@")[0] or "Admin")
-    role: UserRole = "operator" if profile.get("role") == "operator" else "owner"
+    # Fail-safe: hanya nilai 'superadmin' yang memberi hak penuh. Sebelumnya
+    # apa pun selain 'operator' dianggap owner — dengan itu baris yang belum
+    # ikut migrasi (masih 'owner') akan lolos di backend padahal RLS sudah
+    # menolaknya, menghasilkan kondisi setengah jalan yang membingungkan.
+    role: UserRole = "superadmin" if profile.get("role") == "superadmin" else "operator"
     scope = profile.get("allowed_jenis_unit_ids")
-    allowed = None if role == "owner" else (list(scope) if isinstance(scope, list) else None)
+    allowed = None if role == "superadmin" else (list(scope) if isinstance(scope, list) else None)
     return CurrentUser(
         id=user_id,
         email=str(profile.get("email") or email or ""),
@@ -130,9 +134,9 @@ async def require_auth(
     return AuthContext(user=user, token=token)
 
 
-async def require_owner(auth: AuthContext = Depends(require_auth)) -> AuthContext:
-    if not auth.user.is_owner:
-        raise ForbiddenError("Hanya owner yang boleh mengakses ini.")
+async def require_superadmin(auth: AuthContext = Depends(require_auth)) -> AuthContext:
+    if not auth.user.is_superadmin:
+        raise ForbiddenError("Hanya super administrator yang boleh mengakses ini.")
     return auth
 
 
@@ -145,8 +149,8 @@ async def user_client(
         yield client
 
 
-async def owner_client(
-    auth: AuthContext = Depends(require_owner),
+async def superadmin_client(
+    auth: AuthContext = Depends(require_superadmin),
     factory: SupabaseClientFactory = Depends(get_client_factory),
 ) -> AsyncIterator[AsyncClient]:
     async with factory.for_user(auth.token) as client:

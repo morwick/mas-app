@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from supabase import AsyncClient
 
 from app.core.auth import AuthContext, require_auth, user_client
 from app.modules.auth.schemas import OkResponse
 from app.modules.uang_jalan.schemas import (
     JobUangJalan,
+    RejectRequestInput,
     SetPaguRequest,
     SumberDana,
     UangJalan,
     UangJalanInput,
     UangJalanJobRow,
+    UangJalanRequest,
 )
 from app.modules.uang_jalan.service import UangJalanService
 
@@ -38,6 +40,23 @@ async def list_job_uang_jalan(
     return await svc.list_jobs(hanya_belum_lunas=hanya_belum_lunas, hanya_berjalan=hanya_berjalan)
 
 
+@router.get("/uang-jalan/pengajuan", response_model=list[UangJalanRequest])
+async def list_pending_requests(svc: UangJalanService = Depends(get_service)) -> list[UangJalanRequest]:
+    """Pengajuan driver yang menunggu dicairkan kasir (FR-UJ-05)."""
+    return await svc.list_pending_requests()
+
+
+@router.post("/uang-jalan/pengajuan/{request_id}/tolak", response_model=OkResponse)
+async def reject_request(
+    request_id: str,
+    payload: RejectRequestInput,
+    auth: AuthContext = Depends(require_auth),
+    svc: UangJalanService = Depends(get_service),
+) -> OkResponse:
+    await svc.reject_request(request_id, alasan=payload.alasan, decided_by=auth.user.id)
+    return OkResponse()
+
+
 @router.get("/jobs/{job_id}/uang-jalan", response_model=JobUangJalan)
 async def job_uang_jalan(job_id: str, svc: UangJalanService = Depends(get_service)) -> JobUangJalan:
     return await svc.job_summary(job_id)
@@ -55,7 +74,40 @@ async def create_uang_jalan(
     auth: AuthContext = Depends(require_auth),
     svc: UangJalanService = Depends(get_service),
 ) -> UangJalan:
+    """Transaksi tanpa berkas — hanya untuk `penambahan_pagu`. Pencairan pakai endpoint multipart."""
     return await svc.create(payload, created_by=auth.user.id)
+
+
+@router.post("/uang-jalan/pencairan", response_model=UangJalan, status_code=201)
+async def create_pencairan(
+    job_id: str = Form(...),
+    tanggal: str = Form(...),
+    jumlah: float = Form(..., gt=0),
+    sumber_dana_id: str = Form(...),
+    keperluan: str | None = Form(None),
+    catatan: str | None = Form(None),
+    request_id: str | None = Form(None),
+    bukti: UploadFile = File(..., description="Foto bukti transfer"),
+    auth: AuthContext = Depends(require_auth),
+    svc: UangJalanService = Depends(get_service),
+) -> UangJalan:
+    """Fase 3: kasir mencairkan uang jalan dengan foto bukti transfer (FR-UJ-06)."""
+    payload = UangJalanInput(
+        job_id=job_id,
+        jenis="pencairan",
+        tanggal=tanggal,
+        jumlah=jumlah,
+        sumber_dana_id=sumber_dana_id,
+        keperluan=keperluan,
+        catatan=catatan,
+    )
+    data = await bukti.read()
+    return await svc.create(
+        payload,
+        created_by=auth.user.id,
+        bukti=(data, bukti.content_type),
+        request_id=request_id,
+    )
 
 
 @router.put("/uang-jalan/{uang_jalan_id}", response_model=OkResponse)

@@ -7,7 +7,7 @@ from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
 from supabase import AsyncClient
 
-from app.core.auth import owner_client, user_client
+from app.core.auth import superadmin_client, user_client
 from app.core.errors import ConflictError
 from app.core.pg import rows
 from app.modules.auth.schemas import OkResponse
@@ -32,7 +32,7 @@ async def list_jenis_unit(client: AsyncClient = Depends(user_client)) -> list[Je
 
 
 @router.post("", response_model=JenisUnit, status_code=201)
-async def create_jenis_unit(payload: JenisUnitInput, client: AsyncClient = Depends(owner_client)) -> JenisUnit:
+async def create_jenis_unit(payload: JenisUnitInput, client: AsyncClient = Depends(superadmin_client)) -> JenisUnit:
     try:
         res = await client.table("jenis_unit").insert({"nama": payload.nama.strip()}).execute()
     except APIError as exc:
@@ -44,14 +44,14 @@ async def create_jenis_unit(payload: JenisUnitInput, client: AsyncClient = Depen
 
 @router.patch("/{jenis_id}", response_model=OkResponse)
 async def update_jenis_unit(
-    jenis_id: str, payload: JenisUnitInput, client: AsyncClient = Depends(owner_client)
+    jenis_id: str, payload: JenisUnitInput, client: AsyncClient = Depends(superadmin_client)
 ) -> OkResponse:
     await client.table("jenis_unit").update({"nama": payload.nama.strip()}).eq("id", jenis_id).execute()
     return OkResponse()
 
 
 @router.delete("/{jenis_id}", response_model=OkResponse)
-async def delete_jenis_unit(jenis_id: str, client: AsyncClient = Depends(owner_client)) -> OkResponse:
+async def delete_jenis_unit(jenis_id: str, client: AsyncClient = Depends(superadmin_client)) -> OkResponse:
     try:
         await client.table("jenis_unit").delete().eq("id", jenis_id).execute()
     except APIError as exc:

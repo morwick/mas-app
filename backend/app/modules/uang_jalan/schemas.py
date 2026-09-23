@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.domain.uang_jalan import UangJalanJenis, UangJalanRingkasan
@@ -28,6 +30,47 @@ class UangJalan(BaseModel):
     catatan: str | None = None
     created_by_nama: str | None = None
     created_at: str
+    # Bukti transfer (bucket privat) — URL bertanda tangan, berlaku sementara.
+    bukti_transfer_path: str | None = None
+    bukti_transfer_url: str | None = None
+    request_id: str | None = None
+
+
+RequestStatus = Literal["diajukan", "dicairkan", "ditolak"]
+
+
+class UangJalanRequest(BaseModel):
+    id: str
+    job_id: str
+    job_number: str | None = None
+    driver_id: str
+    driver_nama: str | None = None
+    nominal: float
+    catatan: str | None = None
+    status: RequestStatus
+    alasan_tolak: str | None = None
+    uang_jalan_id: str | None = None
+    requested_at: str
+    decided_at: str | None = None
+
+
+class UangJalanPosisi(BaseModel):
+    """Posisi uang jalan sebuah job, dihitung database (job_uang_jalan_posisi)."""
+
+    pagu: float
+    cair: float
+    sisa: float
+    ada_bukti: bool
+    pending_request: bool
+
+
+class DriverRequestInput(BaseModel):
+    nominal: int = Field(gt=0)
+    catatan: str | None = None
+
+
+class RejectRequestInput(BaseModel):
+    alasan: str | None = None
 
 
 class UangJalanInput(BaseModel):
@@ -47,6 +90,8 @@ class SetPaguRequest(BaseModel):
 class JobUangJalan(BaseModel):
     transaksi: list[UangJalan]
     ringkasan: UangJalanRingkasan
+    pengajuan: list[UangJalanRequest] = Field(default_factory=list)
+    posisi: UangJalanPosisi | None = None
 
 
 class UangJalanJobRow(BaseModel):
@@ -61,3 +106,5 @@ class UangJalanJobRow(BaseModel):
     customer_nama: str | None
     ringkasan: UangJalanRingkasan
     pencairan_terakhir: str | None
+    # Pengajuan driver yang belum dicairkan (perlu tindakan kasir).
+    pengajuan_menunggu: int = 0

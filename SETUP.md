@@ -45,6 +45,13 @@ diawali tanggal, jadi urutan abjad = urutan jalan). Yang terbaru:
 | `20260907000002_masa_berlaku_dokumen.sql` | Masa berlaku STNK/KIR/pajak di `units` dan SIM di `drivers`, dipakai pengingat di lonceng notifikasi |
 | `20260907000003_invoices.sql`       | Modul tagihan & piutang: `invoices`, `invoice_items`, `invoice_payments`, penomoran `0001/INV/MAS/I/2026`, RPC `get_piutang_summary()` & `get_job_profitability()` |
 | `20260907000004_pod.sql`            | Bukti terima barang: kolom `jobs.pod_*` dan RPC `driver_submit_pod()` yang menutup job sekaligus menyimpan tanda tangan penerima |
+| `20260922000001_alur_job_v2_enum.sql` | **Jalankan sendiri dulu, lalu klik Run lagi untuk file berikutnya.** Menambah nilai enum status job v2 (`ditugaskan`, `diterima`, `serah_terima_pool`, `menunggu_validasi`) dan tipe foto `serah_terima`. Postgres melarang nilai enum baru dipakai di transaksi yang sama, karena itu dipisah. |
+| `20260922000002_alur_job_v2.sql`    | Alur job v2 sesuai `PRD-Alur-Kerja-Job-v2.md`: Lock System driver, Sequence Lock uang jalan, slot foto per sisi (`job_photos.stage/slot`), pengajuan uang jalan (`uang_jalan_requests`), bukti transfer (`uang_jalan.bukti_transfer_path` + bucket privat `bukti-transfer`), validasi admin (`admin_validate_job`, `admin_return_job`), perangkat push (`driver_devices`), notifikasi kejadian (`notifications`). Menonaktifkan `driver_submit_pod` (e-POD dihapus). |
+
+> **Migration alur job v2 mengubah status job.** `menunggu_pickup` dimigrasikan
+> ke `ditugaskan`; job yang sudah `selesai` dianggap tervalidasi. Jalankan
+> bersamaan dengan penerapan backend + frontend versi ini — kode lama tidak
+> mengenal status baru.
 
 > **Migration portal driver mengubah cara halaman pelacakan customer membaca
 > data.** Sebelumnya policy anon melepas *semua* job aktif kepada siapa pun
@@ -101,6 +108,7 @@ OPENROUTESERVICE_API_KEY=...
 CRON_SECRET=...                  # bebas; dipakai penjadwal eksternal memanggil /api/cron/*
 APP_URL=http://localhost:5173    # URL frontend, untuk tautan reset password
 CORS_ORIGINS=http://localhost:5173
+FIREBASE_CREDENTIALS_FILE=       # opsional: path service-account JSON Firebase untuk push ke aplikasi driver
 ```
 
 > ⚠️ `SUPABASE_SERVICE_ROLE_KEY` menembus semua RLS. Jangan commit, jangan
@@ -237,9 +245,27 @@ frontend/src/
 ├── components/      ui/ dan layout/
 └── features/<fitur>/ api.ts · queries.ts · components/ · pages/
 
+mobile/lib/
+├── core/            config (API_BASE_URL), klien API, sesi, push FCM, tema
+└── features/<fitur>/ auth · jobs · camera · upload · notifications
+
 supabase/migrations/   SQL files (jalankan di Supabase SQL Editor)
 legacy/                versi Next.js lama — referensi saja
 ```
+
+## Aplikasi mobile driver (Flutter)
+
+Lihat `mobile/README.md`. Ringkas:
+
+```bash
+cd mobile
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://<ip-komputer-backend>:8000
+```
+
+Push notification memerlukan project Firebase: `google-services.json` di
+`mobile/android/app/` dan `FIREBASE_CREDENTIALS_FILE` di `backend/.env`.
+Tanpa itu aplikasi tetap berjalan, hanya tanpa push.
 
 ---
 

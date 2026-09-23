@@ -1,42 +1,42 @@
-"""Portal driver: login PIN, daftar job, konfirmasi, update status, foto, e-POD.
+"""Portal driver (dipakai aplikasi Flutter dan portal web transisi).
 
 Tidak ada fungsi di sini yang menerima driver_id dari pemanggil. Baris yang
-boleh terbaca ditentukan RLS lewat token sesi di header, jadi halaman tidak
-bisa keliru (atau dipaksa) membuka job milik driver lain. Semua perubahan
-lewat RPC yang mengunci urutan status dan mengembalikan error kalau ditolak.
+boleh terbaca ditentukan RLS lewat token sesi di header, dan semua perubahan
+lewat RPC SECURITY DEFINER yang menegakkan Lock System, Sequence Lock, dan
+kelengkapan foto per slot (PRD v2 §4).
 """
 
 from __future__ import annotations
 
-import base64
-import re
-import time
+import logging
 from typing import cast
 
 from supabase import AsyncClient
 
 from app.core.config import get_settings
 from app.core.errors import NotFoundError, UnauthorizedError, ValidationError
+from app.core.image_quality import assess_photo_safely
 from app.core.pg import clean_text, first, rows, single
 from app.core.storage import (
-    MAX_PHOTO_BYTES,
     remove_object_quietly,
     unique_object_name,
     upload_object,
     validate_photo,
 )
-from app.core.supabase import storage_public_url
+from app.core.supabase import get_client_factory, storage_public_url
 from app.domain.job_conflicts import ACTIVE_JOB_STATUSES
 from app.modules.driver_portal.schemas import (
     DriverJobFilter,
     DriverLoginRequest,
-    DriverPodRequest,
+    DriverNotification,
     DriverSessionResponse,
 )
 from app.modules.jobs.mappers import DRIVER_JOB_SELECT, to_job
-from app.modules.jobs.schemas import Job, JobPhoto, JobStatus, PhotoType
+from app.modules.jobs.schemas import Job, JobPhoto, JobStatus, PhotoSlot, PhotoStage
+from app.modules.uang_jalan.schemas import JobUangJalan, UangJalanRequest
+from app.modules.uang_jalan.service import UangJalanService
 
-_SIGNATURE_RE = re.compile(r"^data:image/png;base64,([A-Za-z0-9+/=]+)$")
+log = logging.getLogger(__name__)
 
 
 class DriverPortalService:
@@ -44,18 +44,15 @@ class DriverPortalService:
         self._db = client
         self._bucket = get_settings().job_photos_bucket
 
+    # ── Sesi ────────────────────────────────────────────────────────────────
+
     async def login(self, payload: DriverLoginRequest, *, user_agent: str | None) -> DriverSessionResponse:
         """Verifikasi PIN dan penerbitan token dikerjakan `driver_login` di DB, supaya
-        PIN mentah tidak dibandingkan di aplikasi dan pesan gagalnya seragam —
-        nomor tak terdaftar dan PIN salah tidak boleh bisa dibedakan."""
+        PIN mentah tidak dibandingkan di aplikasi dan pesan gagalnya seragam."""
         try:
             res = await self._db.rpc(
                 "driver_login",
-                {
-                    "p_no_hp": payload.no_hp.strip(),
-                    "p_pin": payload.pin,
-                    "p_user_agent": user_agent,
-                },
+                {"p_no_hp": payload.no_hp.strip(), "p_pin": payload.pin, "p_user_agent": user_agent},
             ).execute()
         except Exception as exc:  # noqa: BLE001 — sengaja seragam
             raise UnauthorizedError("Nomor HP atau PIN salah") from exc
@@ -63,7 +60,6 @@ class DriverPortalService:
         row = first(res.data)
         if not row or not row.get("token"):
             raise UnauthorizedError("Nomor HP atau PIN salah")
-
         return DriverSessionResponse(
             token=str(row["token"]),
             driver_id=str(row["driver_id"]),
@@ -72,15 +68,21 @@ class DriverPortalService:
             expires_at=row.get("expires_at"),
         )
 
-    async def logout(self) -> None:
+    async def logout(self, *, fcm_token: str | None = None) -> None:
         try:
+            if fcm_token:
+                await self._db.rpc("driver_unregister_device", {"p_fcm_token": fcm_token}).execute()
             await self._db.rpc("driver_logout").execute()
         except Exception:  # noqa: BLE001 — sesi yang sudah mati tetap dianggap logout
             pass
 
+    async def register_device(self, *, fcm_token: str, platform: str) -> None:
+        await self._db.rpc("driver_register_device", {"p_fcm_token": fcm_token, "p_platform": platform}).execute()
+
+    # ── Job ─────────────────────────────────────────────────────────────────
+
     async def my_jobs(self, *, status: DriverJobFilter = "all") -> list[Job]:
-        # Belum dikonfirmasi lebih dulu, lalu yang paling dekat berangkat — itu
-        # yang dibutuhkan driver di HP, bukan urutan pembuatan.
+        # Belum dikonfirmasi lebih dulu, lalu yang paling dekat berangkat.
         q = self._db.table("jobs").select(DRIVER_JOB_SELECT).order("accepted_at", nullsfirst=True).order("etd")
         if status == "active":
             q = q.in_("status", list(ACTIVE_JOB_STATUSES))
@@ -93,11 +95,12 @@ class DriverPortalService:
             raise NotFoundError("Job tidak ditemukan")
         return to_job(row)
 
-    async def accept(self, job_id: str) -> str:
+    async def accept(self, job_id: str) -> tuple[str, JobStatus]:
         """Driver tidak bisa menolak — penugasan keputusan admin. Yang dicatat
-        adalah kapan job benar-benar sampai ke orangnya."""
+        adalah kapan job benar-benar sampai ke orangnya; status → diterima."""
         res = await self._db.rpc("driver_accept_job", {"p_job_id": job_id}).execute()
-        return str(res.data)
+        job = await self.my_job(job_id)
+        return str(res.data), job.status
 
     async def update_status(self, job_id: str, status: JobStatus, notes: str | None) -> JobStatus:
         res = await self._db.rpc(
@@ -106,60 +109,98 @@ class DriverPortalService:
         ).execute()
         return cast(JobStatus, res.data)
 
-    async def submit_pod(self, job_id: str, payload: DriverPodRequest) -> None:
-        """Serah terima barang sekaligus menutup job. Yang menutup job adalah RPC
-        dalam satu transaksi — tidak mungkin ada job selesai yang bukti terimanya
-        gagal tersimpan."""
-        if not payload.penerima_nama.strip():
-            raise ValidationError("Nama penerima wajib diisi")
+    # ── Foto per slot (FR-PHOTO) ────────────────────────────────────────────
 
-        signature_path: str | None = None
-        if payload.signature_data_url:
-            match = _SIGNATURE_RE.match(payload.signature_data_url)
-            if not match:
-                raise ValidationError("Format tanda tangan tidak dikenal")
-            data = base64.b64decode(match.group(1))
-            if len(data) > MAX_PHOTO_BYTES:
-                raise ValidationError("Tanda tangan terlalu besar")
-            signature_path = f"{job_id}/pod/{int(time.time() * 1000)}.png"
-            await upload_object(self._db, self._bucket, signature_path, data, "image/png")
+    async def upload_slot_photo(
+        self,
+        *,
+        job_id: str,
+        stage: PhotoStage,
+        slot: PhotoSlot,
+        data: bytes,
+        content_type: str | None,
+        taken_at: str | None,
+        lat: float | None,
+        lng: float | None,
+    ) -> JobPhoto:
+        if (stage == "serah_terima") != (slot == "serah_terima"):
+            raise ValidationError("Slot tidak cocok dengan tahap foto")
+
+        ext = validate_photo(content_type, len(data))
+        quality = assess_photo_safely(data, slot=slot)
+        path = f"{job_id}/{stage}/{slot}-{unique_object_name(ext)}"
+        await upload_object(self._db, self._bucket, path, data, content_type or "image/jpeg")
 
         try:
-            await self._db.rpc(
-                "driver_submit_pod",
+            res = await self._db.rpc(
+                "driver_register_job_photo",
                 {
                     "p_job_id": job_id,
-                    "p_nama": payload.penerima_nama.strip(),
-                    "p_jabatan": clean_text(payload.penerima_jabatan),
-                    "p_signature_path": signature_path,
-                    "p_catatan": clean_text(payload.catatan),
+                    "p_stage": stage,
+                    "p_slot": slot,
+                    "p_file_path": path,
+                    "p_file_size": len(data),
+                    "p_sharpness": quality.sharpness if quality else None,
+                    "p_kualitas_rendah": quality.kualitas_rendah if quality else False,
+                    "p_taken_at": taken_at,
+                    "p_lat": lat,
+                    "p_lng": lng,
                 },
             ).execute()
         except Exception:
-            # Job tidak jadi ditutup — tanda tangannya jangan menggantung di bucket.
-            if signature_path:
-                await remove_object_quietly(self._db, self._bucket, signature_path)
-            raise
-
-    async def upload_photo(
-        self, *, job_id: str, photo_type: PhotoType, data: bytes, content_type: str | None
-    ) -> JobPhoto:
-        ext = validate_photo(content_type, len(data))
-        path = f"{job_id}/{photo_type}/{unique_object_name(ext)}"
-        await upload_object(self._db, self._bucket, path, data, content_type or "image/jpeg")
-        try:
-            res = await (
-                self._db.table("job_photos").insert({"job_id": job_id, "type": photo_type, "file_path": path}).execute()
-            )
-        except Exception:
+            # Objek sudah naik tapi barisnya ditolak — jangan tinggalkan file yatim.
             await remove_object_quietly(self._db, self._bucket, path)
             raise
-        row = rows(res)[0]
+
+        row = first(res.data) or {}
+        # Foto lama pada slot yang sama dihapus dari bucket lewat service role:
+        # driver tidak punya hak hapus objek, dan itu memang urusan sistem.
+        replaced = row.get("replaced_path")
+        if replaced:
+            async with get_client_factory().admin() as admin:
+                await remove_object_quietly(admin, self._bucket, replaced)
+
         return JobPhoto(
-            id=row["id"],
+            id=str(row.get("id")),
             job_id=job_id,
-            type=photo_type,
+            type=stage,
+            stage=stage,
+            slot=slot,
             file_path=path,
             file_url=storage_public_url(self._bucket, path),
-            uploaded_at=row["uploaded_at"],
+            uploaded_at=taken_at or "",
+            sharpness_score=quality.sharpness if quality else None,
+            kualitas_rendah=quality.kualitas_rendah if quality else False,
+            taken_at=taken_at,
+            lat=lat,
+            lng=lng,
         )
+
+    # ── Uang jalan (FR-UJ) ──────────────────────────────────────────────────
+
+    async def uang_jalan(self, job_id: str) -> JobUangJalan:
+        # Bukti transfer tidak dibagikan ke driver — hanya nominal & status.
+        return await UangJalanService(self._db).job_summary(job_id, with_bukti_url=False)
+
+    async def request_uang_jalan(self, job_id: str, *, nominal: int, catatan: str | None) -> UangJalanRequest:
+        return await UangJalanService(self._db).driver_request(job_id, nominal=nominal, catatan=catatan)
+
+    # ── Notifikasi ──────────────────────────────────────────────────────────
+
+    async def notifications(self, *, limit: int = 50) -> list[DriverNotification]:
+        res = await (
+            self._db.table("notifications")
+            .select("id, kind, title, body, href, job_id, read_at, created_at")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return [DriverNotification(**r) for r in rows(res)]
+
+    async def mark_read(self, ids: list[str]) -> None:
+        from app.core.timeutil import iso_utc
+
+        q = self._db.table("notifications").update({"read_at": iso_utc()}).is_("read_at", "null")
+        if ids:
+            q = q.in_("id", ids)
+        await q.execute()

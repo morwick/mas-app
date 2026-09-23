@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
+from app.core.paging import Page, PageParams, page_params
 from app.core.auth import user_client
 from app.modules.auth.schemas import OkResponse
 from app.modules.incidents.schemas import Incident
@@ -28,8 +29,26 @@ def get_service(client: AsyncClient = Depends(user_client)) -> UnitService:
     return UnitService(client)
 
 
+@router.get("/page", response_model=Page[Unit])
+async def list_units_page(
+    include_inactive: bool = Query(False),
+    q: str | None = Query(None, description="Cari kode unit atau nomor polisi"),
+    jenis_unit_id: str | None = Query(None),
+    status: str | None = Query(None),
+    params: PageParams = Depends(page_params),
+    svc: UnitService = Depends(get_service),
+) -> Page[Unit]:
+    return await svc.list_page(
+        params=params, include_inactive=include_inactive, q=q,
+        jenis_unit_id=jenis_unit_id, status=status,
+    )
+
+
 @router.get("", response_model=list[Unit])
-async def list_units(include_inactive: bool = Query(False), svc: UnitService = Depends(get_service)) -> list[Unit]:
+async def list_units(
+    include_inactive: bool = Query(False), svc: UnitService = Depends(get_service)
+) -> list[Unit]:
+    """Tanpa potongan — untuk dropdown pemilihan unit di form."""
     return await svc.list_all(include_inactive=include_inactive)
 
 

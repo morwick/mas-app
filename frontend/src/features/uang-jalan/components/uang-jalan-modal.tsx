@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import {
+  createPencairan,
   createUangJalan,
   updateUangJalan
 } from "@/features/uang-jalan/api";
 import { formatRupiah } from "@/lib/utils";
-import type { SumberDana, UangJalan, UangJalanRingkasan } from "@/types";
+import type { SumberDana, UangJalan, UangJalanRequest, UangJalanRingkasan } from "@/types";
 
 /**
  * Keperluan yang sudah biasa dipakai admin di komentar sel Excel. Ditawarkan
@@ -25,6 +26,8 @@ interface Props {
   ringkasan: UangJalanRingkasan;
   /** Diisi kalau sedang mengubah baris yang sudah ada. */
   existing?: UangJalan | null;
+  /** Diisi kalau pencairan ini memenuhi pengajuan driver (nominal terisi otomatis). */
+  request?: UangJalanRequest | null;
   onSaved: () => void;
 }
 
@@ -39,6 +42,7 @@ export function UangJalanModal({
   sumberDana,
   ringkasan,
   existing,
+  request,
   onSaved
 }: Props) {
   const toast = useToast();
@@ -48,6 +52,7 @@ export function UangJalanModal({
   const [sumberId, setSumberId] = useState("");
   const [keperluan, setKeperluan] = useState("");
   const [catatan, setCatatan] = useState("");
+  const [bukti, setBukti] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -62,14 +67,15 @@ export function UangJalanModal({
     } else {
       setJenis("pencairan");
       setTanggal(hariIni());
-      setJumlah("");
+      setJumlah(request ? String(Math.round(request.nominal)) : "");
+      setBukti(null);
       // Kas yang paling sering dipakai ada di urutan pertama, jadi admin
       // biasanya tidak perlu menyentuh pilihan ini sama sekali.
       setSumberId(sumberDana[0]?.id ?? "");
-      setKeperluan("");
+      setKeperluan(request?.catatan ?? "");
       setCatatan("");
     }
-  }, [open, existing, sumberDana]);
+  }, [open, existing, request, sumberDana]);
 
   const angka = Number(jumlah.replace(/[^\d]/g, "")) || 0;
   const pencairan = jenis === "pencairan";
@@ -81,6 +87,14 @@ export function UangJalanModal({
   async function submit() {
     if (angka <= 0) {
       toast.error("Jumlah harus diisi");
+      return;
+    }
+    if (pencairan && !existing && !bukti) {
+      toast.error("Foto bukti transfer wajib dilampirkan");
+      return;
+    }
+    if (pencairan && !sumberId) {
+      toast.error("Pilih kas sumber dana");
       return;
     }
     setSubmitting(true);
@@ -95,7 +109,12 @@ export function UangJalanModal({
     };
     const res = existing
       ? await updateUangJalan(existing.id, input)
-      : await createUangJalan(input);
+      : pencairan
+        ? await createPencairan(
+            { ...input, sumber_dana_id: sumberId, request_id: request?.id ?? null },
+            bukti as File
+          )
+        : await createUangJalan(input);
     setSubmitting(false);
 
     if (!res.ok) {
@@ -117,10 +136,12 @@ export function UangJalanModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={existing ? "Ubah catatan uang jalan" : "Catat uang jalan"}
+      title={
+        existing ? "Ubah catatan uang jalan" : request ? "Cairkan pengajuan driver" : "Catat uang jalan"
+      }
       description={
         pencairan
-          ? "Uang yang benar-benar keluar dari kas ke supir."
+          ? "Uang yang benar-benar keluar dari kas ke supir — wajib dengan foto bukti transfer."
           : "Kesepakatan menaikkan pagu — belum ada uang yang berpindah."
       }
       footer={
@@ -140,6 +161,7 @@ export function UangJalanModal({
             <button
               key={j}
               type="button"
+              disabled={Boolean(request) && j !== "pencairan"}
               onClick={() => setJenis(j)}
               className="btn btn-sm"
               style={{
@@ -238,6 +260,26 @@ export function UangJalanModal({
           </>
         )}
       </Field>
+
+      {pencairan && !existing && (
+        <Field
+          label="Foto bukti transfer"
+          required
+          hint="Setelah tersimpan, kunci perjalanan driver terbuka dan driver dapat notifikasi."
+        >
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setBukti(e.target.files?.[0] ?? null)}
+            className="text-[13px]"
+          />
+          {bukti && (
+            <div className="caption" style={{ marginTop: 4 }}>
+              {bukti.name}
+            </div>
+          )}
+        </Field>
+      )}
 
       <Field label="Catatan (opsional)">
         <Textarea

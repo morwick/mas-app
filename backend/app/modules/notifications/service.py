@@ -9,6 +9,7 @@ disimpan per browser di frontend.
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
 from typing import Any, Literal
 
@@ -20,6 +21,8 @@ from app.core.timeutil import iso_utc, now_utc, parse_iso
 from app.domain.job_conflicts import ACTIVE_JOB_STATUSES
 from app.domain.service_status import derive_service_status, format_km
 
+log = logging.getLogger(__name__)
+
 NotificationKind = Literal[
     "anomaly",
     "service_overdue",
@@ -30,6 +33,10 @@ NotificationKind = Literal[
     "customer_new",
     "document_expiring",
     "invoice_overdue",
+    # Kejadian (tabel notifications, FR-NOTIF-01)
+    "job_diterima",
+    "uang_jalan_diajukan",
+    "job_menunggu_validasi",
 ]
 Severity = Literal["info", "warning", "danger"]
 
@@ -53,6 +60,10 @@ class AppNotification(BaseModel):
     body: str
     href: str
     created_at: str
+    # Kejadian yang tersimpan di database punya status dibaca per pengguna;
+    # notifikasi keadaan (dihitung) tidak, dan frontend menyimpannya lokal.
+    persistent: bool = False
+    read: bool = False
 
 
 def _fmt_jam(iso: str) -> str:
@@ -82,7 +93,27 @@ class NotificationService:
     def __init__(self, client: AsyncClient) -> None:
         self._db = client
 
-    async def build(self, now: datetime | None = None) -> list[AppNotification]:
+    async def _event_notifications(self, user_id: str | None) -> list[AppNotification]:
+        try:
+            return await load_event_notifications(self._db, user_id=user_id)
+        except Exception as exc:  # noqa: BLE001 — tabel belum ada / gagal → lonceng tetap tampil
+            log.warning("gagal memuat notifikasi kejadian: %s", exc)
+            return []
+
+    async def mark_read(self, user_id: str, notification_ids: list[str]) -> None:
+        """Tandai kejadian sebagai dibaca oleh admin ini (id tanpa awalan 'event-')."""
+        if not notification_ids:
+            return
+        await (
+            self._db.table("notification_reads")
+            .upsert(
+                [{"notification_id": nid, "user_id": user_id} for nid in notification_ids],
+                on_conflict="notification_id,user_id",
+            )
+            .execute()
+        )
+
+    async def build(self, now: datetime | None = None, *, user_id: str | None = None) -> list[AppNotification]:
         now = now or now_utc()
         now_iso = iso_utc(now)
         db = self._db
@@ -134,6 +165,7 @@ class NotificationService:
         )
 
         out: list[AppNotification] = []
+        out.extend(await self._event_notifications(user_id))
         jobs = rows(jobs_res)
 
         # ── Job belum dikonfirmasi driver ────────────────────────────────────
@@ -158,7 +190,7 @@ class NotificationService:
         # ── Job yang mestinya sudah jalan ────────────────────────────────────
         anomaly_count = 0
         for j in jobs:
-            if j.get("status") != "menunggu_pickup" or parse_iso(j["etd"]) >= now:
+            if j.get("status") not in ("ditugaskan", "diterima") or parse_iso(j["etd"]) >= now:
                 continue
             if any(n.id == f"job-belum-konfirmasi-{j['id']}" for n in out):
                 continue
@@ -168,7 +200,7 @@ class NotificationService:
                     kind="anomaly",
                     severity="danger",
                     title="Job belum berangkat",
-                    body=f"{j['job_number']} masih menunggu pickup, ETD {_fmt_jam(j['etd'])}",
+                    body=f"{j['job_number']} belum berangkat, ETD {_fmt_jam(j['etd'])}",
                     href=f"/jobs/{j['id']}",
                     created_at=j["etd"],
                 )
@@ -350,6 +382,43 @@ class NotificationService:
         # Paling mendesak dulu, lalu yang paling baru.
         out.sort(key=lambda n: (_SEVERITY_RANK[n.severity], -_sort_ts(n.created_at)))
         return out
+
+
+_EVENT_SEVERITY: dict[str, Severity] = {
+    "job_diterima": "info",
+    "uang_jalan_diajukan": "warning",
+    "job_menunggu_validasi": "warning",
+}
+
+
+async def load_event_notifications(db: AsyncClient, *, user_id: str | None, limit: int = 30) -> list[AppNotification]:
+    """Kejadian dari tabel `notifications` (dibuat trigger DB), dengan status dibaca per admin."""
+    res = await (
+        db.table("notifications")
+        .select("id, kind, title, body, href, job_id, created_at, notification_reads(user_id)")
+        .eq("recipient_type", "admin")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    out: list[AppNotification] = []
+    for r in rows(res):
+        kind = r["kind"] if r["kind"] in _EVENT_SEVERITY else "anomaly"
+        reads = r.get("notification_reads") or []
+        out.append(
+            AppNotification(
+                id=f"event-{r['id']}",
+                kind=kind,  # type: ignore[arg-type]
+                severity=_EVENT_SEVERITY.get(r["kind"], "info"),
+                title=r["title"],
+                body=r["body"],
+                href=r.get("href") or "/dashboard",
+                created_at=r["created_at"],
+                persistent=True,
+                read=any(x.get("user_id") == user_id for x in reads) if user_id else False,
+            )
+        )
+    return out
 
 
 def _sort_ts(value: str) -> float:

@@ -23,6 +23,7 @@ from app.modules.maintenance.router import router as maintenance_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.quotations.router import router as quotations_router
 from app.modules.reports.router import router as reports_router
+from app.modules.search.router import router as search_router
 from app.modules.tracking.router import router as tracking_router
 from app.modules.uang_jalan.router import router as uang_jalan_router
 from app.modules.units.router import router as units_router
@@ -48,6 +49,7 @@ def build_api_router() -> APIRouter:
         uang_jalan_router,
         invoices_router,
         reports_router,
+        search_router,
         notifications_router,
         dashboard_router,
         driver_portal_router,

@@ -4,7 +4,7 @@
  * `fetch` global supaya tidak menyentuh backend.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, type RouteObject } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
 import { adminSession } from "@/lib/auth/session";
@@ -62,12 +62,12 @@ function mockApi(handlers: Record<string, unknown>) {
   return fetchMock;
 }
 
-const owner = {
+const superadmin = {
   id: "u1",
-  email: "owner@mas.id",
+  email: "superadmin@mas.id",
   nama: "Rika Sari",
   initials: "RS",
-  role: "owner" as const,
+  role: "superadmin" as const,
   allowed_jenis_unit_ids: null
 };
 
@@ -116,17 +116,17 @@ describe("guard", () => {
 });
 
 describe("area admin", () => {
-  function loginAsOwner() {
+  function loginAsSuperadmin() {
     adminSession.set({
       access_token: "jwt",
       refresh_token: "r",
       expires_at: Math.floor(Date.now() / 1000) + 3600,
-      user: owner
+      user: superadmin
     });
   }
 
   it("dashboard dengan sidebar & lonceng", async () => {
-    loginAsOwner();
+    loginAsSuperadmin();
     const fetchMock = mockApi({
       "/layout/counts": { units: 3, jobs_active: 1, drivers_available: 2 },
       "/notifications": [],
@@ -150,7 +150,21 @@ describe("area admin", () => {
     ];
     renderAt(routes, "/dashboard");
 
-    await waitFor(() => expect(screen.getAllByText("Rika Sari").length).toBeGreaterThan(0));
+    // Identitas, ubah profil, dan keluar semuanya pindah ke menu profil di
+    // top bar — sidebar tidak lagi memuat satu pun di antaranya.
+    // Dua instance memang wajar: satu untuk top bar desktop, satu untuk
+    // header mobile — keduanya ada di DOM dan dipisah oleh CSS.
+    const profileBtns = await waitFor(() => screen.getAllByLabelText("Menu profil"));
+    expect(profileBtns).toHaveLength(2);
+    expect(profileBtns[0].textContent).toBe("RS");
+    expect(screen.queryByText("Keluar")).toBeNull();
+    expect(screen.queryByText("Rika Sari")).toBeNull();
+
+    fireEvent.click(profileBtns[0]);
+    expect(screen.getByText("Rika Sari")).toBeTruthy();
+    expect(screen.getByText("Super Administrator")).toBeTruthy();
+    expect(screen.getByText("Ubah profil")).toBeTruthy();
+    expect(screen.getByText("Keluar")).toBeTruthy();
     await waitFor(() =>
       expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/dashboard"))).toBe(true)
     );
@@ -160,7 +174,7 @@ describe("area admin", () => {
   });
 
   it("daftar customer", async () => {
-    loginAsOwner();
+    loginAsSuperadmin();
     mockApi({
       "/customers": [
         {

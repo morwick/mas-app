@@ -17,9 +17,9 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
-export function RequireOwner() {
-  const { isOwner } = useAuth();
-  if (!isOwner) return <Navigate to="/settings" replace />;
+export function RequireSuperadmin() {
+  const { isSuperadmin } = useAuth();
+  if (!isSuperadmin) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
 

@@ -4,12 +4,20 @@
 export type UnitStatus = "standby" | "bertugas" | "perbaikan";
 
 export type JobStatus =
-  | "menunggu_pickup"
+  | "menunggu_pickup" // nilai lama, tidak dipakai lagi setelah migrasi v2
+  | "ditugaskan"
+  | "diterima"
   | "loading"
   | "dalam_perjalanan"
   | "unloading"
+  | "serah_terima_pool"
+  | "menunggu_validasi"
   | "selesai"
   | "cancelled";
+
+export type PhotoStage = "loading" | "unloading" | "serah_terima";
+export type PhotoSlot = "depan" | "belakang" | "kanan" | "kiri" | "surat_timbang" | "serah_terima";
+export type DriverStatus = "stand_by" | "in_job";
 
 export interface JenisUnit {
   id: string;
@@ -60,6 +68,10 @@ export interface Driver {
   created_at: string;
   /** Kapan PIN portal driver terakhir di-set. Null = driver belum bisa login. */
   pin_updated_at?: string | null;
+  /** BR-01: diturunkan dari job aktif. */
+  status: DriverStatus;
+  active_job_id?: string | null;
+  active_job_number?: string | null;
 }
 
 export interface Customer {
@@ -86,10 +98,18 @@ export interface Customer {
 export interface JobPhoto {
   id: string;
   job_id: string;
-  type: "loading" | "unloading";
+  type: PhotoStage;
+  stage: PhotoStage;
+  /** null untuk foto lama (sebelum v2) tanpa slot. */
+  slot: PhotoSlot | null;
   file_path: string;
   file_url: string;
   uploaded_at: string;
+  sharpness_score?: number | null;
+  kualitas_rendah: boolean;
+  taken_at?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 /** Job seperti dilihat portal driver — bentuknya sama, unit_kode/no_polisi terisi. */
@@ -155,6 +175,11 @@ export interface Job {
   pod_at?: string | null;
   created_at: string;
   completed_at?: string | null;
+  /** Validasi admin (Fase 7). */
+  validated_at?: string | null;
+  validated_by_nama?: string | null;
+  validation_note?: string | null;
+  eta_is_estimated?: boolean;
   /** Penawaran asal job ini. Null untuk job yang dibuat langsung tanpa penawaran. */
   quotation_id?: string | null;
   quotation_number?: string | null;
@@ -207,11 +232,15 @@ export const incidentStatusLabel: Record<IncidentStatus, string> = {
   resolved: "Selesai"
 };
 
+/** Urutan tahap job v2 (PRD §6.1) — dipakai stepper internal. */
 export const jobStatusOrder: Array<{ key: JobStatus; label: string }> = [
-  { key: "menunggu_pickup", label: "Menunggu pickup" },
+  { key: "ditugaskan", label: "Ditugaskan" },
+  { key: "diterima", label: "Diterima driver" },
   { key: "loading", label: "Loading" },
   { key: "dalam_perjalanan", label: "Dalam perjalanan" },
   { key: "unloading", label: "Unloading" },
+  { key: "serah_terima_pool", label: "Serah terima pool" },
+  { key: "menunggu_validasi", label: "Menunggu validasi" },
   { key: "selesai", label: "Selesai" }
 ];
 
@@ -391,6 +420,37 @@ export interface UangJalan {
   catatan?: string | null;
   created_by_nama?: string | null;
   created_at: string;
+  /** Bukti transfer (bucket privat) — URL bertanda tangan, berlaku sementara. */
+  bukti_transfer_path?: string | null;
+  bukti_transfer_url?: string | null;
+  request_id?: string | null;
+}
+
+export type UangJalanRequestStatus = "diajukan" | "dicairkan" | "ditolak";
+
+/** Pengajuan uang jalan oleh driver (BR-05). */
+export interface UangJalanRequest {
+  id: string;
+  job_id: string;
+  job_number?: string | null;
+  driver_id: string;
+  driver_nama?: string | null;
+  nominal: number;
+  catatan?: string | null;
+  status: UangJalanRequestStatus;
+  alasan_tolak?: string | null;
+  uang_jalan_id?: string | null;
+  requested_at: string;
+  decided_at?: string | null;
+}
+
+/** Posisi uang jalan sebuah job, dihitung database. */
+export interface UangJalanPosisi {
+  pagu: number;
+  cair: number;
+  sisa: number;
+  ada_bukti: boolean;
+  pending_request: boolean;
 }
 
 /**
@@ -564,7 +624,7 @@ export interface JobProfitabilityRow {
 // Pengguna & sesi
 // ---------------------------------------------------------------------------
 
-export type UserRole = "owner" | "operator";
+export type UserRole = "superadmin" | "operator";
 
 export interface CurrentUser {
   id: string;
@@ -573,9 +633,9 @@ export interface CurrentUser {
   initials: string;
   role: UserRole;
   /**
-   * owner: selalu null (akses semua).
+   * superadmin: selalu null (akses semua).
    * operator: daftar jenis_unit_id yang boleh diakses; null/kosong = belum
-   * diberi scope oleh owner.
+   * diberi scope oleh superadmin.
    */
   allowed_jenis_unit_ids: string[] | null;
 }
@@ -643,6 +703,8 @@ export interface UangJalanJobRow {
   customer_nama: string | null;
   ringkasan: UangJalanRingkasan;
   pencairan_terakhir: string | null;
+  /** Pengajuan driver yang belum dicairkan. */
+  pengajuan_menunggu: number;
 }
 
 export interface LocationEntry {

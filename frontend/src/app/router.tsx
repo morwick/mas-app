@@ -13,7 +13,7 @@ import {
   RedirectIfDriverAuthed,
   RequireAuth,
   RequireDriver,
-  RequireOwner
+  RequireSuperadmin
 } from "./guards";
 import { NotFoundPage } from "./NotFoundPage";
 
@@ -61,7 +61,6 @@ import {
 import {
   JenisUnitPage,
   ProfilePage,
-  SettingsIndexPage,
   UsersPage
 } from "@/features/settings/pages/SettingsPages";
 import {
@@ -136,11 +135,17 @@ export const router = createBrowserRouter([
           { path: "/invoices/:id", element: <InvoiceDetailPage /> },
           { path: "/invoices/:id/edit", element: <EditInvoicePage /> },
 
-          { path: "/settings", element: <SettingsIndexPage /> },
-          { path: "/settings/profile", element: <ProfilePage /> },
+          { path: "/profil", element: <ProfilePage /> },
+          // Menu "Pengaturan" sudah dihapus; alamat lamanya tetap hidup.
+          { path: "/settings", element: <Navigate to="/profil" replace /> },
+          { path: "/settings/profile", element: <Navigate to="/profil" replace /> },
+          {
+            path: "/settings/users",
+            element: <Navigate to="/pengguna" replace />
+          },
 
           {
-            element: <RequireOwner />,
+            element: <RequireSuperadmin />,
             children: [
               { path: "/piutang", element: <PiutangPage /> },
               { path: "/services", element: <ServicesPage /> },
@@ -148,8 +153,13 @@ export const router = createBrowserRouter([
               { path: "/reports/utilisasi", element: <UtilisasiReportPage /> },
               { path: "/reports/laba", element: <LabaReportPage /> },
               { path: "/reports/customers", element: <CustomersReportPage /> },
-              { path: "/settings/users", element: <UsersPage /> },
-              { path: "/settings/jenis-unit", element: <JenisUnitPage /> }
+              { path: "/pengguna", element: <UsersPage /> },
+              { path: "/jenis-unit", element: <JenisUnitPage /> },
+              // Alamat lama sebelum Jenis Unit pindah ke menu Master.
+              {
+                path: "/settings/jenis-unit",
+                element: <Navigate to="/jenis-unit" replace />
+              }
             ]
           }
         ]

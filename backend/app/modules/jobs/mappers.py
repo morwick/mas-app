@@ -9,31 +9,37 @@ from app.core.pg import first, num_or_none
 from app.core.supabase import storage_public_url
 from app.modules.jobs.schemas import Job, JobPhoto
 
-JOB_SELECT = """
+_PHOTO_COLUMNS = "id, type, stage, slot, file_path, uploaded_at, sharpness_score, kualitas_rendah, taken_at, lat, lng"
+
+_BASE_COLUMNS = """
   id, job_number, share_token, customer_id, pic_nama, pic_no_hp,
   alat_diangkut, asal, tujuan,
   asal_lat, asal_lng, tujuan_lat, tujuan_lng,
   route_polyline, route_distance_km, route_duration_min,
   unit_id, driver_id, etd, eta,
-  status, catatan, cancelled_reason, accepted_at,
+  status, cancelled_reason, accepted_at, eta_is_estimated,
   pod_penerima_nama, pod_penerima_jabatan, pod_signature_path,
   pod_catatan, pod_at,
   created_at, completed_at,
-  uang_jalan_pagu,
+  customer:customers(nama_perusahaan)"""
+
+# Kolom internal: tidak boleh sampai ke pelanggan.
+_INTERNAL_COLUMNS = """,
+  catatan, uang_jalan_pagu,
+  validated_at, validation_note,
+  validator:profiles!jobs_validated_by_fkey(nama),
   quotation_id,
-  quotation:quotations(quote_number),
-  customer:customers(nama_perusahaan),
-  photos:job_photos(id, type, file_path, uploaded_at)
-"""
+  quotation:quotations(quote_number)"""
 
-# Select untuk akses publik lewat share token. Sengaja tanpa uang_jalan_pagu:
-# angka internal itu tidak boleh terkirim ke halaman pelanggan.
-PUBLIC_JOB_SELECT = JOB_SELECT.replace("  uang_jalan_pagu,\n", "")
+JOB_SELECT = f"{_BASE_COLUMNS}{_INTERNAL_COLUMNS},\n  photos:job_photos({_PHOTO_COLUMNS})"
 
-# Portal driver: tambah identitas unit, tanpa uang jalan dan penawaran.
+# Akses publik lewat share token: tanpa catatan (BR-08), uang jalan, validasi, penawaran.
+PUBLIC_JOB_SELECT = f"{_BASE_COLUMNS},\n  photos:job_photos({_PHOTO_COLUMNS})"
+
+# Portal driver: seperti publik + catatan validasi (alasan job dikembalikan) + identitas unit.
 DRIVER_JOB_SELECT = (
-    PUBLIC_JOB_SELECT.replace("  quotation_id,\n  quotation:quotations(quote_number),\n", "")
-    + ",\n  unit:units(kode_unit, no_polisi)"
+    f"{_BASE_COLUMNS},\n  validated_at, validation_note,\n"
+    f"  photos:job_photos({_PHOTO_COLUMNS}),\n  unit:units(kode_unit, no_polisi)"
 )
 
 
@@ -47,15 +53,23 @@ def to_job(row: dict[str, Any]) -> Job:
             id=p["id"],
             job_id=row["id"],
             type=p["type"],
+            stage=p.get("stage") or p["type"],
+            slot=p.get("slot"),
             file_path=p["file_path"],
             file_url=_photo_url(p["file_path"]),
             uploaded_at=p["uploaded_at"],
+            sharpness_score=num_or_none(p.get("sharpness_score")),
+            kualitas_rendah=bool(p.get("kualitas_rendah", False)),
+            taken_at=p.get("taken_at"),
+            lat=num_or_none(p.get("lat")),
+            lng=num_or_none(p.get("lng")),
         )
         for p in (row.get("photos") or [])
     ]
     quotation = first(row.get("quotation"))
     customer = first(row.get("customer"))
     unit = first(row.get("unit"))
+    validator = first(row.get("validator"))
     signature_path = row.get("pod_signature_path")
 
     return Job(
@@ -76,7 +90,7 @@ def to_job(row: dict[str, Any]) -> Job:
         route_polyline=row.get("route_polyline"),
         route_distance_km=num_or_none(row.get("route_distance_km")),
         route_duration_min=num_or_none(row.get("route_duration_min")),
-        uang_jalan_pagu=(num_or_none(row.get("uang_jalan_pagu")) or 0.0 if "uang_jalan_pagu" in row else None),
+        uang_jalan_pagu=(num_or_none(row.get("uang_jalan_pagu")) or 0.0) if "uang_jalan_pagu" in row else None,
         unit_id=row["unit_id"],
         driver_id=row["driver_id"],
         etd=row["etd"],
@@ -93,6 +107,10 @@ def to_job(row: dict[str, Any]) -> Job:
         pod_at=row.get("pod_at"),
         created_at=row["created_at"],
         completed_at=row.get("completed_at"),
+        validated_at=row.get("validated_at"),
+        validated_by_nama=(validator or {}).get("nama"),
+        validation_note=row.get("validation_note"),
+        eta_is_estimated=bool(row.get("eta_is_estimated", False)),
         quotation_id=row.get("quotation_id"),
         quotation_number=(quotation or {}).get("quote_number"),
         photos=photos,

@@ -1,4 +1,4 @@
-"""Pengelolaan pengguna (owner saja): role, scope jenis unit, aktif/nonaktif."""
+"""Pengelolaan pengguna (super administrator saja): role, scope jenis unit, aktif/nonaktif."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from supabase import AsyncClient
 
-from app.core.auth import AuthContext, owner_client, require_owner
+from app.core.auth import AuthContext, superadmin_client, require_superadmin
 from app.core.errors import ValidationError
 from app.core.pg import rows
 from app.modules.auth.schemas import OkResponse
@@ -20,15 +20,15 @@ class UserRow(BaseModel):
     id: str
     email: str
     nama: str
-    role: Literal["owner", "operator"]
+    role: Literal["superadmin", "operator"]
     is_active: bool
     allowed_jenis_unit_ids: list[str] | None
     created_at: str
 
 
 class UpdateRoleRequest(BaseModel):
-    role: Literal["owner", "operator"]
-    # Hanya dipakai kalau role = operator; untuk owner kolom di-set null.
+    role: Literal["superadmin", "operator"]
+    # Hanya dipakai kalau role = operator; untuk superadmin kolom di-set null.
     allowed_jenis_unit_ids: list[str] = Field(default_factory=list)
 
 
@@ -37,7 +37,7 @@ class SetActiveRequest(BaseModel):
 
 
 @router.get("", response_model=list[UserRow])
-async def list_users(client: AsyncClient = Depends(owner_client)) -> list[UserRow]:
+async def list_users(client: AsyncClient = Depends(superadmin_client)) -> list[UserRow]:
     res = await (
         client.table("profiles")
         .select("id, email, nama, role, is_active, allowed_jenis_unit_ids, created_at")
@@ -49,7 +49,7 @@ async def list_users(client: AsyncClient = Depends(owner_client)) -> list[UserRo
             id=r["id"],
             email=r["email"],
             nama=r["nama"],
-            role="operator" if r.get("role") == "operator" else "owner",
+            role="superadmin" if r.get("role") == "superadmin" else "operator",
             is_active=bool(r["is_active"]),
             allowed_jenis_unit_ids=r.get("allowed_jenis_unit_ids"),
             created_at=r["created_at"],
@@ -62,14 +62,14 @@ async def list_users(client: AsyncClient = Depends(owner_client)) -> list[UserRo
 async def update_role(
     user_id: str,
     payload: UpdateRoleRequest,
-    auth: AuthContext = Depends(require_owner),
-    client: AsyncClient = Depends(owner_client),
+    auth: AuthContext = Depends(require_superadmin),
+    client: AsyncClient = Depends(superadmin_client),
 ) -> OkResponse:
     if auth.user.id == user_id:
         raise ValidationError("Anda tidak bisa mengubah role akun sendiri")
     data = (
-        {"role": "owner", "allowed_jenis_unit_ids": None}
-        if payload.role == "owner"
+        {"role": "superadmin", "allowed_jenis_unit_ids": None}
+        if payload.role == "superadmin"
         else {
             "role": "operator",
             "allowed_jenis_unit_ids": sorted(set(payload.allowed_jenis_unit_ids)),
@@ -83,8 +83,8 @@ async def update_role(
 async def set_active(
     user_id: str,
     payload: SetActiveRequest,
-    auth: AuthContext = Depends(require_owner),
-    client: AsyncClient = Depends(owner_client),
+    auth: AuthContext = Depends(require_superadmin),
+    client: AsyncClient = Depends(superadmin_client),
 ) -> OkResponse:
     if auth.user.id == user_id:
         raise ValidationError("Anda tidak bisa menonaktifkan akun sendiri")

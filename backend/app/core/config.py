@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Rahasia untuk endpoint cron (Authorization: Bearer <CRON_SECRET>)
     cron_secret: str = ""
 
+    # Firebase Cloud Messaging — path berkas service account JSON. Kosong = push nonaktif.
+    firebase_credentials_file: str = ""
+
     # URL frontend — dipakai redirect tautan reset password
     app_url: str = "http://localhost:5173"
 
@@ -32,6 +35,7 @@ class Settings(BaseSettings):
     # Bucket storage
     job_photos_bucket: str = "job-photos"
     incident_photos_bucket: str = "incident-photos"
+    bukti_transfer_bucket: str = "bukti-transfer"
 
     environment: str = Field(default="development")
 

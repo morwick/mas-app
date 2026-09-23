@@ -11,6 +11,7 @@ import {
 } from "@/features/settings/api";
 import type { UserRow } from "@/types";
 import type { JenisUnit } from "@/types";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 interface Props {
   users: UserRow[];
@@ -20,7 +21,7 @@ interface Props {
 
 type EditState = {
   user: UserRow;
-  role: "owner" | "operator";
+  role: "superadmin" | "operator";
   selectedIds: Set<string>;
 };
 
@@ -93,6 +94,8 @@ export function UsersView({ users, jenisUnit, currentUserId }: Props) {
     );
   }
 
+  const pg = usePagination(users, { pageSize: 15 });
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
@@ -118,7 +121,7 @@ export function UsersView({ users, jenisUnit, currentUserId }: Props) {
           {users.length} pengguna
         </div>
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {users.map((u) => (
+          {pg.items.map((u) => (
             <UserRowItem
               key={u.id}
               user={u}
@@ -129,6 +132,7 @@ export function UsersView({ users, jenisUnit, currentUserId }: Props) {
             />
           ))}
         </ul>
+        <Pagination state={pg} label="pengguna" attached />
       </div>
 
       {edit && (
@@ -157,12 +161,12 @@ export function UsersView({ users, jenisUnit, currentUserId }: Props) {
             <Field label="Role" required>
               <div className="grid grid-cols-2 gap-2">
                 <RoleButton
-                  active={edit.role === "owner"}
+                  active={edit.role === "superadmin"}
                   onClick={() =>
-                    setEdit((p) => (p ? { ...p, role: "owner" } : p))
+                    setEdit((p) => (p ? { ...p, role: "superadmin" } : p))
                   }
                   icon={ShieldCheck}
-                  title="Owner"
+                  title="Super Administrator"
                   desc="Akses penuh, kelola pengguna"
                 />
                 <RoleButton
@@ -253,7 +257,7 @@ export function UsersView({ users, jenisUnit, currentUserId }: Props) {
               </Field>
             )}
 
-            {edit.role === "owner" && (
+            {edit.role === "superadmin" && (
               <div
                 style={{
                   padding: 12,
@@ -264,7 +268,7 @@ export function UsersView({ users, jenisUnit, currentUserId }: Props) {
                   lineHeight: 1.45
                 }}
               >
-                <strong>Owner</strong> punya akses penuh ke seluruh data dan
+                <strong>Super Administrator</strong> punya akses penuh ke seluruh data dan
                 bisa kelola pengguna lain. Tidak ada scope jenis unit.
               </div>
             )}
@@ -319,7 +323,7 @@ function UserRowItem({
       : [];
 
   const roleColor =
-    user.role === "owner"
+    user.role === "superadmin"
       ? { bg: "var(--brand-primary-light)", fg: "var(--brand-primary-dark)" }
       : { bg: "#fff4e0", fg: "#8a5a00" };
 
@@ -393,7 +397,7 @@ function UserRowItem({
               textTransform: "uppercase"
             }}
           >
-            {user.role === "owner" ? "Owner" : "Operator"}
+            {user.role === "superadmin" ? "Super Administrator" : "Operator"}
           </span>
           {!user.is_active && (
             <span

@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
 import type { InvoiceListRow, PiutangSummaryRow } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 interface Props {
   summary: PiutangSummaryRow[];
@@ -50,6 +51,8 @@ export function PiutangView({ summary, outstanding }: Props) {
       />
     );
   }
+
+  const pg = usePagination(filteredInvoices, { resetKey: `${q}` });
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
@@ -144,7 +147,7 @@ export function PiutangView({ summary, outstanding }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filteredInvoices.map((row) => (
+              {pg.items.map((row) => (
                 <tr key={row.id} className="row-link">
                   <td>
                     <Link
@@ -200,6 +203,7 @@ export function PiutangView({ summary, outstanding }: Props) {
             </tbody>
           </table>
         </div>
+        <Pagination state={pg} label="tagihan" attached />
       </div>
     </div>
   );

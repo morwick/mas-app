@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 PHONE_RE = re.compile(r"^(08|\+628)\d{7,12}$")
+
+DriverStatus = Literal["stand_by", "in_job"]
 
 
 class Driver(BaseModel):
@@ -20,6 +23,10 @@ class Driver(BaseModel):
     created_at: str
     # Kapan PIN portal terakhir di-set. None = driver belum bisa login.
     pin_updated_at: str | None = None
+    # BR-01: diturunkan dari job aktif — bukan kolom tersimpan.
+    status: DriverStatus = "stand_by"
+    active_job_id: str | None = None
+    active_job_number: str | None = None
 
 
 class DriverCreate(BaseModel):

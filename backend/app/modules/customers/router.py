@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
+from app.core.paging import Page, PageParams, page_params
 from app.core.auth import user_client
 from app.modules.auth.schemas import OkResponse
 from app.modules.customers.schemas import Customer, CustomerCreate, CustomerUpdate
@@ -15,10 +16,21 @@ def get_service(client: AsyncClient = Depends(user_client)) -> CustomerService:
     return CustomerService(client)
 
 
+@router.get("/page", response_model=Page[Customer])
+async def list_customers_page(
+    include_inactive: bool = Query(False),
+    q: str | None = Query(None, description="Cari nama perusahaan, kota, atau PIC"),
+    params: PageParams = Depends(page_params),
+    svc: CustomerService = Depends(get_service),
+) -> Page[Customer]:
+    return await svc.list_page(params=params, include_inactive=include_inactive, q=q)
+
+
 @router.get("", response_model=list[Customer])
 async def list_customers(
     include_inactive: bool = Query(False), svc: CustomerService = Depends(get_service)
 ) -> list[Customer]:
+    """Tanpa potongan — untuk dropdown customer di form job & penawaran."""
     return await svc.list_all(include_inactive=include_inactive)
 
 

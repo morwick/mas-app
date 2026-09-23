@@ -1,0 +1,45 @@
+name: mas_driver
+description: "Aplikasi driver PT. Mitra Angkutan Sejati — terima job, uang jalan, foto muat/bongkar, serah terima."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State & navigasi
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.6.2
+
+  # Jaringan & penyimpanan
+  dio: ^5.7.0
+  shared_preferences: ^2.3.3
+  path_provider: ^2.1.5
+
+  # Kamera, gambar, lokasi (FR-PHOTO)
+  image_picker: ^1.1.2
+  image: ^4.3.0
+  geolocator: ^13.0.2
+
+  # Push notification (FR-MOBILE-05)
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.5
+
+  # UI & format
+  intl: ^0.20.1
+  cached_network_image: ^3.4.1
+  url_launcher: ^6.3.1
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png

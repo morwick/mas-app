@@ -12,6 +12,7 @@ import {
   updateJenisUnit
 } from "@/features/settings/api";
 import type { JenisUnit } from "@/types";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
 interface Props {
   list: JenisUnit[];
@@ -54,6 +55,8 @@ export function JenisUnitView({ list }: Props) {
     } else toast.error(res.error);
   }
 
+  const pg = usePagination(list, { pageSize: 15 });
+
   return (
     <div className="flex flex-col gap-4 max-w-[640px]">
       <div className="flex items-end justify-between gap-3">
@@ -72,7 +75,7 @@ export function JenisUnitView({ list }: Props) {
       </div>
       <Card>
         <div className="flex flex-col">
-          {list.map((j, i) => (
+          {pg.items.map((j, i) => (
             <div
               key={j.id}
               className={`flex items-center justify-between gap-3 py-3 ${
@@ -108,6 +111,7 @@ export function JenisUnitView({ list }: Props) {
             </div>
           ))}
         </div>
+        <Pagination state={pg} label="jenis unit" attached />
       </Card>
 
       <Modal

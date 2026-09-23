@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JOB_STATUS_SOLID } from "@/lib/job-status";
 import type { Job, JobStatus, Unit } from "@/types";
 
 interface Props {
@@ -14,14 +15,7 @@ interface Props {
 
 const HARI = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 
-const statusColor: Record<JobStatus, string> = {
-  menunggu_pickup: "#8A8A85",
-  loading: "#2563EB",
-  dalam_perjalanan: "#1C9600",
-  unloading: "#C97900",
-  selesai: "#5F5E5A",
-  cancelled: "#C13838"
-};
+const statusColor: Record<JobStatus, string> = JOB_STATUS_SOLID;
 
 function addDays(iso: string, n: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -278,10 +272,13 @@ export function JadwalView({ units, jobs, weekStart }: Props) {
       >
         {(
           [
-            ["menunggu_pickup", "Menunggu pickup"],
+            ["ditugaskan", "Ditugaskan"],
+            ["diterima", "Diterima driver"],
             ["loading", "Loading"],
             ["dalam_perjalanan", "Dalam perjalanan"],
             ["unloading", "Unloading"],
+            ["serah_terima_pool", "Serah terima pool"],
+            ["menunggu_validasi", "Menunggu validasi"],
             ["selesai", "Selesai"]
           ] as Array<[JobStatus, string]>
         ).map(([k, label]) => (

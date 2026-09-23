@@ -17,16 +17,10 @@ import { AnomalyAlerts } from "@/features/tracking/components/anomaly-alerts";
 import { MapFullscreenButton } from "@/features/tracking/components/map-fullscreen-button";
 import { JobStepper } from "@/features/jobs/components/job-stepper";
 import { formatDateTime } from "@/lib/utils";
+import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from "@/lib/job-status";
 import type { Job, JobStatus, Unit, Driver } from "@/types";
 
-const STATUS_LABEL: Record<JobStatus, string> = {
-  menunggu_pickup: "Menunggu pickup",
-  loading: "Loading",
-  dalam_perjalanan: "Dalam perjalanan",
-  unloading: "Unloading",
-  selesai: "Selesai",
-  cancelled: "Dibatalkan"
-};
+const STATUS_LABEL: Record<JobStatus, string> = JOB_STATUS_LABEL;
 
 interface Props {
   job: Job;
@@ -34,17 +28,7 @@ interface Props {
   driver: Driver | null;
 }
 
-const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
-  menunggu_pickup: { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" },
-  loading: { bg: "#fff4e0", fg: "#8a5a00" },
-  dalam_perjalanan: {
-    bg: "var(--brand-primary-light)",
-    fg: "var(--brand-primary-dark)"
-  },
-  unloading: { bg: "#efeafe", fg: "#4a2bb0" },
-  selesai: { bg: "var(--brand-primary-light)", fg: "var(--brand-primary-dark)" },
-  cancelled: { bg: "#fcebeb", fg: "#791f1f" }
-};
+const STATUS_COLOR: Record<string, { bg: string; fg: string }> = JOB_STATUS_COLOR;
 
 export function AdminTrackingDetailView({ job, unit, driver }: Props) {
   const statusColor = STATUS_COLOR[job.status] ?? {

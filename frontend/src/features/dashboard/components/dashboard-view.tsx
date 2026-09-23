@@ -30,9 +30,18 @@ interface Props {
   units: Unit[];
   counts: { standby: number; bertugas: number; perbaikan: number };
   activeJobs: ActiveJobSummary[];
+  /** Antrean tindakan admin (alur v2): validasi job & pengajuan uang jalan. */
+  jobsMenungguValidasi?: number;
+  uangJalanDiajukan?: number;
 }
 
-export function DashboardView({ units, counts, activeJobs }: Props) {
+export function DashboardView({
+  units,
+  counts,
+  activeJobs,
+  jobsMenungguValidasi = 0,
+  uangJalanDiajukan = 0
+}: Props) {
   const [filter, setFilter] = useState<Filter>("semua");
   const total = counts.standby + counts.bertugas + counts.perbaikan;
 
@@ -91,6 +100,37 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
           }
         />
       </div>
+
+      {(jobsMenungguValidasi > 0 || uangJalanDiajukan > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {jobsMenungguValidasi > 0 && (
+            <Link
+              to="/jobs"
+              className="card card-pad"
+              style={{ borderColor: "#e0c06a", background: "#fffaf0", textDecoration: "none", color: "inherit" }}
+            >
+              <div className="eyebrow">Perlu tindakan</div>
+              <div className="h2" style={{ marginTop: 4 }}>
+                {jobsMenungguValidasi} job menunggu validasi
+              </div>
+              <div className="caption">Driver sudah menyelesaikan orderan — periksa foto & approve.</div>
+            </Link>
+          )}
+          {uangJalanDiajukan > 0 && (
+            <Link
+              to="/uang-jalan"
+              className="card card-pad"
+              style={{ borderColor: "#fed7aa", background: "#fff7ed", textDecoration: "none", color: "inherit" }}
+            >
+              <div className="eyebrow">Perlu tindakan</div>
+              <div className="h2" style={{ marginTop: 4 }}>
+                {uangJalanDiajukan} pengajuan uang jalan
+              </div>
+              <div className="caption">Driver menunggu bukti transfer sebelum bisa melanjutkan.</div>
+            </Link>
+          )}
+        </div>
+      )}
 
       <div className="split-2">
         {/* Left — unit status */}

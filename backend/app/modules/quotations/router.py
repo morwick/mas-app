@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
-from app.core.auth import AuthContext, require_auth, require_owner, user_client
+from app.core.auth import AuthContext, require_auth, require_superadmin, user_client
 from app.modules.auth.schemas import OkResponse
 from app.modules.quotations.schemas import (
     NextNumberResponse,
@@ -76,7 +76,7 @@ async def set_status(
     return OkResponse()
 
 
-@router.delete("/{quotation_id}", response_model=OkResponse, dependencies=[Depends(require_owner)])
+@router.delete("/{quotation_id}", response_model=OkResponse, dependencies=[Depends(require_superadmin)])
 async def delete_quotation(quotation_id: str, svc: QuotationService = Depends(get_service)) -> OkResponse:
     await svc.delete(quotation_id)
     return OkResponse()

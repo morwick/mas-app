@@ -13,11 +13,15 @@ from pydantic import BaseModel
 
 from app.core.timeutil import parse_iso
 
+# Semua status yang belum ditutup — job aktif menahan unit & driver (BR-01).
 ACTIVE_JOB_STATUSES: tuple[str, ...] = (
-    "menunggu_pickup",
+    "ditugaskan",
+    "diterima",
     "loading",
     "dalam_perjalanan",
     "unloading",
+    "serah_terima_pool",
+    "menunggu_validasi",
 )
 
 # ETA fallback bila job tidak mengisi ETA.

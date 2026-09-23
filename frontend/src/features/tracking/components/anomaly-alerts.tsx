@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, WifiOff, MapPin } from "lucide-react";
 import { publicLocation } from "@/features/tracking/api";
+import type { JobStatus } from "@/types";
 
 /**
  * Banner otomatis di atas halaman detail Pantau yang flag anomali:
@@ -25,7 +26,7 @@ const EARTH_RADIUS_KM = 6371;
 
 interface Props {
   jobToken: string;
-  jobStatus: "menunggu_pickup" | "loading" | "dalam_perjalanan" | "unloading" | "selesai" | "cancelled";
+  jobStatus: JobStatus;
 }
 
 function toRad(d: number): number {

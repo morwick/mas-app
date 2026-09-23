@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
-import { Info, Plus, Sparkles, Truck } from "lucide-react";
-import { Input, Select, Textarea, Field } from "@/components/ui/input";
+import { Info, Plus, Sparkles, TriangleAlert, Truck } from "lucide-react";
+import { Input, Textarea, Field } from "@/components/ui/input";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { NewCustomerInline } from "@/features/jobs/components/new-customer-inline";
@@ -19,6 +21,7 @@ import {
   findJobConflicts,
   type ConflictCheckResult
 } from "@/lib/job-conflicts";
+import { minEtdValue, validateSchedule } from "@/lib/job-schedule";
 import type { Customer, Driver, Job, Unit } from "@/types";
 
 /**
@@ -106,6 +109,8 @@ export function NewJobView({
     driver_id: "",
     etd: "",
     eta: "",
+    // BR-04: uang jalan sudah diketahui sejak awal — wajib.
+    uang_jalan_pagu: "",
     catatan: prefill?.catatan ?? ""
   });
   const [error, setError] = useState<Record<string, string>>({});
@@ -176,6 +181,24 @@ export function NewJobView({
     }
   }
 
+  /**
+   * PIC job mengikuti customer yang dipilih: begitu customer ganti, nama & no HP
+   * PIC diisi ulang dari data master. Tetap bisa ditimpa manual — PIC di lapangan
+   * sering berbeda dengan PIC yang tercatat di master customer.
+   */
+  function onCustomerChange(customerId: string) {
+    if (customerId === form.customer_id) return;
+    const customer = localCustomers.find((c) => c.id === customerId);
+    setForm((f) => ({
+      ...f,
+      customer_id: customerId,
+      pic_nama: customer?.pic_nama ?? "",
+      pic_no_hp: customer?.pic_no_hp ?? ""
+    }));
+    // Nilai baru datang tanpa user menyentuh field-nya; error lama jadi basi.
+    setError(({ customer_id: _c, pic_nama: _n, pic_no_hp: _h, ...rest }) => rest);
+  }
+
   function onUnitChange(unitId: string) {
     const unit = standbyUnits.find((u) => u.id === unitId);
     setForm((f) => {
@@ -185,11 +208,58 @@ export function NewJobView({
     });
   }
 
+  // Batas bawah picker ETD — dihitung sekali saat form dibuka supaya tidak
+  // berubah-ubah di tengah pengisian.
+  const minEtd = useMemo(() => minEtdValue(), []);
+
   const selectedUnit = standbyUnits.find((u) => u.id === form.unit_id);
+  // Muncul begitu dropdown unit diganti ke unit tanpa GPS — konsekuensinya
+  // ditanggung customer, jadi admin perlu tahu sebelum menyimpan.
+  const unitWithoutGps =
+    selectedUnit && !selectedUnit.imei_gps ? selectedUnit : null;
   const driverChangedFromDefault =
     !!selectedUnit?.default_driver_id &&
     !!form.driver_id &&
     form.driver_id !== selectedUnit.default_driver_id;
+
+  const customerOptions = useMemo<ComboboxOption[]>(
+    () =>
+      localCustomers.map((c) => ({
+        value: c.id,
+        label: c.nama_perusahaan,
+        // Kota & PIC ikut jadi kata kunci pencarian, bukan sekadar hiasan.
+        hint: [c.kota, c.pic_nama].filter(Boolean).join(" · ") || undefined
+      })),
+    [localCustomers]
+  );
+
+  const unitOptions = useMemo<ComboboxOption[]>(
+    () =>
+      standbyUnits.map((u) => ({
+        value: u.id,
+        label: `${u.kode_unit} — ${u.jenis_unit_nama}`,
+        hint: u.no_polisi
+      })),
+    [standbyUnits]
+  );
+
+  const driverOptions = useMemo<ComboboxOption[]>(
+    () =>
+      drivers.map((d) => ({
+        value: d.id,
+        label: d.nama,
+        hint:
+          d.status === "in_job"
+            ? `${d.no_hp} · In Job: ${d.active_job_number ?? "—"}`
+            : d.id === selectedUnit?.default_driver_id
+              ? `${d.no_hp} · driver tetap unit ini`
+              : d.no_hp,
+        // Driver yang sedang jalan tetap ditampilkan (biar jelas kenapa tak bisa
+        // dipilih) tapi tidak bisa diklik — sama seperti <option disabled>.
+        disabled: d.status === "in_job"
+      })),
+    [drivers, selectedUnit]
+  );
 
   const conflicts = useMemo<ConflictCheckResult>(() => {
     if (!form.unit_id || !form.driver_id || !form.etd)
@@ -207,17 +277,24 @@ export function NewJobView({
 
   const valid =
     form.customer_id &&
+    form.pic_nama.trim() &&
+    form.pic_no_hp.trim() &&
     form.alat_diangkut &&
     form.asal &&
     form.tujuan &&
     form.unit_id &&
     form.driver_id &&
-    form.etd;
+    form.etd &&
+    Number(form.uang_jalan_pagu) > 0;
 
   async function doSubmit(allowConflict: boolean) {
     setLoading(true);
     const res = await createJob(
-      { ...form, quotation_id: prefill?.quotation_id ?? null },
+      {
+        ...form,
+        uang_jalan_pagu: Math.round(Number(form.uang_jalan_pagu)),
+        quotation_id: prefill?.quotation_id ?? null
+      },
       { allowConflict }
     );
     setLoading(false);
@@ -238,13 +315,17 @@ export function NewJobView({
     e.preventDefault();
     const errs: Record<string, string> = {};
     if (!form.customer_id) errs.customer_id = "Customer wajib dipilih";
+    if (!form.pic_nama.trim()) errs.pic_nama = "PIC wajib diisi";
     if (!form.alat_diangkut.trim()) errs.alat_diangkut = "Alat wajib diisi";
     if (!form.asal.trim()) errs.asal = "Lokasi asal wajib diisi";
     if (!form.tujuan.trim()) errs.tujuan = "Lokasi tujuan wajib diisi";
     if (!form.unit_id) errs.unit_id = "Unit wajib dipilih";
     if (!form.driver_id) errs.driver_id = "Driver wajib dipilih";
     if (!form.etd) errs.etd = "ETD wajib diisi";
-    if (form.pic_no_hp && !/^(08|\+628)\d{7,12}$/.test(form.pic_no_hp))
+    Object.assign(errs, validateSchedule(form.etd, form.eta));
+    //if (!(Number(form.uang_jalan_pagu) > 0)) errs.uang_jalan_pagu = "Uang jalan wajib diisi";
+    if (!form.pic_no_hp.trim()) errs.pic_no_hp = "No HP PIC wajib diisi";
+    else if (!/^(08|\+628)\d{7,12}$/.test(form.pic_no_hp.trim()))
       errs.pic_no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
     setError(errs);
     if (Object.keys(errs).length > 0) return;
@@ -287,18 +368,16 @@ export function NewJobView({
           <Field label="Customer" required>
             <div className="flex flex-wrap gap-2">
               <div style={{ flex: 1, minWidth: 200 }}>
-                <Select
+                <Combobox
                   value={form.customer_id}
-                  onChange={(e) => set("customer_id", e.target.value)}
+                  onChange={onCustomerChange}
+                  options={customerOptions}
+                  placeholder="Pilih customer"
+                  searchPlaceholder="Cari nama perusahaan, kota, PIC…"
+                  emptyText="Customer tidak ditemukan"
+                  clearable
                   error={error.customer_id}
-                >
-                  <option value="">Pilih customer</option>
-                  {localCustomers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nama_perusahaan}
-                    </option>
-                  ))}
-                </Select>
+                />
               </div>
               <button
                 type="button"
@@ -314,14 +393,19 @@ export function NewJobView({
             className="grid grid-cols-1 sm:grid-cols-2"
             style={{ gap: 12, marginTop: 12 }}
           >
-            <Field label="PIC di lapangan">
+            <Field
+              label="PIC di lapangan"
+              required
+              hint="Boleh disesuaikan dengan yang standby di lapangan."
+            >
               <Input
                 placeholder="Bapak/Ibu nama"
                 value={form.pic_nama}
                 onChange={(e) => set("pic_nama", e.target.value)}
+                error={error.pic_nama}
               />
             </Field>
-            <Field label="No HP PIC">
+            <Field label="No HP PIC" required>
               <Input
                 type="tel"
                 placeholder="0812xxxxxxxx"
@@ -412,23 +496,33 @@ export function NewJobView({
               label="Unit"
               required
               hint={
-                standbyUnits.length === 0
-                  ? "Tidak ada unit standby"
-                  : `${standbyUnits.length} unit standby tersedia`
+                unitWithoutGps
+                  ? undefined // peringatan di bawah sudah jadi barisnya sendiri
+                  : standbyUnits.length === 0
+                    ? "Tidak ada unit standby"
+                    : `${standbyUnits.length} unit standby tersedia`
               }
             >
-              <Select
+              <Combobox
                 value={form.unit_id}
-                onChange={(e) => onUnitChange(e.target.value)}
+                onChange={onUnitChange}
+                options={unitOptions}
+                placeholder="Pilih unit standby"
+                searchPlaceholder="Cari kode unit, jenis, no polisi…"
+                emptyText="Tidak ada unit standby yang cocok"
+                clearable
                 error={error.unit_id}
-              >
-                <option value="">Pilih unit standby</option>
-                {standbyUnits.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.kode_unit} — {u.jenis_unit_nama} ({u.no_polisi})
-                  </option>
-                ))}
-              </Select>
+              />
+              {unitWithoutGps && (
+                <p className="field-warning">
+                  <TriangleAlert style={{ width: 13, height: 13 }} />
+                  <span>
+                    Unit {unitWithoutGps.kode_unit} belum punya link TrackSolid
+                    — customer tidak melihat peta real-time, hanya link-out.
+                    Tambahkan di form unit.
+                  </span>
+                </p>
+              )}
             </Field>
             <Field
               label="Driver"
@@ -443,25 +537,21 @@ export function NewJobView({
                     : undefined
               }
             >
-              <Select
+              <Combobox
                 value={form.driver_id}
-                onChange={(e) => set("driver_id", e.target.value)}
+                onChange={(v) => set("driver_id", v)}
+                options={driverOptions}
+                placeholder="Pilih driver"
+                searchPlaceholder="Cari nama atau no HP driver…"
+                emptyText="Driver tidak ditemukan"
+                clearable
                 error={error.driver_id}
-              >
-                <option value="">Pilih driver</option>
-                {drivers.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.nama} — {d.no_hp}
-                    {d.id === selectedUnit?.default_driver_id
-                      ? "  (default)"
-                      : ""}
-                  </option>
-                ))}
-              </Select>
+              />
             </Field>
             <Field label="Tanggal & jam pickup (ETD)" required>
               <Input
                 type="datetime-local"
+                min={minEtd}
                 value={form.etd}
                 onChange={(e) => set("etd", e.target.value)}
                 error={error.etd}
@@ -469,12 +559,26 @@ export function NewJobView({
             </Field>
             <Field
               label="Estimasi sampai (ETA)"
-              hint="Bila kosong, sistem cek konflik dengan asumsi durasi 12 jam"
+              hint="Bila kosong, sistem mengisi dari durasi rute (ditandai perkiraan sistem)"
             >
               <Input
                 type="datetime-local"
+                min={form.etd || minEtd}
                 value={form.eta}
                 onChange={(e) => set("eta", e.target.value)}
+                error={error.eta}
+              />
+            </Field>
+            <Field
+              label="Uang jalan"
+              required
+              hint="Uang jalan yang disepakati untuk perjalanan ini. Driver dapat mengajukan pencairan bertahap dari sini."
+            >
+              <CurrencyInput
+                placeholder="2.500.000"
+                value={form.uang_jalan_pagu}
+                onChange={(v) => set("uang_jalan_pagu", v)}
+                error={error.uang_jalan_pagu}
               />
             </Field>
           </div>
@@ -487,27 +591,6 @@ export function NewJobView({
 
         <FormSection title="Catatan" subtitle="Bisa diisi belakangan">
           <div style={{ display: "grid", gap: 12 }}>
-            {selectedUnit && (
-              <div
-                className="caption"
-                style={{
-                  fontSize: 11.5,
-                  padding: "8px 10px",
-                  background: selectedUnit.imei_gps
-                    ? "var(--brand-primary-light)"
-                    : "var(--bg-muted)",
-                  color: selectedUnit.imei_gps
-                    ? "var(--brand-primary-dark)"
-                    : "var(--text-secondary)",
-                  borderRadius: 8,
-                  lineHeight: 1.5
-                }}
-              >
-                {selectedUnit.imei_gps
-                  ? `Tracking GPS aktif dari unit ${selectedUnit.kode_unit}. Customer akan lihat peta real-time di halaman tracking.`
-                  : `Unit ${selectedUnit.kode_unit} belum punya link TrackSolid. Customer akan lihat fallback link-out. Tambahkan di form unit.`}
-              </div>
-            )}
             <Field label="Catatan internal">
               <Textarea
                 rows={2}
@@ -587,59 +670,47 @@ export function NewJobView({
                   marginBottom: 4
                 }}
               >
-                Otomatis setelah simpan
+                Apa yang akan terjadi setelah disimpan?
               </div>
               <ul
                 style={{
                   margin: 0,
-                  paddingLeft: 16,
+                  paddingLeft: 18,
                   fontSize: 12,
                   color: "var(--brand-primary-dark)",
-                  lineHeight: 1.6
+                  lineHeight: 1.5,
+                  // Preflight Tailwind mematikan list-style; tanpa ini antar
+                  // poin menyambung dan sulit dibedakan saat teksnya membungkus.
+                  listStyle: "disc outside",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6
                 }}
               >
-                <li>Job ID dibuat otomatis</li>
-                <li>Share link customer aktif</li>
                 <li>
-                  Unit berubah ke <strong>Bertugas</strong>
+                  Tersedia template WhatsApp pemberitahuan ke customer yang
+                  siap copy
                 </li>
-                <li>Template WhatsApp siap copy</li>
+                <li>Customer dapat link tracking melalui WhatsApp</li>
+                <li>Driver menerima notifikasi pemberitahuan</li>
+                <li>
+                  Unit berubah status menjadi <strong>Bertugas</strong>
+                </li>
               </ul>
             </div>
           </div>
         </div>
 
         <div className="card card-pad">
-          <div className="h3" style={{ marginBottom: 12 }}>
+          <div className="h3" style={{ marginBottom: 4 }}>
             Preview status
           </div>
-          <JobStepper status="menunggu_pickup" />
-          <div className="caption" style={{ marginTop: 12, lineHeight: 1.5 }}>
-            Job akan dibuat dengan status{" "}
-            <strong style={{ color: "var(--text-primary)" }}>
-              Menunggu pickup
-            </strong>
-            . Admin update progres seiring waktu.
+          <div className="caption" style={{ marginBottom: 12, lineHeight: 1.5 }}>
+            Job dibuat di tahap pertama, lalu naik seiring progres di lapangan.
           </div>
-        </div>
-
-        <div
-          className="card card-pad"
-          style={{ background: "var(--bg-muted)" }}
-        >
-          <div className="eyebrow" style={{ marginBottom: 6 }}>
-            Tips
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: "var(--text-secondary)",
-              lineHeight: 1.5
-            }}
-          >
-            Field PIC bisa berbeda dari customer master — ini untuk PIC yang
-            stand-by di site. Customer dapat link tracking lewat WhatsApp.
-          </div>
+          {/* Sidebar hanya selebar 280px — stepper horizontal membuat label
+              antar tahap saling menimpa, jadi di sini dipakai yang vertikal. */}
+          <JobStepper status="ditugaskan" orientation="vertical" />
         </div>
       </div>
 
@@ -648,20 +719,33 @@ export function NewJobView({
         onClose={() => setNewCustomerOpen(false)}
         onCreate={async (data) => {
           const res = await createCustomer(data);
-          if (res.ok) {
-            setLocalCustomers((prev) => [
-              {
-                id: res.data.id,
-                nama_perusahaan: res.data.nama_perusahaan,
-                is_active: true,
-                created_at: new Date().toISOString()
-              } as Customer,
-              ...prev
-            ]);
-            set("customer_id", res.data.id);
-            setNewCustomerOpen(false);
-            toast.success("Customer ditambahkan");
-          } else toast.error(res.error);
+          if (!res.ok) {
+            toast.error(res.error);
+            return false;
+          }
+          setLocalCustomers((prev) => [
+            {
+              id: res.data.id,
+              nama_perusahaan: res.data.nama_perusahaan,
+              pic_nama: data.pic_nama,
+              pic_no_hp: data.pic_no_hp,
+              is_active: true,
+              created_at: new Date().toISOString()
+            } as Customer,
+            ...prev
+          ]);
+          // PIC customer baru langsung dipakai sebagai PIC job — sama seperti
+          // memilih customer lama yang sudah punya PIC di master.
+          setForm((f) => ({
+            ...f,
+            customer_id: res.data.id,
+            pic_nama: data.pic_nama,
+            pic_no_hp: data.pic_no_hp
+          }));
+          setError(({ customer_id: _c, pic_nama: _n, pic_no_hp: _h, ...rest }) => rest);
+          setNewCustomerOpen(false);
+          toast.success("Customer ditambahkan");
+          return true;
         }}
       />
 

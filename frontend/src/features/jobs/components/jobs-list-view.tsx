@@ -11,21 +11,19 @@ import {
   Search
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Tabs } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/layout/fab";
 import { formatDate, formatTime } from "@/lib/utils";
+import { ACTIVE_JOB_STATUSES } from "@/lib/job-status";
 import type { Customer, Job, JobStatus } from "@/types";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
-type TabKey = "aktif" | "selesai" | "cancelled";
-const activeStatuses: JobStatus[] = [
-  "menunggu_pickup",
-  "loading",
-  "dalam_perjalanan",
-  "unloading"
-];
+type TabKey = "aktif" | "validasi" | "selesai" | "cancelled";
+const activeStatuses: JobStatus[] = ACTIVE_JOB_STATUSES;
 
 interface Props {
   jobs: Job[];
@@ -55,15 +53,29 @@ export function JobsListView({
   const counts = useMemo(
     () => ({
       aktif: jobs.filter((j) => activeStatuses.includes(j.status)).length,
+      validasi: jobs.filter((j) => j.status === "menunggu_validasi").length,
       selesai: jobs.filter((j) => j.status === "selesai").length,
       cancelled: jobs.filter((j) => j.status === "cancelled").length
     }),
     [jobs]
   );
 
+  const customerOptions = useMemo<ComboboxOption[]>(
+    () =>
+      customers
+        .filter((c) => c.is_active)
+        .map((c) => ({
+          value: c.id,
+          label: c.nama_perusahaan,
+          hint: c.kota ?? undefined
+        })),
+    [customers]
+  );
+
   const filtered = useMemo(() => {
     return jobs.filter((j) => {
       if (tab === "aktif" && !activeStatuses.includes(j.status)) return false;
+      if (tab === "validasi" && j.status !== "menunggu_validasi") return false;
       if (tab === "selesai" && j.status !== "selesai") return false;
       if (tab === "cancelled" && j.status !== "cancelled") return false;
       if (customerId && j.customer_id !== customerId) return false;
@@ -79,6 +91,8 @@ export function JobsListView({
       return true;
     });
   }, [jobs, tab, q, customerId]);
+
+  const pg = usePagination(filtered, { resetKey: `${tab}|${q}|${customerId}` });
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,13 +113,14 @@ export function JobsListView({
             onChange={(k) => setTab(k as TabKey)}
             items={[
               { key: "aktif", label: "Aktif", count: counts.aktif },
+              { key: "validasi", label: "Menunggu validasi", count: counts.validasi },
               { key: "selesai", label: "Selesai", count: counts.selesai },
               { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
             ]}
           />
         </div>
         <div className="toolbar" style={{ flex: 1, justifyContent: "flex-end" }}>
-          <div style={{ flex: 1, maxWidth: 280, minWidth: 0 }}>
+          <div className="toolbar-search">
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -113,20 +128,17 @@ export function JobsListView({
               leftIcon={<Search style={{ width: 15, height: 15 }} />}
             />
           </div>
-          <Select
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-            style={{ width: 200 }}
-          >
-            <option value="">Semua customer</option>
-            {customers
-              .filter((c) => c.is_active)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nama_perusahaan}
-                </option>
-              ))}
-          </Select>
+          <div className="toolbar-filter">
+            <Combobox
+              value={customerId}
+              onChange={setCustomerId}
+              options={customerOptions}
+              placeholder="Semua customer"
+              searchPlaceholder="Cari customer…"
+              emptyText="Customer tidak ditemukan"
+              clearable
+            />
+          </div>
           <Link to="/jobs/jadwal" className="hidden lg:inline-flex">
             <Button
               variant="secondary"
@@ -189,7 +201,7 @@ export function JobsListView({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((j) => {
+              {pg.items.map((j) => {
                 const u = unitMap[j.unit_id];
                 const driverNama = driverMap[j.driver_id];
                 return (
@@ -336,7 +348,7 @@ export function JobsListView({
 
           {/* Mobile: card list */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
-            {filtered.map((j) => {
+            {pg.items.map((j) => {
               const u = unitMap[j.unit_id];
               const driverNama = driverMap[j.driver_id];
               return (
@@ -478,6 +490,8 @@ export function JobsListView({
               );
             })}
           </div>
+
+          <Pagination state={pg} label="job" />
         </>
       )}
 

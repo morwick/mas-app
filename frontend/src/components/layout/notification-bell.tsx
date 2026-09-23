@@ -7,6 +7,8 @@ import {
   timeAgo,
   type AppNotification
 } from "@/lib/notifications";
+import { markNotificationsRead } from "@/features/notifications/api";
+import { queryClient } from "@/lib/api/query";
 
 interface Props {
   variant?: "desktop" | "mobile";
@@ -72,10 +74,20 @@ export function NotificationBell({
     };
   }, [open]);
 
-  const unreadCount = useMemo(
-    () => notifs.filter((n) => !readIds.has(n.id)).length,
-    [notifs, readIds]
+  // Kejadian tersimpan (persistent) status dibacanya dari server; notifikasi
+  // keadaan (dihitung) disimpan lokal per browser.
+  const isRead = useCallback(
+    (n: AppNotification) => (n.persistent ? Boolean(n.read) || readIds.has(n.id) : readIds.has(n.id)),
+    [readIds]
   );
+
+  const unreadCount = useMemo(() => notifs.filter((n) => !isRead(n)).length, [notifs, isRead]);
+
+  const persistServer = useCallback((ids: string[]) => {
+    const eventIds = ids.filter((id) => id.startsWith("event-")).map((id) => id.slice("event-".length));
+    if (eventIds.length === 0) return;
+    void markNotificationsRead(eventIds).then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }));
+  }, []);
 
   const markRead = useCallback(
     (id: string) => {
@@ -86,15 +98,17 @@ export function NotificationBell({
         writeReadIds(next);
         return next;
       });
+      persistServer([id]);
     },
-    []
+    [persistServer]
   );
 
   const markAllRead = useCallback(() => {
     const next = new Set(notifs.map((n) => n.id));
     setReadIds(next);
     writeReadIds(next);
-  }, [notifs]);
+    persistServer(notifs.map((n) => n.id));
+  }, [notifs, persistServer]);
 
   const isMobile = variant === "mobile";
 
@@ -284,7 +298,7 @@ export function NotificationBell({
                 <NotificationRow
                   key={n.id}
                   notif={n}
-                  isRead={readIds.has(n.id)}
+                  isRead={isRead(n)}
                   onRead={() => {
                     markRead(n.id);
                     setOpen(false);
