@@ -5,6 +5,8 @@ export interface LayoutCounts {
   units: number;
   jobs_active: number;
   drivers_available: number;
+  jobs_menunggu_validasi: number;
+  uang_jalan_diajukan: number;
 }
 
 export interface DashboardActiveJob {
@@ -16,6 +18,10 @@ export interface DashboardData {
   units: Unit[];
   counts: { standby: number; bertugas: number; perbaikan: number };
   active_jobs: DashboardActiveJob[];
+  jobs_menunggu_validasi: number;
+  uang_jalan_diajukan: number;
+  /** Job sebelum muat yang belum punya pencairan berbukti transfer. */
+  uang_jalan_belum_transfer: number;
 }
 
 export const layoutCounts = () => api.get<LayoutCounts>("/layout/counts");

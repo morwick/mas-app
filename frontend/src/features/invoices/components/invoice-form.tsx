@@ -5,6 +5,7 @@ import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import {
   createInvoice,
   updateInvoice,
@@ -364,18 +365,14 @@ export function InvoiceForm({
           }}
         >
           <Field label="Customer" required>
-            <Select
+            <Combobox
               value={form.customer_id}
-              onChange={(e) => onCustomerChange(e.target.value)}
+              onChange={onCustomerChange}
+              options={customers.map((c) => ({ value: c.id, label: c.nama_perusahaan }))}
+              placeholder="— pilih customer —"
+              searchPlaceholder="Cari nama customer…"
               disabled={isEdit}
-            >
-              <option value="">— pilih customer —</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nama_perusahaan}
-                </option>
-              ))}
-            </Select>
+            />
           </Field>
 
           <Field
@@ -574,27 +571,34 @@ export function InvoiceForm({
                 label="Job yang ditagihkan"
                 hint="Kosongkan untuk baris di luar job (mis. biaya tambahan)"
               >
-                <Select
+                <Combobox
                   value={it.job_id}
-                  onChange={(e) => pilihJob(it.key, e.target.value)}
+                  onChange={(v) => pilihJob(it.key, v)}
+                  options={[
+                    // Job yang sudah dipilih di baris ini tetap tampil walau sudah tidak
+                    // ada di daftar "belum ditagih" saat mode edit.
+                    ...(it.job_id && !jobsTersedia.some((j) => j.id === it.job_id)
+                      ? [
+                          {
+                            value: it.job_id,
+                            label:
+                              invoice?.items.find((x) => x.job_id === it.job_id)?.job_number ??
+                              "Job terpilih"
+                          }
+                        ]
+                      : []),
+                    ...jobsTersedia.map((j) => ({
+                      value: j.id,
+                      label: j.job_number,
+                      hint: `${j.asal} → ${j.tujuan}`
+                    }))
+                  ]}
+                  placeholder="— tanpa job —"
+                  searchPlaceholder="Cari nomor job atau rute…"
+                  emptyText="Tidak ada job yang belum ditagih"
                   disabled={!form.customer_id}
-                >
-                  <option value="">— tanpa job —</option>
-                  {/* Job yang sudah dipilih di baris ini tetap tampil walau
-                      sudah tidak ada di daftar "belum ditagih" saat mode edit. */}
-                  {it.job_id &&
-                    !jobsTersedia.some((j) => j.id === it.job_id) && (
-                      <option value={it.job_id}>
-                        {invoice?.items.find((x) => x.job_id === it.job_id)
-                          ?.job_number ?? "Job terpilih"}
-                      </option>
-                    )}
-                  {jobsTersedia.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.job_number} — {j.asal} → {j.tujuan}
-                    </option>
-                  ))}
-                </Select>
+                  clearable
+                />
               </Field>
 
               <div

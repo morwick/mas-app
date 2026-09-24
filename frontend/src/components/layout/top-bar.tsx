@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { navItems } from "./nav-items";
+import { GlobalSearch } from "./global-search";
 import { NotificationBell } from "./notification-bell";
+import { ProfileMenu } from "./profile-menu";
 import type { AppNotification } from "@/lib/notifications";
 
 function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
@@ -20,8 +22,6 @@ function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
     else if (seg === "utilisasi") crumbs.push({ label: "Utilisasi armada" });
     else if (seg === "customers" && segments[0] === "reports")
       crumbs.push({ label: "Riwayat customer" });
-    else if (seg === "profile") crumbs.push({ label: "Profil" });
-    else if (seg === "jenis-unit") crumbs.push({ label: "Jenis unit" });
     else if (seg.length > 8 && /[0-9a-f-]/i.test(seg))
       crumbs.push({ label: "Detail" });
   }
@@ -99,47 +99,9 @@ export function TopBar({
         <div className="h2">{title}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ position: "relative" }}>
-          <div
-            style={{
-              position: "absolute",
-              left: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "var(--text-tertiary)",
-              pointerEvents: "none",
-              display: "flex"
-            }}
-          >
-            <Search style={{ width: 15, height: 15 }} />
-          </div>
-          <input
-            placeholder="Cari job, unit, customer…"
-            className="input"
-            style={{
-              width: 280,
-              paddingLeft: 36,
-              paddingRight: 56,
-              height: 36,
-              fontSize: 13
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              right: 10,
-              top: "50%",
-              transform: "translateY(-50%)",
-              display: "flex",
-              gap: 3,
-              pointerEvents: "none"
-            }}
-          >
-            <span className="kbd">⌘</span>
-            <span className="kbd">K</span>
-          </div>
-        </div>
+        <GlobalSearch />
         <NotificationBell variant="desktop" notifications={notifications} />
+        <ProfileMenu />
       </div>
     </header>
   );

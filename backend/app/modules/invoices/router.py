@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
-from app.core.auth import AuthContext, owner_client, require_auth, user_client
+from app.core.auth import AuthContext, require_auth, superadmin_client, user_client
 from app.modules.auth.schemas import OkResponse
 from app.modules.invoices.schemas import (
     Invoice,
@@ -102,5 +102,5 @@ async def delete_invoice(invoice_id: str, svc: InvoiceService = Depends(get_serv
 
 
 @router.get("/piutang/summary", response_model=list[PiutangSummaryRow])
-async def piutang_summary(client: AsyncClient = Depends(owner_client)) -> list[PiutangSummaryRow]:
+async def piutang_summary(client: AsyncClient = Depends(superadmin_client)) -> list[PiutangSummaryRow]:
     return await InvoiceService(client).piutang_summary()

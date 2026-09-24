@@ -2,6 +2,7 @@
 // saat admin mengisi form. Backend menjalankan logika yang sama sebagai
 // defense-in-depth sebelum menyimpan.
 
+import { ACTIVE_JOB_STATUSES } from "@/lib/job-status";
 import type { Job, JobStatus } from "@/types";
 
 export interface JobConflict {
@@ -30,12 +31,7 @@ interface FindConflictsInput {
   excludeJobId?: string;
 }
 
-const ACTIVE_STATUSES: JobStatus[] = [
-  "menunggu_pickup",
-  "loading",
-  "dalam_perjalanan",
-  "unloading"
-];
+const ACTIVE_STATUSES: JobStatus[] = ACTIVE_JOB_STATUSES;
 
 /** ETA fallback 12 jam dari ETD bila eta tidak diisi. */
 const ETA_FALLBACK_HOURS = 12;

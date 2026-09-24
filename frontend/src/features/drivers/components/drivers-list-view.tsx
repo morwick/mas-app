@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 import type { Driver } from "@/types";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   drivers: Driver[];
@@ -50,11 +52,17 @@ export function DriversListView({ drivers }: Props) {
     });
   }, [drivers, q, filter]);
 
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}` });
+
   return (
     <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Driver"
+        description="Daftar driver beserta no HP, status tugas, dan akses aplikasi driver."
+      />
       {/* Toolbar */}
       <div className="toolbar">
-        <div style={{ flex: 1, minWidth: 260 }}>
+        <div className="toolbar-search">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -62,11 +70,13 @@ export function DriversListView({ drivers }: Props) {
             leftIcon={<Search style={{ width: 15, height: 15 }} />}
           />
         </div>
-        <Link to="/drivers/new" className="hidden lg:inline-flex">
-          <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
-            Tambah driver
-          </Button>
-        </Link>
+        <div className="toolbar-actions hidden lg:flex">
+          <Link to="/drivers/new">
+            <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+              Tambah driver
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <FilterChips
@@ -97,7 +107,7 @@ export function DriversListView({ drivers }: Props) {
           className="grid gap-3"
           style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
         >
-          {filtered.map((d) => (
+          {pg.items.map((d) => (
             <Link
               key={d.id}
               to={`/drivers/${d.id}/edit`}
@@ -165,10 +175,17 @@ export function DriversListView({ drivers }: Props) {
                   </div>
                 </div>
                 {d.is_active ? (
-                  <span className="badge badge-standby">
-                    <span className="badge-dot" />
-                    Aktif
-                  </span>
+                  d.status === "in_job" ? (
+                    <span className="badge badge-bertugas" title={d.active_job_number ?? undefined}>
+                      <span className="badge-dot" />
+                      In Job{d.active_job_number ? ` · ${d.active_job_number}` : ""}
+                    </span>
+                  ) : (
+                    <span className="badge badge-standby">
+                      <span className="badge-dot" />
+                      Stand By
+                    </span>
+                  )
                 ) : (
                   <span className="badge">Nonaktif</span>
                 )}
@@ -211,6 +228,8 @@ export function DriversListView({ drivers }: Props) {
           ))}
         </div>
       )}
+
+      {filtered.length > 0 && <Pagination state={pg} label="driver" />}
 
       <Fab href="/drivers/new" label="Tambah driver" />
     </div>

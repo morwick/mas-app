@@ -38,8 +38,12 @@ def test_validation_errors_surface_as_422(client: TestClient) -> None:
 
 
 def test_build_current_user_roles() -> None:
-    owner = build_current_user(user_id="1", email="a@b.id", profile={"nama": "Rika Sari", "role": "owner"})
-    assert owner.role == "owner" and owner.initials == "RS" and owner.allowed_jenis_unit_ids is None
+    superadmin = build_current_user(
+        user_id="1", email="a@b.id", profile={"nama": "Rika Sari", "role": "superadmin"}
+    )
+    assert superadmin.role == "superadmin"
+    assert superadmin.is_superadmin
+    assert superadmin.initials == "RS" and superadmin.allowed_jenis_unit_ids is None
 
     operator = build_current_user(
         user_id="2",
@@ -47,6 +51,29 @@ def test_build_current_user_roles() -> None:
         profile={"nama": "Op", "role": "operator", "allowed_jenis_unit_ids": ["x"]},
     )
     assert operator.role == "operator" and operator.allowed_jenis_unit_ids == ["x"]
+    assert not operator.is_superadmin
+
+
+def test_role_resolution_is_fail_safe() -> None:
+    """Hanya 'superadmin' yang memberi hak penuh — sisanya jadi operator.
+
+    Termasuk 'owner' yang belum ikut migrasi: kalau ini lolos jadi superadmin,
+    backend memberi akses yang justru ditolak RLS di database.
+    """
+    for role in ("owner", "admin", "", None):
+        user = build_current_user(user_id="9", email="x@b.id", profile={"nama": "X", "role": role})
+        assert user.role == "operator", f"role {role!r} tidak boleh jadi superadmin"
+        assert not user.is_superadmin
 
     no_profile = build_current_user(user_id="3", email="siapa@b.id", profile=None)
-    assert no_profile.nama == "siapa" and no_profile.role == "owner"
+    assert no_profile.nama == "siapa" and no_profile.role == "operator"
+
+
+def test_build_current_user_multi_role_memakai_role_aktif() -> None:
+    profil = {"nama": "Rika", "roles": ["operator", "superadmin"], "allowed_jenis_unit_ids": ["j1"]}
+    op = build_current_user(user_id="1", email="r@b.id", profile={**profil, "role_aktif": "operator"})
+    assert op.role == "operator" and op.roles == ["operator", "superadmin"] and op.allowed_jenis_unit_ids == ["j1"]
+    sa = build_current_user(user_id="1", email="r@b.id", profile={**profil, "role_aktif": "superadmin"})
+    assert sa.is_superadmin and sa.allowed_jenis_unit_ids is None
+    # Tanpa role aktif (sesi belum ada): role paling terbatas, bukan superadmin.
+    assert build_current_user(user_id="1", email="r@b.id", profile=profil).role == "operator"

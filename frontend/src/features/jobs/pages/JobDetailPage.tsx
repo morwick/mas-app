@@ -35,6 +35,7 @@ export function JobDetailPage() {
       sumberDana={sumberDana.data ?? []}
       uangJalan={uangJalan.data?.transaksi ?? []}
       uangJalanRingkasan={uangJalan.data?.ringkasan ?? EMPTY_RINGKASAN}
+      uangJalanPengajuan={uangJalan.data?.pengajuan ?? []}
     />
   );
 }

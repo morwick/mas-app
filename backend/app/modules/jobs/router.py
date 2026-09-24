@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from supabase import AsyncClient
 
 from app.core.auth import AuthContext, require_auth, user_client
+from app.core.paging import Page, PageParams, page_params
 from app.domain.job_conflicts import ConflictCheckResult
 from app.modules.auth.schemas import OkResponse
 from app.modules.jobs.photos import JobPhotoService
@@ -13,6 +14,8 @@ from app.modules.jobs.schemas import (
     ActiveJobByUnit,
     CancelRequest,
     ConflictCheckRequest,
+    GantiTrukEntry,
+    GantiTrukRequest,
     Job,
     JobConflictResponse,
     JobCreate,
@@ -21,8 +24,12 @@ from app.modules.jobs.schemas import (
     JobPhoto,
     JobStatusHistoryEntry,
     JobUpdate,
-    PhotoType,
+    PhotoSlotMasukan,
+    PhotoStage,
+    ReturnJobRequest,
+    StatusResponse,
     UpdateStatusRequest,
+    normalisasi_slot,
 )
 from app.modules.jobs.service import JobService
 
@@ -41,13 +48,36 @@ def get_photo_service(client: AsyncClient = Depends(user_client)) -> JobPhotoSer
     return JobPhotoService(client)
 
 
+@router.get("/page", response_model=Page[Job])
+async def list_jobs_page(
+    status: JobListFilter = Query("all"),
+    customer_id: str | None = Query(None),
+    q: str | None = Query(None, description="Cari nomor job, customer, alat, atau rute"),
+    params: PageParams = Depends(page_params),
+    svc: JobService = Depends(get_service),
+) -> Page[Job]:
+    return await svc.list_page(status=status, customer_id=customer_id, q=q, params=params)
+
+
 @router.get("", response_model=list[Job])
 async def list_jobs(
     status: JobListFilter = Query("all"),
     customer_id: str | None = Query(None),
     svc: JobService = Depends(get_service),
 ) -> list[Job]:
+    """Tanpa potongan — dipakai deteksi bentrok jadwal dan ekspor."""
     return await svc.list_all(status=status, customer_id=customer_id)
+
+
+@router.get("/counts", response_model=dict[str, int])
+async def job_tab_counts(
+    customer_id: str | None = Query(None),
+    q: str | None = Query(None),
+    svc: JobService = Depends(get_service),
+) -> dict[str, int]:
+    """Jumlah per tab mengikuti filter yang sedang aktif — angka di tab harus
+    cocok dengan isi daftarnya."""
+    return await svc.tab_counts(customer_id=customer_id, q=q)
 
 
 @router.get("/active-by-unit", response_model=list[ActiveJobByUnit])
@@ -79,6 +109,17 @@ async def job_history(job_id: str, svc: JobService = Depends(get_service)) -> li
     return await svc.status_history(job_id)
 
 
+@router.get("/{job_id}/ganti-truk", response_model=list[GantiTrukEntry])
+async def riwayat_ganti_truk(job_id: str, svc: JobService = Depends(get_service)) -> list[GantiTrukEntry]:
+    return await svc.riwayat_ganti_truk(job_id)
+
+
+@router.post("/{job_id}/ganti-truk", response_model=OkResponse)
+async def ganti_truk(job_id: str, payload: GantiTrukRequest, svc: JobService = Depends(get_service)) -> OkResponse:
+    await svc.ganti_truk(job_id, payload)
+    return OkResponse()
+
+
 @router.post("", response_model=JobCreated, status_code=201, responses=CONFLICT_RESPONSE)
 async def create_job(
     payload: JobCreate,
@@ -108,18 +149,33 @@ async def cancel_job(job_id: str, payload: CancelRequest, svc: JobService = Depe
     return OkResponse()
 
 
+@router.post("/{job_id}/validate", response_model=StatusResponse)
+async def validate_job(job_id: str, svc: JobService = Depends(get_service)) -> StatusResponse:
+    """Fase 7: Approve — job selesai, driver kembali Stand By."""
+    return StatusResponse(status=await svc.validate(job_id))  # type: ignore[arg-type]
+
+
+@router.post("/{job_id}/return", response_model=StatusResponse)
+async def return_job(job_id: str, payload: ReturnJobRequest, svc: JobService = Depends(get_service)) -> StatusResponse:
+    """Fase 7: kembalikan ke driver dengan catatan perbaikan."""
+    return StatusResponse(status=await svc.return_to_driver(job_id, payload))  # type: ignore[arg-type]
+
+
 @router.post("/{job_id}/photos", response_model=JobPhoto, status_code=201)
 async def upload_photo(
     job_id: str,
-    type: PhotoType = Form(...),
+    stage: PhotoStage = Form(..., alias="type"),
+    slot: PhotoSlotMasukan | None = Form(None),
     photo: UploadFile = File(...),
     auth: AuthContext = Depends(require_auth),
     svc: JobPhotoService = Depends(get_photo_service),
 ) -> JobPhoto:
+    """Unggah foto oleh admin. `slot` opsional — tanpa slot foto jadi arsip tambahan."""
     data = await photo.read()
     return await svc.upload(
         job_id=job_id,
-        photo_type=type,
+        stage=stage,
+        slot=normalisasi_slot(slot) if slot else None,
         data=data,
         content_type=photo.content_type,
         uploaded_by=auth.user.id,

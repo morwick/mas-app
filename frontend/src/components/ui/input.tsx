@@ -1,9 +1,11 @@
 import {
   forwardRef,
+  useState,
   type InputHTMLAttributes,
   type TextareaHTMLAttributes,
   type SelectHTMLAttributes
 } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -86,6 +88,33 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     </div>
   );
 });
+
+type PasswordInputProps = Omit<InputProps, "type" | "rightAddon">;
+
+/** Input password dengan tombol mata untuk menampilkan/menyembunyikan isinya. */
+export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
+  function PasswordInput(props, ref) {
+    const [show, setShow] = useState(false);
+    return (
+      <Input
+        ref={ref}
+        {...props}
+        type={show ? "text" : "password"}
+        rightAddon={
+          <button
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            className="px-2 h-8 text-text-muted hover:text-text"
+            aria-label={show ? "Sembunyikan password" : "Tampilkan password"}
+            title={show ? "Sembunyikan password" : "Tampilkan password"}
+          >
+            {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        }
+      />
+    );
+  }
+);
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   error?: string;

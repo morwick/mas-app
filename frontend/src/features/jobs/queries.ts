@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { activeJobsByUnit, getJob, getJobHistory, jobsInRange, listJobs, type JobListFilter } from "./api";
+import { activeJobsByUnit, getJob, getJobHistory, getRiwayatGantiTruk, jobsInRange, listJobs, type JobListFilter } from "./api";
 
 export const jobKeys = {
   list: (status: JobListFilter, customerId?: string) =>
@@ -27,3 +27,6 @@ export const useActiveJobsByUnit = () =>
 
 export const useJobsInRange = (start: string, end: string) =>
   useQuery({ queryKey: jobKeys.range(start, end), queryFn: () => jobsInRange(start, end) });
+
+export const useRiwayatGantiTruk = (id: string | undefined) =>
+  useQuery({ queryKey: ["jobs", "ganti-truk", id ?? ""], queryFn: () => getRiwayatGantiTruk(id!), enabled: !!id });

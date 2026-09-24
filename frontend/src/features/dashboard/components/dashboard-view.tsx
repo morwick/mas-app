@@ -30,9 +30,21 @@ interface Props {
   units: Unit[];
   counts: { standby: number; bertugas: number; perbaikan: number };
   activeJobs: ActiveJobSummary[];
+  /** Antrean tindakan admin (alur v2): validasi job & pengajuan uang jalan. */
+  jobsMenungguValidasi?: number;
+  uangJalanDiajukan?: number;
+  /** Job yang driver-nya tertahan karena uang jalan belum ditransfer. */
+  uangJalanBelumTransfer?: number;
 }
 
-export function DashboardView({ units, counts, activeJobs }: Props) {
+export function DashboardView({
+  units,
+  counts,
+  activeJobs,
+  jobsMenungguValidasi = 0,
+  uangJalanDiajukan = 0,
+  uangJalanBelumTransfer = 0
+}: Props) {
   const [filter, setFilter] = useState<Filter>("semua");
   const total = counts.standby + counts.bertugas + counts.perbaikan;
 
@@ -91,6 +103,34 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
           }
         />
       </div>
+
+      {(jobsMenungguValidasi > 0 ||
+        uangJalanDiajukan > 0 ||
+        uangJalanBelumTransfer > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {uangJalanDiajukan > 0 && (
+            <ActionPanel
+              to="/uang-jalan"
+              title={`${uangJalanDiajukan} pengajuan uang jalan`}
+              caption="Driver mengajukan uang jalan — cairkan & unggah bukti transfer."
+            />
+          )}
+          {uangJalanBelumTransfer > 0 && (
+            <ActionPanel
+              to="/uang-jalan"
+              title={`${uangJalanBelumTransfer} job belum ditransfer uang jalan`}
+              caption="Belum ada bukti transfer — driver belum bisa mulai muat."
+            />
+          )}
+          {jobsMenungguValidasi > 0 && (
+            <ActionPanel
+              to="/jobs"
+              title={`${jobsMenungguValidasi} job menunggu validasi`}
+              caption="Driver sudah menyelesaikan orderan — periksa foto & approve."
+            />
+          )}
+        </div>
+      )}
 
       <div className="split-2">
         {/* Left — unit status */}
@@ -374,5 +414,51 @@ export function DashboardView({ units, counts, activeJobs }: Props) {
 
       <Fab href="/jobs/new" label="Job baru" />
     </div>
+  );
+}
+
+/** Panel merah "Perlu tindakan" — pekerjaan admin yang menahan driver. */
+function ActionPanel({
+  to,
+  title,
+  caption
+}: {
+  to: string;
+  title: string;
+  caption: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="card card-pad"
+      style={{
+        borderColor: "#e8a3a3",
+        background: "var(--status-cancelled-bg)",
+        color: "var(--status-cancelled-text)",
+        textDecoration: "none",
+        display: "flex",
+        gap: 12,
+        alignItems: "flex-start"
+      }}
+    >
+      <AlertTriangle
+        style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: "#c93030" }}
+      />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div
+          className="eyebrow"
+          style={{ color: "#c93030", fontWeight: 700 }}
+        >
+          Perlu tindakan
+        </div>
+        <div className="h2" style={{ marginTop: 4, color: "var(--status-cancelled-text)" }}>
+          {title}
+        </div>
+        <div className="caption" style={{ color: "var(--status-cancelled-text)", opacity: 0.85 }}>
+          {caption}
+        </div>
+      </div>
+      <ArrowRight style={{ width: 16, height: 16, flexShrink: 0, marginTop: 4 }} />
+    </Link>
   );
 }

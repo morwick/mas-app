@@ -4,17 +4,21 @@ import { Plus, Pencil, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { Input } from "@/components/ui/input";
+import { Field, Textarea } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { Modal } from "@/components/ui/modal";
 import { UangJalanModal } from "./uang-jalan-modal";
-import { deleteUangJalan, setPagu } from "@/features/uang-jalan/api";
-import { formatRupiah, formatDate } from "@/lib/utils";
-import type { SumberDana, UangJalan, UangJalanRingkasan } from "@/types";
+import { deleteUangJalan, rejectRequest, setPagu } from "@/features/uang-jalan/api";
+import { formatRupiah, formatDate, formatDateTime } from "@/lib/utils";
+import type { SumberDana, UangJalan, UangJalanRequest, UangJalanRingkasan } from "@/types";
 
 interface Props {
   jobId: string;
   sumberDana: SumberDana[];
   transaksi: UangJalan[];
   ringkasan: UangJalanRingkasan;
+  /** Pengajuan driver (BR-05); yang berstatus `diajukan` menahan perjalanan. */
+  pengajuan?: UangJalanRequest[];
 }
 
 function Angka({
@@ -51,15 +55,32 @@ export function UangJalanCard({
   jobId,
   sumberDana,
   transaksi,
-  ringkasan
+  ringkasan,
+  pengajuan = []
 }: Props) {
   const toast = useToast();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<UangJalan | null>(null);
+  const [fulfilling, setFulfilling] = useState<UangJalanRequest | null>(null);
+  const [rejecting, setRejecting] = useState<UangJalanRequest | null>(null);
+  const [alasanTolak, setAlasanTolak] = useState("");
+  const pendingRequests = pengajuan.filter((r) => r.status === "diajukan");
+  const adaBukti = transaksi.some((t) => t.jenis === "pencairan" && t.bukti_transfer_path);
+
+  async function tolak() {
+    if (!rejecting) return;
+    setSaving(true);
+    const res = await rejectRequest(rejecting.id, alasanTolak || null);
+    setSaving(false);
+    if (!res.ok) return toast.error(res.error);
+    toast.success("Pengajuan ditolak");
+    setRejecting(null);
+    setAlasanTolak("");
+  }
   const [hapus, setHapus] = useState<UangJalan | null>(null);
   const [editPagu, setEditPagu] = useState(false);
-  const [paguDraft, setPaguDraft] = useState(String(ringkasan.pagu_awal));
+  const [paguDraft, setPaguDraft] = useState(String(Math.round(ringkasan.pagu_awal)));
   const [saving, setSaving] = useState(false);
 
   const belumAdaPagu = ringkasan.pagu === 0;
@@ -119,11 +140,10 @@ export function UangJalanCard({
             <div className="eyebrow" style={{ marginBottom: 4 }}>
               Pagu borongan
             </div>
-            <Input
-              inputMode="numeric"
+            <CurrencyInput
               autoFocus
               value={paguDraft}
-              onChange={(e) => setPaguDraft(e.target.value.replace(/[^\d]/g, ""))}
+              onChange={setPaguDraft}
             />
           </div>
           <Button size="sm" onClick={simpanPagu} loading={saving}>
@@ -133,7 +153,7 @@ export function UangJalanCard({
             size="sm"
             variant="secondary"
             onClick={() => {
-              setPaguDraft(String(ringkasan.pagu_awal));
+              setPaguDraft(String(Math.round(ringkasan.pagu_awal)));
               setEditPagu(false);
             }}
           >
@@ -165,7 +185,7 @@ export function UangJalanCard({
               className="btn-link"
               style={{ fontSize: 11, marginTop: 2 }}
               onClick={() => {
-                setPaguDraft(String(ringkasan.pagu_awal));
+                setPaguDraft(String(Math.round(ringkasan.pagu_awal)));
                 setEditPagu(true);
               }}
             >
@@ -186,6 +206,54 @@ export function UangJalanCard({
         <p className="caption" style={{ marginTop: -6, marginBottom: 12 }}>
           Pagu borongan belum diisi. Sisanya belum bisa dihitung sebelum angkanya
           ada.
+        </p>
+      )}
+
+      {/* Pengajuan driver yang menunggu kasir (Fase 3) */}
+      {pendingRequests.length > 0 && (
+        <div
+          style={{
+            background: "#fff7ed",
+            border: "1px solid #fed7aa",
+            borderRadius: 8,
+            padding: "10px 12px",
+            marginBottom: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8
+          }}
+        >
+          {pendingRequests.map((r) => (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#9a3412" }}>
+                  Driver mengajukan {formatRupiah(r.nominal)}
+                </div>
+                <div className="caption">
+                  {formatDateTime(r.requested_at)}
+                  {r.catatan ? ` · ${r.catatan}` : ""} — perjalanan tertahan sampai dicairkan
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditing(null);
+                  setFulfilling(r);
+                  setModalOpen(true);
+                }}
+              >
+                Cairkan + bukti
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setRejecting(r)}>
+                Tolak
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!adaBukti && pendingRequests.length === 0 && ringkasan.pagu > 0 && (
+        <p className="caption" style={{ marginTop: -6, marginBottom: 12 }}>
+          Belum ada pencairan berbukti — tahap muat driver masih terkunci (BR-02).
         </p>
       )}
 
@@ -232,6 +300,22 @@ export function UangJalanCard({
                       {[t.keperluan, t.catatan].filter(Boolean).join(" · ")}
                     </div>
                   )}
+                  {t.jenis === "pencairan" &&
+                    (t.bukti_transfer_url ? (
+                      <a
+                        href={t.bukti_transfer_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-link"
+                        style={{ fontSize: 11.5 }}
+                      >
+                        Lihat bukti transfer
+                      </a>
+                    ) : (
+                      <div className="caption" style={{ color: "#b45309" }}>
+                        Tanpa bukti transfer (catatan lama)
+                      </div>
+                    ))}
                 </div>
                 <div
                   className="mono"
@@ -273,13 +357,36 @@ export function UangJalanCard({
 
       <UangJalanModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          setFulfilling(null);
+        }}
         jobId={jobId}
         sumberDana={sumberDana}
         ringkasan={ringkasan}
         existing={editing}
+        request={fulfilling}
         onSaved={() => queryClient.invalidateQueries()}
       />
+      <Modal
+        open={rejecting !== null}
+        onClose={() => setRejecting(null)}
+        title="Tolak pengajuan uang jalan"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRejecting(null)} disabled={saving}>
+              Batal
+            </Button>
+            <Button variant="danger" onClick={() => void tolak()} loading={saving}>
+              Tolak
+            </Button>
+          </>
+        }
+      >
+        <Field label="Alasan (dikirim ke driver)">
+          <Textarea rows={2} value={alasanTolak} onChange={(e) => setAlasanTolak(e.target.value)} />
+        </Field>
+      </Modal>
 
       <ConfirmDialog
         open={!!hapus}

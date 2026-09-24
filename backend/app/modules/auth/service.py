@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 from supabase import AsyncClient
 from supabase_auth.errors import AuthApiError
 
 from app.core.auth import (
     AuthContext,
+    CurrentUser,
     build_current_user,
+    fetch_profil,
     forget_cached_identity,
     load_current_user,
 )
 from app.core.config import Settings
-from app.core.errors import UnauthorizedError, ValidationError
+from app.core.errors import ForbiddenError, UnauthorizedError, ValidationError
 from app.core.pg import single
+from app.core.request_context import ip_klien, ua_klien
 from app.core.supabase import SupabaseClientFactory
 from app.modules.auth.schemas import (
     LoginRequest,
@@ -35,6 +40,34 @@ def _friendly_login_error(message: str) -> str:
     if "rate limit" in msg or "too many" in msg:
         return "Terlalu banyak percobaan login. Tunggu beberapa menit lalu coba lagi."
     return f"Login gagal: {message}"
+
+
+logger = logging.getLogger(__name__)
+
+
+async def _mulai_sesi(client: AsyncClient) -> None:
+    """Simpan karyawan & IP ke sesi login (tabel sesi_pengguna) + catat Login.
+
+    Wajib berhasil: setiap aksi berikutnya mengambil karyawan & IP dari sesi ini
+    untuk log sistem. Tanpa sesi, aksi ditolak dan pengguna diminta login lagi —
+    jadi login pun dibatalkan kalau sesinya gagal dibuat.
+    """
+    try:
+        await client.rpc("mulai_sesi", {"p_ip": ip_klien.get(), "p_user_agent": ua_klien.get()}).execute()
+    except Exception as exc:
+        logger.exception("Gagal memulai sesi login")
+        # Penolakan yang disengaja database (mis. karyawan nonaktif) diteruskan apa adanya.
+        if getattr(exc, "code", None) == "28000" and getattr(exc, "message", None):
+            raise UnauthorizedError(f"Login gagal: {exc.message}") from exc
+        raise UnauthorizedError("Login gagal: sesi tidak bisa dibuat. Silakan coba lagi.") from exc
+
+
+async def _akhiri_sesi(client: AsyncClient) -> None:
+    """Catat Logout lalu hapus sesi (status = 2). Sesi hanya dihapus di sini."""
+    try:
+        await client.rpc("akhiri_sesi").execute()
+    except Exception:  # noqa: BLE001 — logout di sisi klien tetap jalan
+        logger.exception("Gagal mengakhiri sesi login")
 
 
 class AuthService:
@@ -71,11 +104,19 @@ class AuthService:
         if not profile.get("is_active", True):
             raise UnauthorizedError("Akun admin Anda dinonaktifkan. Hubungi super-admin.")
 
+        # Akun dengan beberapa role login memakai role paling terbatas (operator);
+        # pengguna lalu memilih role lewat ganti_role().
+        async with self._factory.for_user(session.access_token) as client:
+            await _mulai_sesi(client)
+            profil = await fetch_profil(client)
+        if not profil or profil.get("role_aktif") is None:
+            raise UnauthorizedError("Login gagal: sesi tidak bisa dibuat. Silakan coba lagi.")
+
         return SessionResponse(
             access_token=session.access_token,
             refresh_token=session.refresh_token,
             expires_at=session.expires_at,
-            user=build_current_user(user_id=res.user.id, email=res.user.email, profile=profile),
+            user=build_current_user(user_id=res.user.id, email=res.user.email, profile=profil),
         )
 
     async def refresh(self, refresh_token: str) -> SessionResponse:
@@ -96,9 +137,21 @@ class AuthService:
             user=user,
         )
 
+    async def ganti_role(self, auth: AuthContext, role: str) -> CurrentUser:
+        """Ganti role aktif sesi login ini (akun dengan beberapa role). Tercatat di log sistem."""
+        if role not in auth.user.roles:
+            raise ForbiddenError("Akun Anda tidak punya role tersebut.")
+        async with self._factory.for_user(auth.token) as client:
+            await client.rpc("ganti_role_aktif", {"p_role": role}).execute()
+            forget_cached_identity(auth.token)
+            return await load_current_user(client, auth.token)
+
     async def logout(self, auth: AuthContext) -> None:
         # GoTrue: POST /auth/v1/logout dengan JWT user. Kegagalan di sini tidak
         # perlu menghalangi logout di sisi klien.
+        # Dicatat sebelum token dicabut — sesudahnya database tidak mengenali user.
+        async with self._factory.for_user(auth.token) as client:
+            await _akhiri_sesi(client)
         await self._gotrue("POST", "logout", token=auth.token, ok_statuses=(204, 200, 401, 403))
         forget_cached_identity(auth.token)
 

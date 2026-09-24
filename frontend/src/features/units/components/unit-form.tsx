@@ -5,6 +5,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea, Field } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import { createUnit, updateUnit } from "@/features/units/api";
 import { parseTrackingInput } from "@/lib/tracksolid-link";
 import type { Driver, JenisUnit, Unit, UnitStatus } from "@/types";
@@ -124,16 +125,13 @@ export function UnitForm({
             />
           </Field>
           <Field label="Jenis unit" required>
-            <Select
+            <Combobox
               value={form.jenis_unit_id}
-              onChange={(e) => set("jenis_unit_id", e.target.value)}
-            >
-              {jenisUnitList.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.nama}
-                </option>
-              ))}
-            </Select>
+              onChange={(v) => set("jenis_unit_id", v)}
+              options={jenisUnitList.map((j) => ({ value: j.id, label: j.nama }))}
+              placeholder="— pilih jenis unit —"
+              searchPlaceholder="Cari jenis unit…"
+            />
           </Field>
           <Field label="No polisi" required>
             <Input
@@ -156,28 +154,25 @@ export function UnitForm({
             hint="1 driver hanya boleh untuk 1 unit. Driver yang sudah dipakai unit lain di-disable."
             className="sm:col-span-2"
           >
-            <Select
+            <Combobox
               value={form.default_driver_id ?? ""}
-              onChange={(e) => set("default_driver_id", e.target.value)}
-            >
-              <option value="">— Belum ditugaskan —</option>
-              {drivers.map((d) => {
+              onChange={(v) => set("default_driver_id", v)}
+              options={drivers.map((d) => {
                 const takenBy = driverAssignments[d.id];
-                // Driver sedang dipakai unit ini sendiri → tetap enabled
+                // Driver sedang dipakai unit ini sendiri → tetap bisa dipilih
                 const takenByOther =
                   takenBy && takenBy.unit_id !== initial?.id ? takenBy : null;
-                return (
-                  <option
-                    key={d.id}
-                    value={d.id}
-                    disabled={!!takenByOther}
-                  >
-                    {d.nama} — {d.no_hp}
-                    {takenByOther ? ` (sudah di ${takenByOther.kode_unit})` : ""}
-                  </option>
-                );
+                return {
+                  value: d.id,
+                  label: d.nama,
+                  hint: takenByOther ? `${d.no_hp} · sudah di ${takenByOther.kode_unit}` : d.no_hp,
+                  disabled: !!takenByOther
+                };
               })}
-            </Select>
+              placeholder="— Belum ditugaskan —"
+              searchPlaceholder="Cari nama atau no HP driver…"
+              clearable
+            />
           </Field>
           {mode === "new" && (
             <Field label="Status awal">

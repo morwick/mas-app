@@ -5,7 +5,8 @@ Frontend menyimpan JWT hasil login dan mengirimnya sebagai
 
 1. Token diverifikasi ke Supabase Auth (`/auth/v1/user`) — hasilnya dicache
    sebentar per token supaya tidak ada dua round-trip tambahan di tiap request.
-2. Baris `profiles` dibaca untuk nama, role, dan scope jenis unit.
+2. Profil dibaca lewat `profil_saya()`: nama, role yang dimiliki (`roles`),
+   role AKTIF sesi login ini (`role_aktif`), dan scope jenis unit.
 3. Klien Supabase yang membawa token yang sama diberikan ke service, sehingga
    RLS tetap menjadi penjaga akses yang sebenarnya — bukan kode di sini.
 """
@@ -23,10 +24,9 @@ from pydantic import BaseModel
 from supabase import AsyncClient
 
 from app.core.errors import ForbiddenError, UnauthorizedError
-from app.core.pg import single
 from app.core.supabase import SupabaseClientFactory, get_client_factory
 
-UserRole = Literal["owner", "operator"]
+UserRole = Literal["superadmin", "operator"]
 
 # Identitas per token disimpan 60 detik. Pencabutan sesi tetap efektif segera di
 # sisi data karena RLS memverifikasi JWT pada setiap query; yang tertunda paling
@@ -39,14 +39,17 @@ class CurrentUser(BaseModel):
     email: str
     nama: str
     initials: str
+    # Role yang sedang dipakai di sesi login ini (menentukan hak akses).
     role: UserRole
-    # owner: None (akses semua). operator: daftar jenis_unit_id yang boleh diakses;
-    # None/kosong berarti belum diberi scope oleh owner.
+    # Semua role yang dimiliki akun — > 1 berarti pengguna bisa ganti role.
+    roles: list[UserRole] = []
+    # superadmin: None (akses semua). operator: daftar jenis_unit_id yang boleh
+    # diakses; None/kosong berarti belum diberi scope oleh superadmin.
     allowed_jenis_unit_ids: list[str] | None
 
     @property
-    def is_owner(self) -> bool:
-        return self.role == "owner"
+    def is_superadmin(self) -> bool:
+        return self.role == "superadmin"
 
 
 @dataclass(frozen=True)
@@ -60,21 +63,51 @@ def _initials(nama: str) -> str:
     return "".join(p[0] for p in parts).upper() or "A"
 
 
+def _role_valid(nilai: object) -> UserRole | None:
+    return nilai if nilai in ("superadmin", "operator") else None  # type: ignore[return-value]
+
+
 def build_current_user(*, user_id: str, email: str | None, profile: dict[str, object] | None) -> CurrentUser:
-    """Susun identitas dari row auth + row profiles (boleh None bila belum ada)."""
+    """Susun identitas dari row auth + profil (boleh None bila belum ada).
+
+    `profile` berasal dari `profil_saya()` (roles + role_aktif). Bentuk lama
+    dengan satu kolom `role` tetap diterima.
+    """
     profile = profile or {}
     nama = str(profile.get("nama") or (email or "").split("@")[0] or "Admin")
-    role: UserRole = "operator" if profile.get("role") == "operator" else "owner"
+    raw_roles = profile.get("roles")
+    roles: list[UserRole] = [r for r in (raw_roles if isinstance(raw_roles, list) else []) if _role_valid(r)]
+    if not roles and _role_valid(profile.get("role")):
+        roles = [profile["role"]]  # type: ignore[list-item]
+    # Fail-safe: hak penuh hanya bila database mengonfirmasi role AKTIF
+    # 'superadmin'. Tanpa role aktif dipakai role paling terbatas — tidak pernah
+    # superadmin (akun dinonaktifkan / sesi berakhir juga berujung di sini).
+    aktif = _role_valid(profile.get("role_aktif"))
+    if aktif is None:
+        # Bentuk lama (hanya kolom `role`, tanpa roles/role_aktif) masih dihormati.
+        bentuk_lama = "roles" not in profile and "role_aktif" not in profile
+        aktif = (_role_valid(profile.get("role")) if bentuk_lama else None) or "operator"
+    role: UserRole = aktif
     scope = profile.get("allowed_jenis_unit_ids")
-    allowed = None if role == "owner" else (list(scope) if isinstance(scope, list) else None)
+    allowed = None if role == "superadmin" else (list(scope) if isinstance(scope, list) else None)
     return CurrentUser(
         id=user_id,
         email=str(profile.get("email") or email or ""),
         nama=nama,
         initials=_initials(nama),
         role=role,
+        roles=sorted(roles) or [role],
         allowed_jenis_unit_ids=allowed,
     )
+
+
+async def fetch_profil(client: AsyncClient) -> dict[str, object] | None:
+    """Profil + role aktif sesi ini (fungsi database `profil_saya`)."""
+    res = await client.rpc("profil_saya").execute()
+    data = res.data
+    if isinstance(data, list):
+        return data[0] if data else None
+    return data if isinstance(data, dict) else None
 
 
 def bearer_token(request: Request) -> str | None:
@@ -98,17 +131,16 @@ async def load_current_user(client: AsyncClient, token: str) -> CurrentUser:
     if res is None or res.user is None:
         raise UnauthorizedError("Sesi tidak valid. Silakan login lagi.")
 
-    profile = (
-        await client.table("profiles")
-        .select("nama, email, role, allowed_jenis_unit_ids")
-        .eq("id", res.user.id)
-        .maybe_single()
-        .execute()
-    )
+    profil = await fetch_profil(client)
+    # role_aktif NULL = akun/karyawan nonaktif atau sesi login sudah berakhir
+    # (lihat transport.role_aktif()). Token Supabase yang masih berlaku tidak
+    # cukup — tolak supaya tidak ada hak yang tidak dikonfirmasi database.
+    if not profil or not profil.get("is_active", True) or profil.get("role_aktif") is None:
+        raise UnauthorizedError("Sesi tidak ditemukan atau akun dinonaktifkan. Silakan login lagi.")
     user = build_current_user(
         user_id=res.user.id,
         email=res.user.email,
-        profile=single(profile),
+        profile=profil,
     )
     _IDENTITY_CACHE[key] = user
     return user
@@ -130,9 +162,9 @@ async def require_auth(
     return AuthContext(user=user, token=token)
 
 
-async def require_owner(auth: AuthContext = Depends(require_auth)) -> AuthContext:
-    if not auth.user.is_owner:
-        raise ForbiddenError("Hanya owner yang boleh mengakses ini.")
+async def require_superadmin(auth: AuthContext = Depends(require_auth)) -> AuthContext:
+    if not auth.user.is_superadmin:
+        raise ForbiddenError("Hanya super administrator yang boleh mengakses ini.")
     return auth
 
 
@@ -145,8 +177,8 @@ async def user_client(
         yield client
 
 
-async def owner_client(
-    auth: AuthContext = Depends(require_owner),
+async def superadmin_client(
+    auth: AuthContext = Depends(require_superadmin),
     factory: SupabaseClientFactory = Depends(get_client_factory),
 ) -> AsyncIterator[AsyncClient]:
     async with factory.for_user(auth.token) as client:

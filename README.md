@@ -7,9 +7,11 @@ jalan, tagihan/piutang, dan portal driver.
 mas-app/
 ├── backend/    REST API — Python 3.11+ / FastAPI, di atas Supabase (Postgres + Auth + Storage)
 ├── frontend/   SPA — React 18 / TypeScript / Vite / TanStack Query / Tailwind
+├── mobile/     Aplikasi driver — Flutter (Android), push notification FCM
 ├── supabase/   Migrasi SQL (skema, RLS, fungsi) — dijalankan di Supabase SQL Editor
 ├── legacy/     Versi lama (Next.js) — referensi saja, tidak dijalankan
-└── SETUP.md    Panduan setup lengkap
+├── SETUP.md    Panduan setup lengkap
+└── PRD-Alur-Kerja-Job-v2.md  Aturan alur job v2 (Lock System, uang jalan, foto, validasi)
 ```
 
 ## Arsitektur singkat
@@ -25,8 +27,8 @@ Browser (React SPA) ──HTTP/JSON──▶ FastAPI (/api/*) ──PostgREST/St
   menyimpan JWT, dan mengirimnya sebagai `Authorization: Bearer`. Backend
   meneruskan JWT yang sama ke Supabase sehingga **RLS tetap menjadi penjaga
   akses** — bukan kode aplikasi.
-- **Portal driver** memakai token sesi sendiri (`X-Driver-Token`), diverifikasi
-  fungsi `driver_me()` di database.
+- **Aplikasi driver (Flutter) & portal web driver** memakai token sesi sendiri
+  (`X-Driver-Token`), diverifikasi fungsi `driver_me()` di database.
 - **Halaman pelacakan pelanggan** memakai `x-share-token` tanpa login.
 - Semua logika bisnis (bentrok jadwal, penomoran surat, sinkronisasi mileage,
   notifikasi, dsb.) ada di backend Python. Frontend hanya menampilkan dan
@@ -56,11 +58,11 @@ npm run dev
 
 ## Perintah pengembangan
 
-| Backend (`backend/`)              | Frontend (`frontend/`)        |
-|-----------------------------------|-------------------------------|
-| `pytest` — tes unit & smoke API   | `npm test` — tes render       |
-| `ruff check app` / `ruff format`  | `npm run typecheck`           |
-| `mypy app`                        | `npm run build` → `dist/`     |
+| Backend (`backend/`)              | Frontend (`frontend/`)        | Mobile (`mobile/`)            |
+|-----------------------------------|-------------------------------|-------------------------------|
+| `pytest` — tes unit & smoke API   | `npm test` — tes render       | `flutter test`                |
+| `ruff check app` / `ruff format`  | `npm run typecheck`           | `flutter analyze`             |
+| `mypy app`                        | `npm run build` → `dist/`     | `flutter build apk --release` |
 
 ## Struktur kode
 

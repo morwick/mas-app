@@ -10,27 +10,13 @@ import {
 } from "lucide-react";
 import { computeEta, compareEta } from "@/lib/routing/eta";
 import { TrackingTabs } from "@/features/tracking/components/tracking-tabs";
+import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from "@/lib/job-status";
 import type { Job, JobStatus, Unit } from "@/types";
 import { fleetLocations } from "@/features/tracking/api";
+import { Pagination, usePagination } from "@/components/ui/pagination";
 
-const STATUS_LABEL: Record<JobStatus, string> = {
-  menunggu_pickup: "Menunggu pickup",
-  loading: "Loading",
-  dalam_perjalanan: "Dalam perjalanan",
-  unloading: "Unloading",
-  selesai: "Selesai",
-  cancelled: "Dibatalkan"
-};
-
-const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
-  menunggu_pickup: { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" },
-  loading: { bg: "#fff4e0", fg: "#8a5a00" },
-  dalam_perjalanan: {
-    bg: "var(--brand-primary-light)",
-    fg: "var(--brand-primary-dark)"
-  },
-  unloading: { bg: "#efeafe", fg: "#4a2bb0" }
-};
+const STATUS_LABEL: Record<JobStatus, string> = JOB_STATUS_LABEL;
+const STATUS_COLOR: Record<string, { bg: string; fg: string }> = JOB_STATUS_COLOR;
 
 const ETA_COLOR: Record<string, { bg: string; fg: string; icon: string }> = {
   ontime: {
@@ -116,6 +102,8 @@ export function AdminTrackingListView({ jobs, units }: Props) {
     return map;
   }, [jobs, locations]);
 
+  const pg = usePagination(jobs);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <TrackingTabs />
@@ -160,7 +148,7 @@ export function AdminTrackingListView({ jobs, units }: Props) {
             gap: 12
           }}
         >
-          {jobs.map((job) => {
+          {pg.items.map((job) => {
             const unit = unitsMap.get(job.unit_id);
             const statusColor = STATUS_COLOR[job.status] ?? {
               bg: "var(--bg-muted)",
@@ -407,6 +395,8 @@ export function AdminTrackingListView({ jobs, units }: Props) {
           })}
         </div>
       )}
+
+      {jobs.length > 0 && <Pagination state={pg} label="job" />}
     </div>
   );
 }

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Check, X } from "lucide-react";
+import { Bell, Check, ChevronRight, X } from "lucide-react";
 import {
   KIND_META,
   severityTokens,
   timeAgo,
   type AppNotification
 } from "@/lib/notifications";
+import { useNotificationReadState } from "@/features/notifications/read-state";
 
 interface Props {
   variant?: "desktop" | "mobile";
@@ -14,35 +15,15 @@ interface Props {
   notifications?: AppNotification[];
 }
 
-const STORAGE_KEY = "mas:notif:read-ids";
-
-function readReadIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? new Set(parsed) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function writeReadIds(ids: Set<string>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(ids)));
-  } catch {
-    // diam
-  }
-}
+/** Panel lonceng hanya menampilkan sebanyak ini; sisanya di halaman Notifikasi. */
+const PANEL_LIMIT = 50;
 
 export function NotificationBell({
   variant = "desktop",
   notifications
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(() => readReadIds());
+  const { isRead, mark } = useNotificationReadState();
   const notifs = notifications ?? [];
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -72,29 +53,34 @@ export function NotificationBell({
     };
   }, [open]);
 
-  const unreadCount = useMemo(
-    () => notifs.filter((n) => !readIds.has(n.id)).length,
-    [notifs, readIds]
+  const unreadCount = useMemo(() => notifs.filter((n) => !isRead(n)).length, [notifs, isRead]);
+
+  /**
+   * Isi panel: hanya yang belum dibaca, diurutkan terbaru ke terlama, dan
+   * dipotong 50. Panel ini untuk melihat sekilas apa yang perlu ditindak —
+   * riwayat lengkapnya ada di halaman Notifikasi.
+   */
+  const panelItems = useMemo(
+    () =>
+      notifs
+        .filter((n) => !isRead(n))
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+        .slice(0, PANEL_LIMIT),
+    [notifs, isRead]
   );
 
   const markRead = useCallback(
     (id: string) => {
-      setReadIds((prev) => {
-        if (prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.add(id);
-        writeReadIds(next);
-        return next;
-      });
+      const found = notifs.find((n) => n.id === id);
+      if (found) mark([found]);
     },
-    []
+    [notifs, mark]
   );
 
-  const markAllRead = useCallback(() => {
-    const next = new Set(notifs.map((n) => n.id));
-    setReadIds(next);
-    writeReadIds(next);
-  }, [notifs]);
+  const markAllRead = useCallback(() => mark(notifs), [notifs, mark]);
 
   const isMobile = variant === "mobile";
 
@@ -268,7 +254,7 @@ export function NotificationBell({
               minHeight: 0
             }}
           >
-            {notifs.length === 0 ? (
+            {panelItems.length === 0 ? (
               <div
                 style={{
                   padding: 32,
@@ -277,14 +263,14 @@ export function NotificationBell({
                   color: "var(--text-tertiary)"
                 }}
               >
-                Belum ada notifikasi
+                Tidak ada notifikasi yang belum dibaca
               </div>
             ) : (
-              notifs.map((n) => (
+              panelItems.map((n) => (
                 <NotificationRow
                   key={n.id}
                   notif={n}
-                  isRead={readIds.has(n.id)}
+                  isRead={isRead(n)}
                   onRead={() => {
                     markRead(n.id);
                     setOpen(false);
@@ -293,6 +279,17 @@ export function NotificationBell({
               ))
             )}
           </div>
+
+          {/* Panel dibatasi 50 dan hanya yang belum dibaca — riwayat lengkap,
+              termasuk yang sudah dibaca, ada di halaman Notifikasi. */}
+          <Link
+            to="/notifikasi"
+            onClick={() => setOpen(false)}
+            className="notif-panel-footer"
+          >
+            Lihat semua notifikasi
+            <ChevronRight style={{ width: 14, height: 14 }} />
+          </Link>
         </div>
       )}
     </>

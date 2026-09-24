@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { RolePicker } from "../components/role-picker";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, perluPilihRole, selesaiPilihRole } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [show, setShow] = useState(false);
@@ -16,6 +17,15 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Akun dengan beberapa role memilih role dulu sebelum masuk (state di
+  // AuthContext, supaya penjaga rute ikut menahan).
+  const pilihRole = perluPilihRole;
+
+  function masuk() {
+    selesaiPilihRole();
+    const next = params.get("next");
+    navigate(next && next.startsWith("/") ? next : "/dashboard", { replace: true });
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -26,9 +36,8 @@ export function LoginPage() {
     setPending(true);
     setError(null);
     try {
-      await login(email.trim(), password);
-      const next = params.get("next");
-      navigate(next && next.startsWith("/") ? next : "/dashboard", { replace: true });
+      const user = await login(email.trim(), password);
+      if ((user.roles ?? []).length <= 1) masuk();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login gagal");
     } finally {
@@ -44,6 +53,15 @@ export function LoginPage() {
           Masuk untuk mengelola armada & job pengiriman
         </p>
       </div>
+      {pilihRole ? (
+        <Card className="p-6">
+          <p className="text-[14px] font-semibold mb-1">Masuk sebagai</p>
+          <p className="text-[12.5px] text-text-muted mb-4">
+            Akun Anda punya beberapa role. Pilih role yang akan dipakai — bisa diganti nanti dari menu profil.
+          </p>
+          <RolePicker onSelesai={masuk} />
+        </Card>
+      ) : (
       <Card className="p-6">
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <Field label="Email" required>
@@ -95,6 +113,7 @@ export function LoginPage() {
           </Button>
         </form>
       </Card>
+      )}
       <p className="mt-6 text-center text-[11px] text-text-subtle">
         &copy; {new Date().getFullYear()} PT. Mitra Angkutan Sejati
       </p>

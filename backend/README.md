@@ -30,8 +30,8 @@ mypy app            # type-check
 | Prefix              | Isi                                                      | Auth            |
 |---------------------|----------------------------------------------------------|-----------------|
 | `/auth`             | login, refresh, logout, reset password, profil           | Bearer / publik |
-| `/users`            | role & scope pengguna                                    | owner           |
-| `/jenis-unit`       | master jenis unit                                        | Bearer (tulis: owner) |
+| `/users`            | role & scope pengguna                                    | superadmin      |
+| `/jenis-unit`       | master jenis unit                                        | Bearer (tulis: superadmin) |
 | `/units`            | unit, riwayat status, job/insiden/servis per unit        | Bearer          |
 | `/drivers`          | driver, PIN portal                                       | Bearer          |
 | `/customers`        | customer                                                 | Bearer          |
@@ -42,8 +42,8 @@ mypy app            # type-check
 | `/track/{token}`    | pelacakan pelanggan                                      | publik (share token) |
 | `/quotations`       | penawaran                                                | Bearer          |
 | `/uang-jalan`, `/sumber-dana` | uang jalan                                     | Bearer          |
-| `/invoices`, `/piutang` | tagihan, pembayaran, piutang                         | Bearer / owner  |
-| `/reports`          | utilisasi, laba per job                                  | owner           |
+| `/invoices`, `/piutang` | tagihan, pembayaran, piutang                         | Bearer / superadmin |
+| `/reports`          | utilisasi, laba per job                                  | superadmin      |
 | `/notifications`    | isi lonceng                                              | Bearer          |
 | `/dashboard`, `/layout/counts` | data agregat                                  | Bearer          |
 | `/driver/*`         | portal driver                                            | `X-Driver-Token` |
@@ -57,7 +57,7 @@ app/
 ├── core/
 │   ├── config.py      Settings (pydantic-settings, .env)
 │   ├── supabase.py    pabrik klien per identitas (user / anon+share / driver / admin)
-│   ├── auth.py        verifikasi JWT admin, CurrentUser, dependency user_client/owner_client
+│   ├── auth.py        verifikasi JWT admin, CurrentUser, dependency user_client/superadmin_client
 │   ├── driver_auth.py sesi portal driver
 │   ├── errors.py      AppError → JSON {detail}, pemetaan error PostgREST/Auth/Storage
 │   ├── storage.py     validasi & unggah foto

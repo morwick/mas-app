@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { AlertTriangle, ExternalLink, Truck, User } from "lucide-react";
+import { AlertTriangle, ExternalLink, Truck, User, WifiOff } from "lucide-react";
 import { StatusBadge } from "@/components/ui/badge";
 import type { ConflictCheckResult } from "@/lib/job-conflicts";
 import { formatDateTime } from "@/lib/utils";
@@ -44,6 +44,42 @@ export function ConflictWarning({ conflicts, className }: Props) {
             jobs={conflicts.driver}
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Ditampilkan bila daftar job aktif gagal dimuat. Tanpa daftar itu form tidak
+ * bisa memperingatkan bentrok sambil diisi, dan admin baru tahu setelah menekan
+ * simpan — jadi keadaannya dikatakan terang-terangan, bukan didiamkan.
+ */
+export function ConflictCheckUnavailable({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="bg-status-perbaikan-bg border border-status-perbaikan-fg/30 rounded-md p-3.5 flex items-start gap-3">
+      <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
+        <WifiOff className="w-4 h-4 text-status-perbaikan-fg" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] font-semibold text-status-perbaikan-fg">
+          Pemeriksaan bentrok jadwal tidak aktif
+        </p>
+        <p className="text-[12px] text-text-muted mt-0.5">
+          Daftar job aktif gagal dimuat, jadi bentrok tidak bisa diperiksa sambil
+          form diisi. Server tetap memeriksanya saat disimpan.
+          {onRetry && (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={onRetry}
+                className="text-brand-dark hover:underline"
+              >
+                Coba muat lagi
+              </button>
+            </>
+          )}
+        </p>
       </div>
     </div>
   );

@@ -103,10 +103,10 @@ export function ProfileView({ user }: Props) {
       </form>
       <div className="text-center pt-2">
         <Link
-          to="/settings"
+          to="/dashboard"
           className="text-[13px] text-text-muted hover:text-text"
         >
-          Kembali ke pengaturan
+          Kembali ke dashboard
         </Link>
       </div>
     </div>

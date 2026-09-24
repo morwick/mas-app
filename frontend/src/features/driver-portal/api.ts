@@ -1,15 +1,28 @@
 import { api } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
-import type { ActionResult, Job, JobPhoto, JobStatus } from "@/types";
+import type {
+  ActionResult,
+  Job,
+  JobPhoto,
+  JobStatus,
+  PhotoSlot,
+  PhotoStage,
+  UangJalan,
+  UangJalanPosisi,
+  UangJalanRequest,
+  UangJalanRingkasan
+} from "@/types";
 
 export const myJobs = (status: "active" | "all" = "all") =>
   api.get<Job[]>("/driver/jobs", { status }, "driver");
 
 export const myJob = (id: string) => api.get<Job>(`/driver/jobs/${id}`, undefined, "driver");
 
-export function driverAcceptJob(jobId: string): Promise<ActionResult<{ accepted_at: string }>> {
+export function driverAcceptJob(
+  jobId: string
+): Promise<ActionResult<{ accepted_at: string; status: JobStatus }>> {
   return mutate(
-    api.post<{ accepted_at: string }>(`/driver/jobs/${jobId}/accept`, undefined, "driver")
+    api.post<{ accepted_at: string; status: JobStatus }>(`/driver/jobs/${jobId}/accept`, undefined, "driver")
   );
 }
 
@@ -27,26 +40,62 @@ export function driverUpdateJobStatus(
   );
 }
 
-export function driverSubmitPod(input: {
-  jobId: string;
-  penerima_nama: string;
-  penerima_jabatan?: string | null;
-  catatan?: string | null;
-  /** PNG data URL dari kanvas tanda tangan. */
-  signature_data_url?: string | null;
-}): Promise<ActionResult<unknown>> {
-  const { jobId, ...body } = input;
-  return mutate(api.post(`/driver/jobs/${jobId}/pod`, body, "driver"));
+export interface DriverUangJalan {
+  transaksi: UangJalan[];
+  ringkasan: UangJalanRingkasan;
+  pengajuan: UangJalanRequest[];
+  posisi: UangJalanPosisi | null;
 }
 
+export const driverUangJalan = (jobId: string) =>
+  api.get<DriverUangJalan>(`/driver/jobs/${jobId}/uang-jalan`, undefined, "driver");
+
+/** BR-05: ajukan uang jalan (nominal ≤ sisa pagu). */
+export function driverRequestUangJalan(
+  jobId: string,
+  nominal: number,
+  catatan?: string | null
+): Promise<ActionResult<UangJalanRequest>> {
+  return mutate(
+    api.post<UangJalanRequest>(
+      `/driver/jobs/${jobId}/uang-jalan/ajukan`,
+      { nominal, catatan: catatan ?? null },
+      "driver"
+    )
+  );
+}
+
+/** Unggah/ganti foto pada satu slot tahap (FR-PHOTO-01..06). */
 export function driverUploadPhoto(
   jobId: string,
-  type: "loading" | "unloading",
+  stage: PhotoStage,
+  slot: PhotoSlot,
   file: Blob,
-  fileName = "foto.jpg"
+  opts?: { fileName?: string; takenAt?: string; lat?: number; lng?: number }
 ): Promise<ActionResult<JobPhoto>> {
   const form = new FormData();
-  form.append("type", type);
-  form.append("photo", file, fileName);
+  form.append("stage", stage);
+  form.append("slot", slot);
+  form.append("photo", file, opts?.fileName ?? "foto.jpg");
+  if (opts?.takenAt) form.append("taken_at", opts.takenAt);
+  if (opts?.lat != null) form.append("lat", String(opts.lat));
+  if (opts?.lng != null) form.append("lng", String(opts.lng));
   return mutate(api.upload<JobPhoto>(`/driver/jobs/${jobId}/photos`, form, "driver"));
 }
+
+export interface DriverNotification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  href: string | null;
+  job_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export const driverNotifications = () =>
+  api.get<DriverNotification[]>("/driver/notifications", undefined, "driver");
+
+export const driverMarkRead = (ids: string[]) =>
+  api.post("/driver/notifications/read", { ids }, "driver");

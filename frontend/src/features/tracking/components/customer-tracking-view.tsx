@@ -16,7 +16,8 @@ import { JobStepper } from "@/features/jobs/components/job-stepper";
 import { TrackSolidEmbed } from "@/features/tracking/components/tracksolid-embed";
 import { MapFullscreenButton } from "@/features/tracking/components/map-fullscreen-button";
 import { formatDateTime } from "@/lib/utils";
-import type { Job, JobStatus } from "@/types";
+import { customerStep } from "@/lib/job-status";
+import type { Job } from "@/types";
 
 interface Props {
   job: Job;
@@ -31,8 +32,13 @@ interface Props {
 
 type StatusInfo = { title: string; body: string; color: string; bg: string };
 
-const STATUS_INFO: Record<JobStatus, StatusInfo> = {
-  menunggu_pickup: {
+// Tahap internal (diterima, serah terima pool, menunggu validasi) tidak perlu
+// diketahui pelanggan — dipetakan ke tahap pelanggan lewat customerStep().
+const STATUS_INFO: Record<
+  "ditugaskan" | "loading" | "dalam_perjalanan" | "unloading" | "selesai" | "cancelled",
+  StatusInfo
+> = {
+  ditugaskan: {
     title: "Menunggu pickup",
     body: "Driver dalam perjalanan menuju lokasi pickup.",
     color: "var(--status-pickup-text)",
@@ -81,7 +87,8 @@ function driverInitials(nama: string) {
 }
 
 export function CustomerTrackingView({ job, unit, driver }: Props) {
-  const si = STATUS_INFO[job.status] ?? STATUS_INFO.menunggu_pickup;
+  const step = customerStep(job.status) as keyof typeof STATUS_INFO;
+  const si = STATUS_INFO[step] ?? STATUS_INFO.ditugaskan;
   const loadingPhotos = (job.photos ?? []).filter((p) => p.type === "loading");
   const unloadingPhotos = (job.photos ?? []).filter(
     (p) => p.type === "unloading"
@@ -280,7 +287,7 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
           <div className="eyebrow" style={{ marginBottom: 12 }}>
             Progress pengiriman
           </div>
-          <JobStepper status={job.status} />
+          <JobStepper status={job.status} audience="customer" />
         </div>
 
         {/* Map */}

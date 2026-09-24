@@ -22,7 +22,17 @@ interface UnitStatusModalProps {
 
 const manualOptions: { key: UnitStatus; label: string; desc: string }[] = [
   { key: "standby", label: "Standby", desc: "Siap menerima job baru" },
-  { key: "perbaikan", label: "Perbaikan", desc: "Tidak tersedia untuk job" }
+  { key: "perbaikan", label: "Perbaikan", desc: "Tidak tersedia untuk job" },
+  {
+    key: "terjual",
+    label: "Terjual",
+    desc: "Unit sudah dijual — tidak bisa dipakai job, tidak dihitung sebagai armada"
+  },
+  {
+    key: "diafkirkan",
+    label: "Diafkirkan",
+    desc: "Unit tidak layak pakai & dikeluarkan dari armada — tidak bisa dipakai job"
+  }
 ];
 
 export function UnitStatusModal({

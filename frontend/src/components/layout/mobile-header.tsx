@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Logo } from "./logo";
 import { MobileDrawer } from "./mobile-drawer";
 import { NotificationBell } from "./notification-bell";
+import { ProfileMenu } from "./profile-menu";
 import { navItems } from "./nav-items";
 import type { AppNotification } from "@/lib/notifications";
 
@@ -18,8 +19,6 @@ function getPageTitle(pathname: string) {
   if (last === "utilisasi") return "Utilisasi armada";
   if (segments[0] === "reports" && last === "customers")
     return "Riwayat customer";
-  if (segments[0] === "settings" && last === "profile") return "Profil";
-  if (segments[0] === "settings" && last === "jenis-unit") return "Jenis unit";
   return `Detail ${root.label.toLowerCase()}`;
 }
 
@@ -28,7 +27,7 @@ interface MobileHeaderProps {
     nama: string;
     email: string;
     initials: string;
-    role?: "owner" | "operator";
+    role?: "superadmin" | "operator";
   } | null;
   counts?: {
     units?: number;
@@ -103,8 +102,11 @@ export function MobileHeader({
             </>
           )}
         </div>
-        <div className="flex items-center" style={{ flexShrink: 0 }}>
+        {/* Menu profil ikut di top bar pada layar sempit — isinya role,
+            ubah profil, dan keluar. */}
+        <div className="flex items-center" style={{ flexShrink: 0, gap: 6 }}>
           <NotificationBell variant="mobile" notifications={notifications} />
+          <ProfileMenu />
         </div>
       </div>
     </header>

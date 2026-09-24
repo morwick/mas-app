@@ -1,16 +1,22 @@
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
-import { Settings } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Logo } from "./logo";
-import { navItems, visibleNavItems } from "./nav-items";
-import { LogoutButton } from "@/features/auth/components/logout-button";
+import {
+  groupHasActive,
+  isNavGroup,
+  navTree,
+  visibleNavTree,
+  type NavItem
+} from "./nav-items";
 
 interface SidebarProps {
   user: {
     nama: string;
     email: string;
     initials: string;
-    role?: "owner" | "operator";
+    role?: "superadmin" | "operator";
   } | null;
   counts?: {
     units?: number;
@@ -29,15 +35,76 @@ const BADGE_KEYS = new Set(["/jobs"]);
 
 export function Sidebar({ user, counts }: SidebarProps) {
   const { pathname } = useLocation();
-  const mainItems = visibleNavItems(navItems, user?.role).filter(
-    (n) => n.href !== "/settings"
-  );
-  const settingsActive = pathname.startsWith("/settings");
-  const roleBadgeLabel = user?.role === "operator" ? "Operator" : "Owner";
-  const roleBadgeColor =
-    user?.role === "operator"
-      ? { bg: "#fff4e0", fg: "#8a5a00" }
-      : { bg: "var(--brand-primary-light)", fg: "var(--brand-primary-dark)" };
+  const entries = visibleNavTree(navTree, user?.role);
+  // Semua grup terbuka secara default; yang ditutup manual disimpan di sini.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggle(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  /** Satu baris tautan; `nested` dipakai untuk submenu di dalam grup. */
+  function renderItem(item: NavItem, nested: boolean) {
+    const active = item.match
+      ? item.match(pathname)
+      : pathname.startsWith(item.href);
+    const Icon = item.icon;
+    const countKey = COUNT_KEY[item.href];
+    const count = countKey ? counts?.[countKey] : undefined;
+    const badge = BADGE_KEYS.has(item.href);
+    return (
+      <Link
+        key={item.href}
+        to={item.href}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: nested ? "7px 10px 7px 12px" : "8px 10px",
+          marginLeft: nested ? 12 : 0,
+          borderLeft: nested ? "1.5px solid var(--border-default)" : undefined,
+          borderRadius: nested ? "0 8px 8px 0" : 8,
+          background: active ? "var(--brand-primary-light)" : "transparent",
+          borderLeftColor: nested && active ? "var(--brand-primary)" : undefined,
+          color: active ? "var(--brand-primary-dark)" : "var(--text-primary)",
+          textDecoration: "none",
+          fontSize: nested ? 13 : 13.5,
+          fontWeight: active ? 600 : 500,
+          transition: "background 120ms ease"
+        }}
+        onMouseEnter={(e) => {
+          if (!active) e.currentTarget.style.background = "var(--bg-muted)";
+        }}
+        onMouseLeave={(e) => {
+          if (!active) e.currentTarget.style.background = "transparent";
+        }}
+      >
+        <Icon style={{ width: nested ? 16 : 18, height: nested ? 16 : 18 }} />
+        <span style={{ flex: 1 }}>{item.label}</span>
+        {count != null && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "1px 7px",
+              borderRadius: 99,
+              background: badge ? "var(--brand-primary)" : "rgba(0,0,0,0.06)",
+              color: badge ? "white" : "var(--text-secondary)",
+              minWidth: 20,
+              textAlign: "center"
+            }}
+          >
+            {count}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <aside
@@ -59,176 +126,63 @@ export function Sidebar({ user, counts }: SidebarProps) {
         <div className="eyebrow" style={{ padding: "8px 10px 4px" }}>
           Menu
         </div>
-        {mainItems.map((item) => {
-          const active = item.match
-            ? item.match(pathname)
-            : pathname.startsWith(item.href);
-          const Icon = item.icon;
-          const countKey = COUNT_KEY[item.href];
-          const count = countKey ? counts?.[countKey] : undefined;
-          const badge = BADGE_KEYS.has(item.href);
+        {entries.map((entry) => {
+          if (!isNavGroup(entry)) return renderItem(entry, false);
+
+          const hasActive = groupHasActive(entry, pathname);
+          // Submenu yang sedang aktif memaksa induknya terbuka, supaya
+          // halaman yang dibuka tidak tersembunyi di balik grup tertutup.
+          const open = !collapsed.has(entry.key) || hasActive;
+          const GroupIcon = entry.icon;
           return (
-            <Link
-              key={item.href}
-              to={item.href}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 10px",
-                borderRadius: 8,
-                background: active ? "var(--brand-primary-light)" : "transparent",
-                color: active
-                  ? "var(--brand-primary-dark)"
-                  : "var(--text-primary)",
-                textDecoration: "none",
-                fontSize: 13.5,
-                fontWeight: active ? 600 : 500,
-                transition: "background 120ms ease"
-              }}
-              onMouseEnter={(e) => {
-                if (!active) e.currentTarget.style.background = "var(--bg-muted)";
-              }}
-              onMouseLeave={(e) => {
-                if (!active) e.currentTarget.style.background = "transparent";
-              }}
-            >
-              <Icon style={{ width: 18, height: 18 }} />
-              <span style={{ flex: 1 }}>{item.label}</span>
-              {count != null && (
-                <span
+            <div key={entry.key} style={{ display: "contents" }}>
+              <button
+                type="button"
+                onClick={() => toggle(entry.key)}
+                aria-expanded={open}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  width: "100%",
+                  padding: "8px 10px",
+                  marginTop: 6,
+                  borderRadius: 8,
+                  border: "none",
+                  background: "transparent",
+                  color: hasActive
+                    ? "var(--brand-primary-dark)"
+                    : "var(--text-primary)",
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  textAlign: "left"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "var(--bg-muted)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
+              >
+                <GroupIcon style={{ width: 18, height: 18 }} />
+                <span style={{ flex: 1 }}>{entry.label}</span>
+                <ChevronDown
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: "1px 7px",
-                    borderRadius: 99,
-                    background: badge
-                      ? "var(--brand-primary)"
-                      : "rgba(0,0,0,0.06)",
-                    color: badge ? "white" : "var(--text-secondary)",
-                    minWidth: 20,
-                    textAlign: "center"
+                    width: 15,
+                    height: 15,
+                    color: "var(--text-tertiary)",
+                    transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+                    transition: "transform 150ms ease"
                   }}
-                >
-                  {count}
-                </span>
-              )}
-            </Link>
+                />
+              </button>
+              {open && entry.items.map((item) => renderItem(item, true))}
+            </div>
           );
         })}
       </nav>
-      <div className="divider" />
-      <Link
-        to="/settings"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "10px 14px",
-          margin: 12,
-          borderRadius: 8,
-          background: settingsActive
-            ? "var(--brand-primary-light)"
-            : "transparent",
-          color: settingsActive
-            ? "var(--brand-primary-dark)"
-            : "var(--text-primary)",
-          textDecoration: "none",
-          fontSize: 13.5,
-          fontWeight: settingsActive ? 600 : 500
-        }}
-        onMouseEnter={(e) => {
-          if (!settingsActive)
-            e.currentTarget.style.background = "var(--bg-muted)";
-        }}
-        onMouseLeave={(e) => {
-          if (!settingsActive)
-            e.currentTarget.style.background = "transparent";
-        }}
-      >
-        <Settings style={{ width: 18, height: 18 }} />
-        Pengaturan
-      </Link>
-      <div
-        style={{
-          padding: "12px 14px 16px",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          borderTop: "0.5px solid var(--border-default)"
-        }}
-      >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 99,
-            background: "var(--brand-primary)",
-            color: "white",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 600,
-            fontSize: 12,
-            flexShrink: 0
-          }}
-        >
-          {user?.initials ?? "?"}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              marginBottom: 1
-            }}
-          >
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                flex: 1,
-                minWidth: 0
-              }}
-            >
-              {user?.nama ?? "Tamu"}
-            </span>
-            {user && (
-              <span
-                style={{
-                  fontSize: 9.5,
-                  fontWeight: 700,
-                  padding: "2px 6px",
-                  borderRadius: 4,
-                  background: roleBadgeColor.bg,
-                  color: roleBadgeColor.fg,
-                  letterSpacing: 0.4,
-                  textTransform: "uppercase",
-                  flexShrink: 0
-                }}
-              >
-                {roleBadgeLabel}
-              </span>
-            )}
-          </div>
-          <div
-            style={{
-              fontSize: 11,
-              color: "var(--text-tertiary)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap"
-            }}
-          >
-            {user?.email ?? "—"}
-          </div>
-        </div>
-        <LogoutButton variant="icon" />
-      </div>
     </aside>
   );
 }

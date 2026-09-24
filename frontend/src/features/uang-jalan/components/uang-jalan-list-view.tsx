@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, Wallet } from "lucide-react";
+import { BellRing, Search, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatRupiah, formatDate } from "@/lib/utils";
-import type { UangJalanJobRow } from "@/types";
+import { formatRupiah, formatDate, formatDateTime } from "@/lib/utils";
+import type { UangJalanJobRow, UangJalanRequest } from "@/types";
+import { Pagination, usePagination } from "@/components/ui/pagination";
+import { PageHeader } from "@/components/ui/page-header";
 
-type Filter = "semua" | "berjalan" | "belum_cair" | "lewat_pagu";
+type Filter = "semua" | "pengajuan" | "berjalan" | "belum_cair" | "lewat_pagu";
 
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: "semua", label: "Semua" },
+  { key: "pengajuan", label: "Ada pengajuan driver" },
   { key: "berjalan", label: "Masih jalan" },
   { key: "belum_cair", label: "Belum dikasih sama sekali" },
   { key: "lewat_pagu", label: "Lebih dari pagu" }
@@ -17,15 +20,18 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
 
 interface Props {
   rows: UangJalanJobRow[];
+  /** Pengajuan driver yang menunggu kasir (Fase 3). */
+  pengajuan?: UangJalanRequest[];
 }
 
-export function UangJalanListView({ rows }: Props) {
+export function UangJalanListView({ rows, pengajuan = [] }: Props) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("semua");
 
   const tersaring = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
+      if (filter === "pengajuan" && r.pengajuan_menunggu === 0) return false;
       if (filter === "berjalan" && r.status === "selesai") return false;
       if (filter === "belum_cair" && r.ringkasan.cair > 0) return false;
       if (filter === "lewat_pagu" && r.ringkasan.sisa >= 0) return false;
@@ -63,8 +69,42 @@ export function UangJalanListView({ rows }: Props) {
     [rows]
   );
 
+  const pg = usePagination(tersaring, { resetKey: `${q}|${filter}` });
+
   return (
     <div>
+      <PageHeader
+        title="Uang Jalan"
+        description="Posisi uang jalan per job serta pengajuan dari driver yang perlu dicairkan."
+        style={{ marginBottom: 16 }}
+      />
+      {pengajuan.length > 0 && (
+        <div
+          className="card card-pad"
+          style={{ marginBottom: 16, borderColor: "#fed7aa", background: "#fff7ed" }}
+        >
+          <div className="h3" style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+            <BellRing style={{ width: 16, height: 16, color: "#c2410c" }} />
+            {pengajuan.length} pengajuan uang jalan menunggu dicairkan
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {pengajuan.map((r) => (
+              <Link
+                key={r.id}
+                to={`/jobs/${r.job_id}`}
+                style={{ display: "flex", gap: 10, alignItems: "center", textDecoration: "none", color: "inherit", fontSize: 13 }}
+              >
+                <span className="mono" style={{ fontWeight: 600 }}>{r.job_number ?? "—"}</span>
+                <span style={{ flex: 1 }}>
+                  {r.driver_nama ?? "Driver"} mengajukan <b>{formatRupiah(r.nominal)}</b>
+                  {r.catatan ? ` · ${r.catatan}` : ""}
+                </span>
+                <span className="caption">{formatDateTime(r.requested_at)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ marginBottom: 16 }}>
         <Input
           leftIcon={<Search style={{ width: 15, height: 15 }} />}
@@ -130,10 +170,11 @@ export function UangJalanListView({ rows }: Props) {
                   <th style={{ textAlign: "right" }}>Dikasih</th>
                   <th style={{ textAlign: "right" }}>Belum dikasih</th>
                   <th style={{ textAlign: "right" }}>Terakhir</th>
+                  <th>Pengajuan</th>
                 </tr>
               </thead>
               <tbody>
-                {tersaring.map((r) => {
+                {pg.items.map((r) => {
                   const minus = r.ringkasan.sisa < 0;
                   return (
                     <tr key={r.job_id}>
@@ -201,6 +242,13 @@ export function UangJalanListView({ rows }: Props) {
                           ? formatDate(r.pencairan_terakhir)
                           : "—"}
                       </td>
+                      <td>
+                        {r.pengajuan_menunggu > 0 ? (
+                          <span className="badge badge-perbaikan">{r.pengajuan_menunggu} menunggu</span>
+                        ) : (
+                          <span className="caption">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -232,6 +280,7 @@ export function UangJalanListView({ rows }: Props) {
               </tfoot>
             </table>
           </div>
+          <Pagination state={pg} label="pengajuan" attached />
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import {
   createQuotation,
   updateQuotation,
@@ -261,17 +262,13 @@ export function QuotationForm({
         </p>
         <div className="split-2" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
           <Field label="Customer" required>
-            <Select
+            <Combobox
               value={form.customer_id}
-              onChange={(e) => onCustomerChange(e.target.value)}
-            >
-              <option value="">— pilih customer —</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nama_perusahaan}
-                </option>
-              ))}
-            </Select>
+              onChange={onCustomerChange}
+              options={customers.map((c) => ({ value: c.id, label: c.nama_perusahaan }))}
+              placeholder="— pilih customer —"
+              searchPlaceholder="Cari nama customer…"
+            />
           </Field>
 
           <Field

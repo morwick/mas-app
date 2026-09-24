@@ -9,7 +9,7 @@ from app.core.errors import GoneError, NotFoundError, UpstreamError, ValidationE
 from app.core.pg import first, rows, single
 from app.core.timeutil import iso_utc
 from app.integrations.tracksolid.client import TrackSolidClient
-from app.modules.jobs.mappers import PUBLIC_JOB_SELECT, to_job
+from app.modules.jobs.mappers import PUBLIC_JOB_SELECT, active_children, to_job
 from app.modules.tracking.schemas import (
     FleetLocationsResponse,
     LocationEntry,
@@ -72,7 +72,10 @@ class PublicTrackingService:
 
     async def get(self, token: str) -> PublicTrackingResponse:
         row = single(
-            await self._db.table("jobs").select(PUBLIC_JOB_SELECT).eq("share_token", token).maybe_single().execute()
+            await active_children(self._db.table("jobs").select(PUBLIC_JOB_SELECT), PUBLIC_JOB_SELECT)
+            .eq("share_token", token)
+            .maybe_single()
+            .execute()
         )
         # Token tidak ada ATAU RLS menutup job yang sudah selesai/dibatalkan —
         # bagi pelanggan artinya sama: tautan sudah berakhir.
@@ -112,7 +115,7 @@ class PublicTrackingService:
         502 = TrackSolid bermasalah → coba lagi interval berikutnya."""
         row = single(
             await self._db.table("jobs")
-            .select("id, status, unit_id, units!inner(imei_gps)")
+            .select("id, status_job, unit_id, units!inner(imei_gps)")
             .eq("share_token", token)
             .maybe_single()
             .execute()

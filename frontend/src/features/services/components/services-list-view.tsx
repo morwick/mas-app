@@ -7,6 +7,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import type { JenisUnit, ServiceStatus, UnitWithService } from "@/types";
 import { deriveServiceStatus, formatKm } from "@/lib/service";
 import { syncAllMileage } from "@/features/services/api";
+import { Pagination, usePagination } from "@/components/ui/pagination";
+import { Combobox } from "@/components/ui/combobox";
+import { PageHeader } from "@/components/ui/page-header";
 
 const MILEAGE_POLL_MS = 5 * 60 * 1000; // 5 menit
 
@@ -115,6 +118,8 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
     return c;
   }, [rows]);
 
+  const pg = usePagination(filtered, { resetKey: `${q}|${jenis}|${statusFilter}` });
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
@@ -127,14 +132,10 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
           flexWrap: "wrap"
         }}
       >
-        <div>
-          <h1 className="h1" style={{ fontSize: 22, marginBottom: 4 }}>
-            Service Unit
-          </h1>
-          <p className="body-sm muted">
-            Pantau jadwal servis berkala tiap unit (per 10.000 km).
-          </p>
-        </div>
+        <PageHeader
+          title="Service Unit"
+          description="Pantau jadwal servis berkala tiap unit (per 10.000 km)."
+        />
         <SyncIndicator polling={polling} lastSyncAt={lastSyncAt} />
       </div>
 
@@ -167,7 +168,7 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
 
       {/* Toolbar */}
       <div className="toolbar">
-        <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
+        <div className="toolbar-search">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -175,30 +176,29 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
             leftIcon={<Search style={{ width: 15, height: 15 }} />}
           />
         </div>
-        <Select
-          value={jenis}
-          onChange={(e) => setJenis(e.target.value)}
-          style={{ width: 160 }}
-        >
-          <option value="">Semua jenis</option>
-          {jenisUnitList.map((j) => (
-            <option key={j.id} value={j.id}>
-              {j.nama}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={statusFilter}
-          onChange={(e) =>
-            setStatusFilter(e.target.value as "" | ServiceStatus)
-          }
-          style={{ width: 160 }}
-        >
-          <option value="">Semua status</option>
-          <option value="overdue">Overdue</option>
-          <option value="mendekati">Mendekati</option>
-          <option value="ok">OK</option>
-        </Select>
+        <div className="toolbar-filter">
+          <Combobox
+            value={jenis}
+            onChange={setJenis}
+            options={jenisUnitList.map((j) => ({ value: j.id, label: j.nama }))}
+            placeholder="Semua jenis"
+            searchPlaceholder="Cari jenis unit…"
+            clearable
+          />
+        </div>
+        <div className="toolbar-filter">
+          <Select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as "" | ServiceStatus)
+            }
+          >
+            <option value="">Semua status</option>
+            <option value="overdue">Overdue</option>
+            <option value="mendekati">Mendekati</option>
+            <option value="ok">OK</option>
+          </Select>
+        </div>
       </div>
 
       {/* Tabel */}
@@ -225,7 +225,7 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {pg.items.map((r) => (
                 <tr key={r.unit.id} className="row-link">
                   <td>
                     <Link
@@ -323,7 +323,7 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
 
           {/* Mobile: card list */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
-            {filtered.map((r) => (
+            {pg.items.map((r) => (
               <Link
                 key={r.unit.id}
                 to={`/units/${r.unit.id}?tab=service`}
@@ -411,6 +411,8 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
               </Link>
             ))}
           </div>
+
+          <Pagination state={pg} label="unit" />
         </>
       )}
     </div>

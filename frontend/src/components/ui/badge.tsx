@@ -1,43 +1,41 @@
 import { cn } from "@/lib/utils";
-import type { ServiceStatus } from "@/types";
+import { JOB_STATUS_BADGE, JOB_STATUS_LABEL } from "@/lib/job-status";
+import type { JobStatus, ServiceStatus } from "@/types";
 
 type StatusKey =
   | "standby"
   | "bertugas"
   | "perbaikan"
-  | "cancelled"
+  | "terjual"
+  | "diafkirkan"
   | "info"
-  | "menunggu_pickup"
-  | "loading"
-  | "dalam_perjalanan"
-  | "unloading"
-  | "selesai"
-  | "neutral";
+  | "neutral"
+  | "stand_by"
+  | "in_job"
+  | JobStatus;
 
 const statusClass: Record<StatusKey, string> = {
   standby: "badge-standby",
   bertugas: "badge-bertugas",
   perbaikan: "badge-perbaikan",
-  cancelled: "badge-cancelled",
+  terjual: "badge-terjual",
+  diafkirkan: "badge-diafkirkan",
   info: "badge-pickup",
-  menunggu_pickup: "badge-pickup",
-  loading: "badge-loading",
-  dalam_perjalanan: "badge-perjalanan",
-  unloading: "badge-unloading",
-  selesai: "badge-selesai",
-  neutral: ""
+  neutral: "",
+  stand_by: "badge-standby",
+  in_job: "badge-bertugas",
+  ...JOB_STATUS_BADGE
 };
 
 const labels: Partial<Record<StatusKey, string>> = {
   standby: "Standby",
   bertugas: "Bertugas",
   perbaikan: "Perbaikan",
-  cancelled: "Dibatalkan",
-  menunggu_pickup: "Menunggu pickup",
-  loading: "Loading",
-  dalam_perjalanan: "Dalam perjalanan",
-  unloading: "Unloading",
-  selesai: "Selesai"
+  terjual: "Terjual",
+  diafkirkan: "Diafkirkan",
+  stand_by: "Stand By",
+  in_job: "In Job",
+  ...JOB_STATUS_LABEL
 };
 
 interface StatusBadgeProps {

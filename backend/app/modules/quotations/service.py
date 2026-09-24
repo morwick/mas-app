@@ -8,7 +8,9 @@ from supabase import AsyncClient
 
 from app.core.errors import NotFoundError, ValidationError
 from app.core.pg import clean_text, first, num, rows, single
+from app.core.soft_delete import AKTIF, DIHAPUS, STATUS
 from app.core.timeutil import iso_utc, roman_month, today_wib, today_wib_str
+from app.core.transaksi import Transaksi
 from app.modules.quotations.schemas import (
     Quotation,
     QuotationCreated,
@@ -26,7 +28,7 @@ QUOTATION_SELECT = """
   customer_id, customer_nama, customer_kota, pic_sapaan, pic_nama,
   kota_terbit, tanggal, berlaku_sampai, perihal, objek, lampiran,
   ppn_aktif, ppn_persen, subtotal, ppn_nominal, total,
-  status, ttd_nama, ttd_jabatan, catatan, alasan_ditolak,
+  status_penawaran, ttd_nama, ttd_jabatan, catatan, alasan_ditolak,
   sent_at, decided_at, created_at, updated_at,
   created_by_profile:profiles!quotations_created_by_fkey(nama)
 """
@@ -85,7 +87,7 @@ def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
         "subtotal": num(r.get("subtotal")),
         "ppn_nominal": num(r.get("ppn_nominal")),
         "total": num(r.get("total")),
-        "status": derive_status(r["status"], r.get("berlaku_sampai")),
+        "status": derive_status(r["status_penawaran"], r.get("berlaku_sampai")),
         "ttd_nama": r.get("ttd_nama"),
         "ttd_jabatan": r.get("ttd_jabatan"),
         "catatan": r.get("catatan"),
@@ -167,12 +169,14 @@ class QuotationService:
         # jenis unit untuk operator, jadi hitungannya hanya job yang boleh ia lihat.
         q = (
             self._db.table("quotations")
-            .select(f"{QUOTATION_SELECT}, quotation_items(id), jobs(id, status)")
+            .select(f"{QUOTATION_SELECT}, quotation_items(id), jobs(id, status_job)")
+            .eq("quotation_items.status", AKTIF)
+            .eq("jobs.status", AKTIF)
             .order("seq_tahun", desc=True)
             .order("seq_no", desc=True)
         )
         if status:
-            q = q.eq("status", status)
+            q = q.eq("status_penawaran", status)
         if customer_id:
             q = q.eq("customer_id", customer_id)
         if limit:
@@ -180,13 +184,13 @@ class QuotationService:
 
         out = []
         for r in rows(await q.execute()):
-            jobs = [j for j in (r.get("jobs") or []) if j.get("status") != "cancelled"]
+            jobs = [j for j in (r.get("jobs") or []) if j.get("status_job") != "cancelled"]
             out.append(
                 QuotationListRow(
                     **_base_fields(r),
                     jumlah_item=len(r.get("quotation_items") or []),
                     jumlah_job=len(jobs),
-                    jumlah_job_selesai=sum(1 for j in jobs if j.get("status") == "selesai"),
+                    jumlah_job_selesai=sum(1 for j in jobs if j.get("status_job") == "selesai"),
                 )
             )
         return out
@@ -225,12 +229,22 @@ class QuotationService:
     async def jobs_for(self, quotation_id: str) -> list[QuotationJobRef]:
         res = await (
             self._db.table("jobs")
-            .select("id, job_number, status, asal, tujuan, etd")
+            .select("id, job_number, status_job, asal, tujuan, etd")
             .eq("quotation_id", quotation_id)
             .order("created_at")
             .execute()
         )
-        return [QuotationJobRef(**r) for r in rows(res)]
+        return [
+            QuotationJobRef(
+                id=r["id"],
+                job_number=r["job_number"],
+                status=r["status_job"],
+                asal=r["asal"],
+                tujuan=r["tujuan"],
+                etd=r["etd"],
+            )
+            for r in rows(res)
+        ]
 
     async def create(self, payload: QuotationInput, *, created_by: str | None) -> QuotationCreated:
         _validate(payload)
@@ -245,72 +259,66 @@ class QuotationService:
         if cust is None:
             raise NotFoundError("Customer tidak ditemukan")
 
-        # Nomor diambil atomik dari database — dua admin yang menyimpan bersamaan
-        # tetap mendapat nomor berbeda.
-        num_res = await self._db.rpc("next_quotation_number").execute()
-        nomor = first(num_res.data) or {}
-        if not nomor.get("nomor"):
-            raise ValidationError("Gagal ambil nomor surat dari database")
-
-        res = await (
-            self._db.table("quotations")
-            .insert(
-                {
-                    "quote_number": nomor["nomor"],
-                    "seq_no": nomor["seq"],
-                    "seq_tahun": nomor["tahun"],
-                    "customer_id": payload.customer_id,
-                    "customer_nama": cust["nama_perusahaan"],
-                    "customer_kota": cust.get("kota"),
-                    "pic_sapaan": payload.pic_sapaan or cust.get("pic_sapaan"),
-                    "pic_nama": clean_text(payload.pic_nama) or cust.get("pic_nama"),
-                    **_header_payload(payload),
-                    "created_by": created_by,
-                }
-            )
-            .execute()
+        # Satu transaksi: nomor diambil atomik dari database (dua admin yang
+        # menyimpan bersamaan tetap mendapat nomor berbeda), lalu header dan
+        # rincian. Satu langkah gagal → semuanya batal, nomor tidak hangus.
+        tx = Transaksi(self._db)
+        nomor = tx.nomor_dokumen("quotation")
+        q = tx.insert(
+            "quotations",
+            {
+                "quote_number": nomor["nomor"],
+                "seq_no": nomor["seq"],
+                "seq_tahun": nomor["tahun"],
+                "customer_id": payload.customer_id,
+                "customer_nama": cust["nama_perusahaan"],
+                "customer_kota": cust.get("kota"),
+                "pic_sapaan": payload.pic_sapaan or cust.get("pic_sapaan"),
+                "pic_nama": clean_text(payload.pic_nama) or cust.get("pic_nama"),
+                **_header_payload(payload),
+                "created_by": created_by,
+            },
         )
-        row = rows(res)[0]
-
-        try:
-            await self._db.table("quotation_items").insert(_item_rows(row["id"], payload.items)).execute()
-        except Exception:
-            # Header tanpa rincian tidak berguna — buang. Nomornya hangus, itu
-            # konsekuensi wajar demi urutan yang tidak pernah dipakai ulang.
-            await self._db.table("quotations").delete().eq("id", row["id"]).execute()
-            raise
+        tx.insert("quotation_items", _item_rows(q["id"], payload.items))
+        hasil = await tx.jalankan()
+        row = hasil[1][0]
         return QuotationCreated(id=row["id"], quote_number=row["quote_number"])
 
     async def update(self, quotation_id: str, payload: QuotationInput) -> None:
         _validate(payload)
         existing = single(
-            await self._db.table("quotations").select("status").eq("id", quotation_id).maybe_single().execute()
+            await self._db.table("quotations")
+            .select("status_penawaran")
+            .eq("id", quotation_id)
+            .maybe_single()
+            .execute()
         )
         if existing is None:
             raise NotFoundError("Penawaran tidak ditemukan")
-        if existing["status"] not in EDITABLE_STATUSES:
+        if existing["status_penawaran"] not in EDITABLE_STATUSES:
             raise ValidationError(
                 "Penawaran yang sudah deal tidak bisa diubah. Batalkan status deal-nya dulu bila memang perlu direvisi."
             )
 
-        await (
-            self._db.table("quotations")
-            .update(
-                {
-                    "pic_sapaan": payload.pic_sapaan,
-                    "pic_nama": clean_text(payload.pic_nama),
-                    **_header_payload(payload),
-                }
-            )
-            .eq("id", quotation_id)
-            .execute()
+        # Rincian diganti utuh (baris bisa ditambah/dihapus/diurutkan bebas di
+        # form) — dalam satu transaksi bersama header, supaya rincian lama tidak
+        # hilang kalau rincian baru gagal disimpan.
+        tx = Transaksi(self._db)
+        tx.update(
+            "quotations",
+            {
+                "pic_sapaan": payload.pic_sapaan,
+                "pic_nama": clean_text(payload.pic_nama),
+                **_header_payload(payload),
+            },
+            {"id": quotation_id},
         )
-        # Rincian diganti utuh: baris bisa ditambah/dihapus/diurutkan bebas di form.
-        await self._db.table("quotation_items").delete().eq("quotation_id", quotation_id).execute()
-        await self._db.table("quotation_items").insert(_item_rows(quotation_id, payload.items)).execute()
+        tx.hapus("quotation_items", {"quotation_id": quotation_id})
+        tx.insert("quotation_items", _item_rows(quotation_id, payload.items))
+        await tx.jalankan()
 
     async def set_status(self, quotation_id: str, payload: SetQuotationStatusRequest) -> None:
-        data: dict[str, Any] = {"status": payload.status}
+        data: dict[str, Any] = {"status_penawaran": payload.status}
         now = iso_utc()
         if payload.status == "terkirim":
             data["sent_at"] = now
@@ -324,4 +332,4 @@ class QuotationService:
         await self._db.table("quotations").update(data).eq("id", quotation_id).execute()
 
     async def delete(self, quotation_id: str) -> None:
-        await self._db.table("quotations").delete().eq("id", quotation_id).execute()
+        await self._db.table("quotations").update({STATUS: DIHAPUS}).eq("id", quotation_id).execute()

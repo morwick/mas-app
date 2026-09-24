@@ -30,6 +30,10 @@ import { useToast } from "@/components/ui/toast";
 import { JobStepper } from "@/features/jobs/components/job-stepper";
 import { UpdateStatusModal } from "@/features/jobs/components/update-status-modal";
 import { UploadPhotoModal } from "@/features/jobs/components/upload-photo-modal";
+import { PhotoSlots } from "@/features/jobs/components/photo-slots";
+import { ValidationPanel } from "@/features/jobs/components/validation-panel";
+import { GantiTrukModal, bolehGantiTruk } from "@/features/jobs/components/ganti-truk-modal";
+import { useRiwayatGantiTruk } from "@/features/jobs/queries";
 import {
   cancelJob,
   updateJobStatus
@@ -40,13 +44,16 @@ import type {
   Job,
   JobStatus,
   JobStatusHistoryEntry,
+  PhotoSlot,
+  PhotoStage,
   SumberDana,
   UangJalan,
+  UangJalanRequest,
   UangJalanRingkasan,
   Unit
 } from "@/types";
 import { UangJalanCard } from "@/features/uang-jalan/components/uang-jalan-card";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatRupiah } from "@/lib/utils";
 
 interface Props {
   job: Job;
@@ -56,6 +63,7 @@ interface Props {
   sumberDana: SumberDana[];
   uangJalan: UangJalan[];
   uangJalanRingkasan: UangJalanRingkasan;
+  uangJalanPengajuan?: UangJalanRequest[];
 }
 
 function driverInitials(nama: string) {
@@ -75,21 +83,22 @@ export function JobDetailView({
   history,
   sumberDana,
   uangJalan,
-  uangJalanRingkasan
+  uangJalanRingkasan,
+  uangJalanPengajuan = []
 }: Props) {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const loadingPhotos = (job.photos ?? []).filter((p) => p.type === "loading");
-  const unloadingPhotos = (job.photos ?? []).filter(
-    (p) => p.type === "unloading"
-  );
+  const photos = job.photos ?? [];
+  // Foto lama (sebelum v2) tanpa slot tetap ditampilkan sebagai arsip.
+  const legacyPhotos = photos.filter((p) => !p.slot);
+  const allPhotoUrls = photos.map((p) => p.file_url);
 
   const [statusOpen, setStatusOpen] = useState(false);
-  const [uploadType, setUploadType] = useState<"loading" | "unloading" | null>(
-    null
-  );
+  const [uploadTarget, setUploadTarget] = useState<{ stage: PhotoStage; slot: PhotoSlot | null } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [gantiTrukOpen, setGantiTrukOpen] = useState(false);
+  const riwayatGantiTruk = useRiwayatGantiTruk(job.id);
   const [lightbox, setLightbox] = useState<{
     images: string[];
     index: number;
@@ -107,6 +116,9 @@ export function JobDetailView({
   const shareUrl = `${origin}/track/${job.share_token}`;
 
   const closed = job.status === "selesai" || job.status === "cancelled";
+  // Job boleh dibatalkan selama uang jalan belum cair. Sesudah itu uangnya
+  // sudah di tangan driver dan penutupannya lewat alur normal.
+  const uangJalanCair = (job.uang_jalan_cair ?? 0) > 0;
 
   async function onUpdateStatus(next: JobStatus, notes?: string) {
     setPending(true);
@@ -143,6 +155,22 @@ export function JobDetailView({
 
   return (
     <div className="flex flex-col gap-4">
+      {job.status === "menunggu_validasi" && (
+        <ValidationPanel
+          job={job}
+          uangJalan={{
+            pagu: uangJalanRingkasan.pagu,
+            cair: uangJalanRingkasan.cair,
+            pending: uangJalanPengajuan.filter((r) => r.status === "diajukan").length
+          }}
+        />
+      )}
+      {job.validation_note && job.status !== "menunggu_validasi" && job.status !== "selesai" && (
+        <div className="card card-pad" style={{ borderColor: "#e0c06a", background: "#fffaf0" }}>
+          <div className="caption">Dikembalikan ke driver dengan catatan</div>
+          <div className="text-[13px]">{job.validation_note}</div>
+        </div>
+      )}
       {/* Header card with stepper */}
       <div className="card">
         <div
@@ -247,8 +275,25 @@ export function JobDetailView({
                 className="btn btn-secondary btn-sm"
                 style={{ color: "#C13838", borderColor: "#F5C0C0" }}
                 onClick={() => setCancelOpen(true)}
+                disabled={uangJalanCair}
+                title={
+                  uangJalanCair
+                    ? `Uang jalan sudah dicairkan ${formatRupiah(job.uang_jalan_cair ?? 0)} — job tidak bisa dibatalkan lagi.`
+                    : undefined
+                }
               >
                 Cancel job
+              </button>
+            )}
+            {bolehGantiTruk(job) && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setGantiTrukOpen(true)}
+                title="Truk rusak di perjalanan? Ganti dengan truk lain (driver opsional ikut diganti)."
+              >
+                <Truck style={{ width: 14, height: 14 }} />
+                Ganti truk
               </button>
             )}
             {!closed && (
@@ -375,41 +420,35 @@ export function JobDetailView({
             </div>
           )}
 
-          {/* Photos sections */}
-          <PhotoSection
-            title="Foto loading"
-            photos={loadingPhotos}
-            onUpload={() => setUploadType("loading")}
-            onOpen={(i) =>
-              setLightbox({
-                images: loadingPhotos.map((p) => p.file_url),
-                index: i
-              })
-            }
-            onDelete={(p) =>
-              setDeletePhoto({ id: p.id, path: p.file_path })
-            }
-            canUpload={!closed}
-            max={5}
-          />
-          <PhotoSection
-            title="Foto unloading"
-            photos={unloadingPhotos}
-            onUpload={() => setUploadType("unloading")}
-            onOpen={(i) =>
-              setLightbox({
-                images: unloadingPhotos.map((p) => p.file_url),
-                index: i
-              })
-            }
-            onDelete={(p) =>
-              setDeletePhoto({ id: p.id, path: p.file_path })
-            }
-            canUpload={
-              !closed && (job.status === "unloading" || job.status === "selesai")
-            }
-            max={5}
-          />
+          {/* Foto per slot (BR-06) */}
+          {(["loading", "unloading", "serah_terima"] as PhotoStage[]).map((stage) => (
+            <PhotoSlots
+              key={stage}
+              stage={stage}
+              photos={photos}
+              reference={
+                stage === "loading"
+                  ? { lat: job.asal_lat, lng: job.asal_lng }
+                  : stage === "unloading"
+                    ? { lat: job.tujuan_lat, lng: job.tujuan_lng }
+                    : undefined
+              }
+              onOpen={(p) => setLightbox({ images: allPhotoUrls, index: allPhotoUrls.indexOf(p.file_url) })}
+              onDelete={closed ? undefined : (p) => setDeletePhoto({ id: p.id, path: p.file_path })}
+              onUpload={closed ? undefined : (slot) => setUploadTarget({ stage, slot })}
+            />
+          ))}
+          {legacyPhotos.length > 0 && (
+            <PhotoSection
+              title="Foto arsip (tanpa slot)"
+              photos={legacyPhotos}
+              onUpload={() => setUploadTarget({ stage: "loading", slot: null })}
+              onOpen={(i) => setLightbox({ images: legacyPhotos.map((p) => p.file_url), index: i })}
+              onDelete={(p) => setDeletePhoto({ id: p.id, path: p.file_path })}
+              canUpload={!closed}
+              max={5}
+            />
+          )}
         </div>
 
         {/* Right column */}
@@ -579,6 +618,14 @@ export function JobDetailView({
                   <ArrowRight style={{ width: 14, height: 14 }} />
                 </Link>
               </div>
+              {job.unit_trailer_kode && (
+                <div
+                  className="caption"
+                  style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--border-default)" }}
+                >
+                  Unit trailer: <strong style={{ color: "var(--text-primary)" }}>{job.unit_trailer_kode}</strong>
+                </div>
+              )}
             </div>
           )}
 
@@ -691,7 +738,38 @@ export function JobDetailView({
             sumberDana={sumberDana}
             transaksi={uangJalan}
             ringkasan={uangJalanRingkasan}
+            pengajuan={uangJalanPengajuan}
           />
+
+          {(riwayatGantiTruk.data ?? []).length > 0 && (
+            <div className="card">
+              <div style={{ padding: "14px 16px", borderBottom: "0.5px solid var(--border-default)" }}>
+                <div className="h3">Riwayat ganti truk</div>
+                <div className="caption">Pergantian truk & driver selama perjalanan</div>
+              </div>
+              <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                {(riwayatGantiTruk.data ?? []).map((r) => (
+                  <div key={r.id} style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 2 }}>
+                    <div style={{ fontWeight: 600 }}>
+                      {r.unit_lama_kode ?? "—"} → {r.unit_baru_kode ?? "—"}
+                      {r.unit_trailer_lama_kode !== r.unit_trailer_baru_kode &&
+                        ` (trailer ${r.unit_trailer_lama_kode ?? "—"} → ${r.unit_trailer_baru_kode ?? "—"})`}
+                    </div>
+                    {r.driver_lama_nama !== r.driver_baru_nama && (
+                      <div>
+                        Driver: {r.driver_lama_nama ?? "—"} → {r.driver_baru_nama ?? "—"}
+                      </div>
+                    )}
+                    <div style={{ color: "var(--text-secondary)" }}>Alasan: {r.alasan}</div>
+                    <div className="caption">
+                      {formatDateTime(r.diganti_pada)}
+                      {r.diganti_oleh_nama ? ` · oleh ${r.diganti_oleh_nama}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Audit log */}
           <div className="card">
@@ -798,15 +876,25 @@ export function JobDetailView({
         open={statusOpen}
         onClose={() => setStatusOpen(false)}
         current={job.status}
+        uangJalanCair={uangJalanCair}
         onConfirm={onUpdateStatus}
       />
       <UploadPhotoModal
-        open={uploadType !== null}
-        onClose={() => setUploadType(null)}
-        type={uploadType ?? "loading"}
+        open={uploadTarget !== null}
+        onClose={() => setUploadTarget(null)}
+        type={uploadTarget?.stage ?? "loading"}
+        slot={uploadTarget?.slot ?? null}
         jobId={job.id}
         onDone={() => queryClient.invalidateQueries()}
       />
+      {gantiTrukOpen && (
+        <GantiTrukModal
+          job={job}
+          unitKode={unit?.kode_unit}
+          driverNama={driver?.nama}
+          onClose={() => setGantiTrukOpen(false)}
+        />
+      )}
       <ConfirmDialog
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}

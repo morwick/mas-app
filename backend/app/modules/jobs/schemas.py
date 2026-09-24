@@ -8,15 +8,36 @@ from pydantic import BaseModel, Field, field_validator
 from app.domain.job_conflicts import ConflictCheckResult
 
 JobStatus = Literal[
-    "menunggu_pickup",
+    "menunggu_pickup",  # nilai lama, tidak dipakai lagi setelah migrasi v2
+    "ditugaskan",
+    "diterima",
     "loading",
     "dalam_perjalanan",
     "unloading",
+    "serah_terima_pool",
+    "menunggu_validasi",
     "selesai",
     "cancelled",
 ]
-PhotoType = Literal["loading", "unloading"]
-JobListFilter = Literal["active", "selesai", "cancelled", "all"]
+PhotoStage = Literal["loading", "unloading", "serah_terima"]
+PhotoType = PhotoStage
+PhotoSlot = Literal["depan", "belakang", "kanan", "kiri", "surat_jalan", "serah_terima"]
+# Yang diterima saat unggah: aplikasi driver versi lama masih mengirim
+# 'surat_timbang' (nama lama slot surat jalan) — dinormalkan ke 'surat_jalan'.
+PhotoSlotMasukan = Literal["depan", "belakang", "kanan", "kiri", "surat_jalan", "surat_timbang", "serah_terima"]
+
+
+def normalisasi_slot(slot: PhotoSlotMasukan) -> PhotoSlot:
+    return "surat_jalan" if slot == "surat_timbang" else slot
+
+JobListFilter = Literal["active", "menunggu_validasi", "selesai", "cancelled", "all"]
+
+# Slot yang wajib terisi per tahap (BR-06).
+REQUIRED_SLOTS: dict[str, tuple[str, ...]] = {
+    "loading": ("depan", "belakang", "kanan", "kiri", "surat_jalan"),
+    "unloading": ("depan", "belakang", "kanan", "kiri", "surat_jalan"),
+    "serah_terima": ("serah_terima",),
+}
 
 PHONE_RE = re.compile(r"^(08|\+628)\d{7,12}$")
 
@@ -25,9 +46,17 @@ class JobPhoto(BaseModel):
     id: str
     job_id: str
     type: PhotoType
+    stage: PhotoStage
+    # None untuk foto lama (sebelum v2) yang tidak punya slot.
+    slot: PhotoSlot | None = None
     file_path: str
     file_url: str
     uploaded_at: str
+    sharpness_score: float | None = None
+    kualitas_rendah: bool = False
+    taken_at: str | None = None
+    lat: float | None = None
+    lng: float | None = None
 
 
 class Job(BaseModel):
@@ -51,6 +80,9 @@ class Job(BaseModel):
     # Borongan uang jalan yang disepakati di awal. Tidak dikirim ke halaman publik.
     uang_jalan_pagu: float | None = None
     unit_id: str
+    # Wajib bila jenis unit dari unit-nya punya jenis unit trailer (dijaga database).
+    unit_trailer_id: str | None = None
+    unit_trailer_kode: str | None = None
     driver_id: str
     etd: str
     eta: str | None = None
@@ -68,8 +100,22 @@ class Job(BaseModel):
     pod_at: str | None = None
     created_at: str
     completed_at: str | None = None
+    # Validasi admin (Fase 7).
+    validated_at: str | None = None
+    validated_by_nama: str | None = None
+    validation_note: str | None = None
+    eta_is_estimated: bool = False
     quotation_id: str | None = None
     quotation_number: str | None = None
+    # Total uang jalan yang sudah dicairkan ke driver. Lebih dari nol berarti
+    # job tidak bisa dibatalkan lagi.
+    uang_jalan_cair: float = 0.0
+    # Pengajuan pencairan uang jalan yang masih menunggu keputusan admin.
+    # Hanya terisi pada payload internal; portal driver dan halaman publik
+    # memakai select tanpa kolom ini, jadi nilainya tetap False di sana.
+    uang_jalan_pending: bool = False
+    uang_jalan_pending_nominal: float | None = None
+    uang_jalan_pending_at: str | None = None
     photos: list[JobPhoto] = Field(default_factory=list)
     # Diisi hanya oleh portal driver / halaman publik.
     unit_kode: str | None = None
@@ -85,6 +131,41 @@ class JobStatusHistoryEntry(BaseModel):
     changed_by_driver: bool
     changed_at: str
     notes: str | None = None
+
+
+class GantiTrukRequest(BaseModel):
+    """Ganti truk di tengah perjalanan (truk rusak). Driver opsional ikut diganti."""
+
+    unit_id: str = Field(min_length=1)
+    alasan: str = Field(min_length=1, max_length=1000)
+    # None = driver tetap.
+    driver_id: str | None = None
+    # Wajib bila jenis unit truk baru memakai trailer (dijaga database).
+    unit_trailer_id: str | None = None
+
+    @field_validator("alasan")
+    @classmethod
+    def _alasan(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Alasan ganti truk wajib diisi")
+        return v
+
+
+class GantiTrukEntry(BaseModel):
+    """Satu baris riwayat pergantian truk pada job."""
+
+    id: str
+    diganti_pada: str
+    status_job_saat_ganti: str
+    alasan: str
+    unit_lama_kode: str | None = None
+    unit_baru_kode: str | None = None
+    driver_lama_nama: str | None = None
+    driver_baru_nama: str | None = None
+    unit_trailer_lama_kode: str | None = None
+    unit_trailer_baru_kode: str | None = None
+    diganti_oleh_nama: str | None = None
 
 
 class _JobFields(BaseModel):
@@ -108,17 +189,33 @@ class _JobFields(BaseModel):
 
 
 class JobCreate(_JobFields):
+    # PIC lapangan wajib sejak awal — driver dan admin selalu punya kontak
+    # yang bisa dihubungi di titik muat/bongkar.
+    pic_nama: str = Field(min_length=1)
+    pic_no_hp: str = Field(min_length=1)
     customer_id: str = Field(min_length=1)
     alat_diangkut: str = Field(min_length=1)
     asal: str = Field(min_length=1)
     tujuan: str = Field(min_length=1)
     unit_id: str = Field(min_length=1)
+    # Wajib bila jenis unit dari unit-nya punya jenis unit trailer (dijaga database).
+    unit_trailer_id: str | None = None
     driver_id: str = Field(min_length=1)
     etd: str = Field(min_length=1)
+    # BR-04: uang jalan sudah diketahui sejak awal — wajib.
+    uang_jalan_pagu: int = Field(gt=0, description="Pagu uang jalan (rupiah)")
     # Diisi bila job lahir dari penawaran yang sudah deal.
     quotation_id: str | None = None
     # True bila admin sudah mengonfirmasi tetap simpan meski ada bentrok.
     allow_conflict: bool = False
+
+    @field_validator("pic_nama", "pic_no_hp")
+    @classmethod
+    def _pic_required(cls, v: str) -> str:
+        text = v.strip()
+        if not text:
+            raise ValueError("PIC dan No HP PIC wajib diisi")
+        return text
 
 
 class JobUpdate(_JobFields):
@@ -127,9 +224,19 @@ class JobUpdate(_JobFields):
     asal: str | None = None
     tujuan: str | None = None
     unit_id: str | None = None
+    # Dikirim bersama unit_id saat unit diganti; null = tanpa unit trailer.
+    unit_trailer_id: str | None = None
     driver_id: str | None = None
     etd: str | None = None
     allow_conflict: bool = False
+
+    @field_validator("pic_nama", "pic_no_hp")
+    @classmethod
+    def _pic_not_blank(cls, v: str | None) -> str | None:
+        """Field boleh absen (update parsial), tapi tidak boleh dikosongkan."""
+        if v is not None and not v.strip():
+            raise ValueError("PIC dan No HP PIC wajib diisi")
+        return v
 
 
 class JobCreated(BaseModel):
@@ -165,3 +272,12 @@ class ConflictCheckRequest(BaseModel):
 class ActiveJobByUnit(BaseModel):
     unit_id: str
     job: Job
+
+
+class ReturnJobRequest(BaseModel):
+    note: str = Field(min_length=1)
+    to_status: Literal["loading", "dalam_perjalanan", "unloading", "serah_terima_pool"] = "serah_terima_pool"
+
+
+class StatusResponse(BaseModel):
+    status: JobStatus

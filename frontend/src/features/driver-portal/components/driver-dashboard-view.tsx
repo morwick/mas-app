@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useDriverAuth } from "@/lib/auth/DriverAuthContext";
+import { isActiveStatus } from "@/lib/job-status";
 import type { DriverJob } from "@/types";
 import type { Job } from "@/types";
 
@@ -20,21 +21,24 @@ interface Props {
   jobs: DriverJob[];
 }
 
-const ACTIVE_STATUSES: Job["status"][] = [
-  "menunggu_pickup",
-  "loading",
-  "dalam_perjalanan",
-  "unloading"
-];
-
 const statusConfig: Record<
   Job["status"],
   { label: string; color: string; icon: React.ReactNode }
 > = {
   menunggu_pickup: {
-    label: "Menunggu Pickup",
+    label: "Ditugaskan",
     color: "bg-gray-100 text-gray-700",
     icon: <Clock className="w-3 h-3" />
+  },
+  ditugaskan: {
+    label: "Ditugaskan",
+    color: "bg-gray-100 text-gray-700",
+    icon: <Clock className="w-3 h-3" />
+  },
+  diterima: {
+    label: "Diterima",
+    color: "bg-blue-100 text-blue-700",
+    icon: <CheckCircle className="w-3 h-3" />
   },
   loading: {
     label: "Loading",
@@ -51,6 +55,16 @@ const statusConfig: Record<
     color: "bg-orange-100 text-orange-700",
     icon: <Package className="w-3 h-3" />
   },
+  serah_terima_pool: {
+    label: "Serah terima pool",
+    color: "bg-purple-100 text-purple-700",
+    icon: <Package className="w-3 h-3" />
+  },
+  menunggu_validasi: {
+    label: "Menunggu validasi admin",
+    color: "bg-amber-100 text-amber-800",
+    icon: <Clock className="w-3 h-3" />
+  },
   selesai: {
     label: "Selesai",
     color: "bg-green-100 text-green-700",
@@ -64,7 +78,7 @@ const statusConfig: Record<
 };
 
 function isActive(job: DriverJob): boolean {
-  return ACTIVE_STATUSES.includes(job.status);
+  return isActiveStatus(job.status);
 }
 
 /** Job aktif yang belum ditekan "Terima" oleh driver. */

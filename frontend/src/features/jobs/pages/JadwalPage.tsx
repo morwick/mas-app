@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useUnits } from "@/features/units/queries";
+import { bukanArmada } from "@/lib/unit-status";
 import { JadwalView } from "../components/jadwal-view";
 import { useJobsInRange } from "../queries";
 
@@ -41,7 +42,11 @@ export function JadwalPage() {
           dijadwalkan dua kali.
         </p>
       </div>
-      <JadwalView units={units.data} jobs={jobs.data} weekStart={weekStart} />
+      <JadwalView
+        units={units.data.filter((u) => !bukanArmada(u.status))}
+        jobs={jobs.data}
+        weekStart={weekStart}
+      />
     </div>
   );
 }

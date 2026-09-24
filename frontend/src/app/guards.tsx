@@ -8,25 +8,26 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { useDriverAuth } from "@/lib/auth/DriverAuthContext";
 
 export function RequireAuth() {
-  const { session } = useAuth();
+  const { session, perluPilihRole } = useAuth();
   const location = useLocation();
-  if (!session) {
+  // Akun beberapa role yang belum memilih role kembali ke layar "Masuk sebagai".
+  if (!session || perluPilihRole) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
   return <Outlet />;
 }
 
-export function RequireOwner() {
-  const { isOwner } = useAuth();
-  if (!isOwner) return <Navigate to="/settings" replace />;
+export function RequireSuperadmin() {
+  const { isSuperadmin } = useAuth();
+  if (!isSuperadmin) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
 
 /** Halaman login/reset: yang sudah masuk langsung ke dashboard. */
 export function RedirectIfAuthed() {
-  const { session } = useAuth();
-  if (session) return <Navigate to="/dashboard" replace />;
+  const { session, perluPilihRole } = useAuth();
+  if (session && !perluPilihRole) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
 

@@ -1,12 +1,21 @@
 import { ApiError, api } from "@/lib/api/client";
 import { mutate, queryClient } from "@/lib/api/query";
 import type { ConflictCheckResult } from "@/lib/job-conflicts";
-import type { ActionResult, Job, JobPhoto, JobStatus, JobStatusHistoryEntry } from "@/types";
+import type {
+  ActionResult,
+  Job,
+  JobPhoto,
+  JobStatus,
+  JobStatusHistoryEntry,
+  PhotoSlot,
+  PhotoStage
+} from "@/types";
 
 export interface JobInput {
   customer_id: string;
-  pic_nama?: string | null;
-  pic_no_hp?: string | null;
+  /** PIC di lapangan — wajib; backend menolak nilai kosong. */
+  pic_nama: string;
+  pic_no_hp: string;
   alat_diangkut: string;
   asal: string;
   tujuan: string;
@@ -15,9 +24,13 @@ export interface JobInput {
   tujuan_lat?: number | null;
   tujuan_lng?: number | null;
   unit_id: string;
+  /** Wajib bila jenis unit dari unit-nya punya jenis unit trailer; null bila tidak. */
+  unit_trailer_id?: string | null;
   driver_id: string;
   etd: string;
   eta?: string | null;
+  /** BR-04: pagu uang jalan, wajib saat membuat job. */
+  uang_jalan_pagu?: number;
   catatan?: string | null;
   /** Diisi bila job lahir dari penawaran yang sudah deal. */
   quotation_id?: string | null;
@@ -38,7 +51,7 @@ export interface ActiveJobByUnit {
   job: Job;
 }
 
-export type JobListFilter = "active" | "selesai" | "cancelled" | "all";
+export type JobListFilter = "active" | "menunggu_validasi" | "selesai" | "cancelled" | "all";
 
 export const listJobs = (opts?: { status?: JobListFilter; customerId?: string }) =>
   api.get<Job[]>("/jobs", { status: opts?.status ?? "all", customer_id: opts?.customerId });
@@ -104,12 +117,51 @@ export async function updateJob(
   }
 }
 
+/** Fase 7: Approve — job selesai, driver kembali Stand By. */
+export function validateJob(id: string): Promise<ActionResult<{ status: JobStatus }>> {
+  return mutate(api.post<{ status: JobStatus }>(`/jobs/${id}/validate`));
+}
+
+/** Fase 7: kembalikan ke driver dengan catatan perbaikan. */
+export function returnJob(
+  id: string,
+  note: string,
+  toStatus: "loading" | "dalam_perjalanan" | "unloading" | "serah_terima_pool" = "serah_terima_pool"
+): Promise<ActionResult<{ status: JobStatus }>> {
+  return mutate(api.post<{ status: JobStatus }>(`/jobs/${id}/return`, { note, to_status: toStatus }));
+}
+
 export function updateJobStatus(
   id: string,
   status: JobStatus,
   notes?: string
 ): Promise<ActionResult<unknown>> {
   return mutate(api.post(`/jobs/${id}/status`, { status, notes: notes ?? null }));
+}
+
+/** Satu baris riwayat pergantian truk. */
+export interface GantiTrukEntry {
+  id: string;
+  diganti_pada: string;
+  status_job_saat_ganti: string;
+  alasan: string;
+  unit_lama_kode: string | null;
+  unit_baru_kode: string | null;
+  driver_lama_nama: string | null;
+  driver_baru_nama: string | null;
+  unit_trailer_lama_kode: string | null;
+  unit_trailer_baru_kode: string | null;
+  diganti_oleh_nama: string | null;
+}
+
+export const getRiwayatGantiTruk = (id: string) => api.get<GantiTrukEntry[]>(`/jobs/${id}/ganti-truk`);
+
+/** Ganti truk di tengah perjalanan; driver opsional ikut diganti. */
+export function gantiTruk(
+  id: string,
+  input: { unit_id: string; alasan: string; driver_id?: string | null; unit_trailer_id?: string | null }
+): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/jobs/${id}/ganti-truk`, input));
 }
 
 export function cancelJob(id: string, reason?: string): Promise<ActionResult<unknown>> {
@@ -119,12 +171,14 @@ export function cancelJob(id: string, reason?: string): Promise<ActionResult<unk
 /** Foto job diunggah lewat backend (yang meneruskan ke Supabase Storage). */
 export function uploadJobPhoto(
   jobId: string,
-  type: "loading" | "unloading",
+  stage: PhotoStage,
   file: Blob,
-  fileName = "foto.jpg"
+  fileName = "foto.jpg",
+  slot?: PhotoSlot
 ): Promise<ActionResult<JobPhoto>> {
   const form = new FormData();
-  form.append("type", type);
+  form.append("type", stage);
+  if (slot) form.append("slot", slot);
   form.append("photo", file, fileName);
   return mutate(api.upload<JobPhoto>(`/jobs/${jobId}/photos`, form));
 }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Channel default untuk push FCM. Dirujuk AndroidManifest (meta-data
+         default_notification_channel_id) dan MainActivity yang membuatnya. -->
+    <string name="default_notification_channel_id" translatable="false">mas_job</string>
+    <string name="default_notification_channel_name">Job &amp; Notifikasi</string>
+    <string name="default_notification_channel_description">Pemberitahuan job baru, penugasan ulang, dan pembatalan.</string>
+</resources>

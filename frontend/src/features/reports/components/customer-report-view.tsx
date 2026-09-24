@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { Select, Field } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import { exportToXlsx } from "@/lib/export";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Customer, Job } from "@/types";
@@ -72,20 +73,17 @@ export function CustomerReportView({
       >
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Field>
-            <Select
+            <Combobox
               value={customerId}
-              onChange={(e) => updateParam("customer", e.target.value)}
-              style={{ width: 260, height: 36 }}
-            >
-              <option value="">Semua customer</option>
-              {customers
+              onChange={(v) => updateParam("customer", v)}
+              options={customers
                 .filter((c) => c.is_active || c.id === customerId)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nama_perusahaan}
-                  </option>
-                ))}
-            </Select>
+                .map((c) => ({ value: c.id, label: c.nama_perusahaan }))}
+              placeholder="Semua customer"
+              searchPlaceholder="Cari nama customer…"
+              clearable
+              style={{ width: 260, height: 36 }}
+            />
           </Field>
           <Field>
             <Select

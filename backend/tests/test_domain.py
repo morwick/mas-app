@@ -22,7 +22,7 @@ def _job(**over: object) -> ScheduledJob:
         driver_id="d1",
         etd="2026-09-22T08:00:00Z",
         eta="2026-09-22T18:00:00Z",
-        status="menunggu_pickup",
+        status="ditugaskan",
     )
     base.update(over)
     return ScheduledJob(**base)  # type: ignore[arg-type]
@@ -190,3 +190,62 @@ class TestTimeUtil:
         dt = next_day_midnight_wib_as_utc(date(2026, 9, 22))
         assert dt == datetime(2026, 9, 23, 0, 0, tzinfo=WIB).astimezone(UTC)
         assert dt.hour == 17 and dt.day == 22
+
+
+class TestImageQuality:
+    @staticmethod
+    def _jpeg(img) -> bytes:  # type: ignore[no-untyped-def]
+        import io
+
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
+
+    def test_sharp_vs_blurred(self) -> None:
+        import numpy as np
+        from PIL import Image, ImageFilter
+
+        from app.core.image_quality import assess_photo
+
+        rng = np.random.default_rng(1)
+        noise = (rng.random((1400, 2000)) * 255).astype("uint8")
+        sharp = Image.fromarray(noise).convert("RGB")
+        blurred = sharp.filter(ImageFilter.GaussianBlur(8))
+
+        a = assess_photo(self._jpeg(sharp), slot="depan")
+        b = assess_photo(self._jpeg(blurred), slot="depan")
+        assert a.sharpness > b.sharpness
+        assert not a.kualitas_rendah
+        assert b.kualitas_rendah and "buram" in b.alasan
+
+    def test_low_resolution_flagged(self) -> None:
+        from PIL import Image
+
+        from app.core.image_quality import assess_photo
+
+        small = Image.new("RGB", (640, 480), (120, 120, 120))
+        r = assess_photo(self._jpeg(small))
+        assert "resolusi rendah" in r.alasan
+
+    def test_garbage_bytes_do_not_raise(self) -> None:
+        from app.core.image_quality import assess_photo_safely
+
+        assert assess_photo_safely(b"bukan gambar") is None
+
+
+class TestStatusFlow:
+    def test_active_statuses_cover_v2_flow(self) -> None:
+        from app.domain.job_conflicts import ACTIVE_JOB_STATUSES
+
+        for s in ("ditugaskan", "diterima", "loading", "dalam_perjalanan", "unloading",
+                  "serah_terima_pool", "menunggu_validasi"):
+            assert s in ACTIVE_JOB_STATUSES
+        assert "selesai" not in ACTIVE_JOB_STATUSES and "cancelled" not in ACTIVE_JOB_STATUSES
+
+    def test_public_select_hides_internal_columns(self) -> None:
+        from app.modules.jobs.mappers import DRIVER_JOB_SELECT, PUBLIC_JOB_SELECT
+
+        for col in ("uang_jalan_pagu", "validator", "quotation", "  catatan"):
+            assert col not in PUBLIC_JOB_SELECT
+        assert "uang_jalan_pagu" not in DRIVER_JOB_SELECT
+        assert "unit:units" in DRIVER_JOB_SELECT

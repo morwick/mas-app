@@ -7,6 +7,7 @@ from typing import Any
 from supabase import AsyncClient
 
 from app.core.pg import clean_text, first, num, rows
+from app.core.soft_delete import DIHAPUS, STATUS
 from app.modules.maintenance.schemas import CalibrateRequest, ServiceCreate, ServiceRecord
 from app.modules.units.schemas import UnitWithService
 from app.modules.units.service import UnitService
@@ -86,7 +87,7 @@ class MaintenanceService:
         return _to_record(rows(full)[0])
 
     async def delete(self, record_id: str) -> None:
-        await self._db.table("service_records").delete().eq("id", record_id).execute()
+        await self._db.table("service_records").update({STATUS: DIHAPUS}).eq("id", record_id).execute()
 
     async def calibrate(self, payload: CalibrateRequest) -> None:
         await (

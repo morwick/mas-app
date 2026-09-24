@@ -298,6 +298,20 @@ select {
   align-items: center;
   gap: 4px;
 }
+/* Bukan kesalahan input — hanya konsekuensi yang perlu diketahui admin
+   (mis. unit tanpa GPS). Memakai token status "perbaikan". */
+.field-warning {
+  font-size: 12px;
+  color: var(--status-perbaikan-text);
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  line-height: 1.45;
+}
+.field-warning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
 
 .input,
 .select,
@@ -395,6 +409,15 @@ select {
 .badge-perbaikan {
   background: var(--status-perbaikan-bg);
   color: var(--status-perbaikan-text);
+}
+/* Unit sudah dijual / diafkirkan — bukan lagi armada. */
+.badge-terjual {
+  background: #eceef1;
+  color: #4b5563;
+}
+.badge-diafkirkan {
+  background: #e5e7eb;
+  color: #374151;
 }
 .badge-cancelled {
   background: var(--status-cancelled-bg);
@@ -644,6 +667,10 @@ select {
   text-align: center;
   font-weight: 500;
   line-height: 1.3;
+  /* Kolom tiap tahap bisa lebih sempit dari satu kata; tanpa ini label
+     meluber ke kiri-kanan dan menimpa label tetangganya. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .stepper-label.active {
   color: var(--brand-primary-dark);
@@ -928,4 +955,497 @@ body {
    z-index Leaflet (controls 1000, panes 200-800) tidak tembus ke top-bar/sidebar. */
 .map-isolated {
   isolation: isolate;
+}
+
+/* ============================================
+   Combobox — dropdown yang bisa dicari
+   ============================================ */
+.combobox-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.combobox-trigger:disabled {
+  cursor: not-allowed;
+  background: var(--bg-subtle);
+  color: var(--text-tertiary);
+}
+.combobox-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.combobox-placeholder {
+  color: var(--text-tertiary);
+}
+.combobox-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.combobox-clear:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.combobox-popup {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-default);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+.combobox-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 0.5px solid var(--border-default);
+}
+.combobox-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.combobox-list {
+  overflow-y: auto;
+  padding: 4px;
+}
+.combobox-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.combobox-option-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.combobox-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.combobox-option[data-active="true"] {
+  background: var(--bg-subtle);
+}
+.combobox-option[data-selected="true"] {
+  color: var(--brand-primary-dark);
+  font-weight: 500;
+}
+.combobox-option[data-disabled="true"] {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+.combobox-option[data-disabled="true"][data-active="true"] {
+  background: transparent;
+}
+.combobox-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.combobox-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   Pagination & penataan toolbar daftar
+   ============================================ */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-muted);
+}
+.pagination-attached {
+  border: none;
+  border-top: 0.5px solid var(--border-default);
+  border-radius: 0;
+}
+.pagination-info {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.pagination-btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-default);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.pagination-btn:hover:not(:disabled):not([data-active="true"]) {
+  background: var(--bg-subtle);
+}
+.pagination-btn[data-active="true"] {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: var(--text-on-brand);
+  cursor: default;
+}
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pagination-gap {
+  padding: 0 2px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+/* Penataan isi .toolbar supaya lebarnya tidak saling berebut dan tidak
+   ada yang tertimpa saat ruangnya menyempit. */
+.toolbar-search {
+  flex: 1 1 260px;
+  min-width: 200px;
+}
+.toolbar-filter {
+  flex: 0 1 170px;
+  min-width: 140px;
+}
+.toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+@media (max-width: 767px) {
+  /* Kelas ini muncul setelah aturan `.toolbar > *` di atas, jadi perlu
+     ditegaskan ulang — kalau tidak, flex-basis-nya menang dan kotak cari
+     berdesakan dengan filter di baris yang sama. */
+  .toolbar-search,
+  .toolbar-filter {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .toolbar-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .toolbar-actions > * {
+    flex: 1;
+  }
+  .pagination {
+    justify-content: center;
+  }
+}
+
+
+/* Tombol aksi mengambang (mobile). Gayanya di kelas, bukan inline style —
+   inline `display` akan mengalahkan utility `lg:hidden` dan membuatnya
+   ikut tampil di desktop lalu menimpa isi tabel. */
+.fab {
+  position: fixed;
+  right: 16px;
+  bottom: 72px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 99px;
+  background: var(--brand-primary);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(28, 150, 0, 0.32);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ============================================
+   Pencarian global di top bar
+   ============================================ */
+.global-search {
+  width: 320px;
+  max-width: 100%;
+  /* Jangan ikut meregang kalau induknya flex dengan align-items: stretch —
+     panel hasil memakai top:100% dan akan terlempar ke dasar layar. */
+  align-self: center;
+}
+.global-search-anchor {
+  position: relative;
+}
+.global-search-input {
+  height: 36px;
+  font-size: 13px;
+  padding-left: 36px;
+  padding-right: 64px;
+}
+.global-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+  display: flex;
+}
+.global-search-kbd {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 3px;
+  pointer-events: none;
+}
+.global-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-full);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.global-search-clear:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.global-search-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-default);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+.global-search-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+.global-search-hit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.global-search-hit[data-active="true"] {
+  background: var(--bg-subtle);
+}
+.global-search-hit-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.global-search-hit-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-search-hit-sub {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-search-kind {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.spin {
+  animation: spin 900ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pemilih jumlah baris di bilah pagination */
+.pagination-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pagination-size-label {
+  color: var(--text-secondary);
+}
+.pagination-size {
+  height: 28px;
+  padding: 0 24px 0 8px;
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-default);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12.5px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235F5E5A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  cursor: pointer;
+}
+
+/* ============================================
+   Daftar notifikasi (halaman Notifikasi)
+   ============================================ */
+.notif-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 0.5px solid var(--border-default);
+  text-decoration: none;
+  color: inherit;
+}
+.notif-row:hover {
+  background: var(--bg-muted);
+}
+.notif-row[data-unread="true"] {
+  background: var(--brand-primary-light);
+}
+.notif-row[data-unread="true"]:hover {
+  background: #dff0d2;
+}
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.notif-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notif-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.notif-text {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.notif-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.notif-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--brand-primary);
+  color: #fff;
+}
+@media (max-width: 767px) {
+  .notif-meta {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+  }
+}
+
+/* Kaki panel lonceng — jalan menuju halaman Notifikasi */
+.notif-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 11px 14px;
+  border-top: 0.5px solid var(--border-default);
+  background: var(--bg-muted);
+  color: var(--brand-primary-dark);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.notif-panel-footer:hover {
+  background: var(--bg-subtle);
 }

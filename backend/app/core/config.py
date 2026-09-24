@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     # Menembus semua RLS. Hanya dipakai untuk cron dan operasi sistem internal.
     supabase_service_role_key: str = ""
+    # Schema Postgres tempat seluruh tabel & fungsi aplikasi (lihat migration
+    # 20260924000002). Harus terdaftar di Data API → Exposed schemas.
+    supabase_db_schema: str = "transport"
 
     # Integrasi eksternal
     tracksolid_account: str = ""
@@ -22,6 +25,14 @@ class Settings(BaseSettings):
 
     # Rahasia untuk endpoint cron (Authorization: Bearer <CRON_SECRET>)
     cron_secret: str = ""
+
+    # Firebase Cloud Messaging — path berkas service account JSON. Kosong = push nonaktif.
+    firebase_credentials_file: str = ""
+
+    # Jumlah reverse proxy tepercaya di depan backend (load balancer, nginx, …).
+    # IP pengguna diambil dari X-Forwarded-For posisi ke-N dari KANAN — entri
+    # paling kiri bisa diisi sembarang oleh klien. 0 = abaikan header proxy.
+    trusted_proxy_count: int = 1
 
     # URL frontend — dipakai redirect tautan reset password
     app_url: str = "http://localhost:5173"
@@ -32,6 +43,7 @@ class Settings(BaseSettings):
     # Bucket storage
     job_photos_bucket: str = "job-photos"
     incident_photos_bucket: str = "incident-photos"
+    bukti_transfer_bucket: str = "bukti-transfer"
 
     environment: str = Field(default="development")
 

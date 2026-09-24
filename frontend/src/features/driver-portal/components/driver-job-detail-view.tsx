@@ -1,4 +1,12 @@
-import { useState, type FormEvent } from "react";
+/**
+ * Detail job di portal driver (web transisi) — alur v2:
+ *   ditugaskan → (Terima) → diterima → [kunci uang jalan] → loading (5 foto)
+ *   → dalam perjalanan → unloading (5 foto) → serah terima pool (1 foto)
+ *   → menunggu validasi admin → selesai.
+ * Semua kunci ditegakkan ulang di database; tampilan ini hanya memandu.
+ */
+
+import { useMemo, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -9,70 +17,63 @@ import {
   MapPin,
   Phone,
   User,
-  Upload,
+  Camera,
   BellRing,
-  Lock
+  Lock,
+  Wallet,
+  AlertTriangle,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Textarea, Field } from "@/components/ui/input";
-import { SignaturePad } from "./signature-pad";
+import { Modal } from "@/components/ui/modal";
+import { formatRupiah } from "@/lib/utils";
+import {
+  JOB_STATUS_LABEL,
+  NEXT_DRIVER_STATUS,
+  REQUIRED_SLOTS,
+  SLOT_LABEL,
+  STAGE_LABEL,
+  stageForStatus
+} from "@/lib/job-status";
 import {
   driverAcceptJob,
-  driverSubmitPod,
+  driverRequestUangJalan,
   driverUpdateJobStatus,
   driverUploadPhoto
 } from "@/features/driver-portal/api";
-import type { DriverJob } from "@/types";
-import type { Job } from "@/types";
+import { useDriverUangJalan } from "@/features/driver-portal/queries";
+import type { DriverJob, JobPhoto, JobStatus, PhotoSlot, PhotoStage } from "@/types";
 
 interface Props {
   job: DriverJob;
 }
 
-/**
- * Langkah berikutnya untuk tiap status. Sengaja hanya satu — driver maju
- * selangkah demi selangkah, dan koreksi status yang terlanjur salah adalah
- * wewenang admin. Aturan yang sama dijaga ulang di database, jadi tampilan
- * ini boleh saja tertinggal versi lama tanpa merusak data.
- */
-const nextStatusOf: Record<Job["status"], Job["status"] | null> = {
-  menunggu_pickup: "loading",
-  loading: "dalam_perjalanan",
-  dalam_perjalanan: "unloading",
-  // Dari unloading job ditutup lewat form serah terima, bukan tombol status —
-  // supaya tidak ada job selesai yang tidak punya bukti terima.
-  unloading: null,
-  selesai: null,
-  cancelled: null
+/** Teks tombol maju per status saat ini. */
+const ADVANCE_LABEL: Partial<Record<JobStatus, string>> = {
+  diterima: "Tiba di lokasi muat — Mulai Loading",
+  loading: "Muat selesai — Berangkat",
+  dalam_perjalanan: "Tiba di tujuan — Mulai Bongkar",
+  unloading: "Bongkar selesai — Kembali ke Pool",
+  serah_terima_pool: "Selesaikan Orderan"
 };
 
-const statusLabel: Record<Job["status"], string> = {
-  menunggu_pickup: "Menunggu Pickup",
-  loading: "Loading",
-  dalam_perjalanan: "Dalam Perjalanan",
-  unloading: "Unloading",
-  selesai: "Selesai",
-  cancelled: "Dibatalkan"
-};
-
-const actionLabel: Record<Job["status"], string> = {
-  menunggu_pickup: "Menunggu Pickup",
-  loading: "Mulai Loading",
-  dalam_perjalanan: "Berangkat",
-  unloading: "Mulai Bongkar",
-  selesai: "Selesaikan Job",
-  cancelled: "Dibatalkan"
-};
-
-const statusColor: Record<Job["status"], string> = {
+const STATUS_CLASS: Record<JobStatus, string> = {
   menunggu_pickup: "bg-gray-100 text-gray-700",
+  ditugaskan: "bg-gray-100 text-gray-700",
+  diterima: "bg-blue-100 text-blue-700",
   loading: "bg-blue-100 text-blue-700",
   dalam_perjalanan: "bg-brand-primary text-white",
   unloading: "bg-orange-100 text-orange-700",
+  serah_terima_pool: "bg-purple-100 text-purple-700",
+  menunggu_validasi: "bg-amber-100 text-amber-800",
   selesai: "bg-green-100 text-green-700",
   cancelled: "bg-status-cancelled-bg text-status-cancelled-fg"
 };
+
+const AJUKAN_ALERT =
+  "Apakah anda yakin ingin mengajukan uang jalan? Anda baru bisa melanjutkan perjalanan setelah admin kasir mengupload bukti transfer uang jalan.";
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("id-ID", {
@@ -83,99 +84,119 @@ function formatDateTime(value: string): string {
   });
 }
 
+function photoBySlot(photos: JobPhoto[], stage: PhotoStage): Partial<Record<PhotoSlot, JobPhoto>> {
+  const out: Partial<Record<PhotoSlot, JobPhoto>> = {};
+  for (const p of photos) {
+    if (p.stage === stage && p.slot) out[p.slot] = p;
+  }
+  return out;
+}
+
 export function DriverJobDetailView({ job }: Props) {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploadFor, setUploadFor] = useState<"loading" | "unloading" | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [pod, setPod] = useState({
-    penerima_nama: "",
-    penerima_jabatan: "",
-    catatan: ""
-  });
-  const [signature, setSignature] = useState<string | null>(null);
+  const [uploadingSlot, setUploadingSlot] = useState<string | null>(null);
+  const [ajukanOpen, setAjukanOpen] = useState(false);
+  const [nominal, setNominal] = useState("");
+  const [catatanAjukan, setCatatanAjukan] = useState("");
 
-  /** Jalankan aksi dengan indikator sibuk; hasil gagal ditampilkan di banner. */
-  async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+  const uangJalan = useDriverUangJalan(job.id);
+  const posisi = uangJalan.data?.posisi ?? null;
+  const pengajuanPending = uangJalan.data?.pengajuan.find((p) => p.status === "diajukan") ?? null;
+
+  const accepted = Boolean(job.accepted_at);
+  const closed = job.status === "selesai" || job.status === "cancelled";
+  const status: JobStatus = job.status === "menunggu_pickup" ? "ditugaskan" : job.status;
+  const nextStatus = NEXT_DRIVER_STATUS[status] ?? null;
+  const stage = stageForStatus(status);
+
+  const photos = job.photos ?? [];
+  const slotsFilled = useMemo(() => (stage ? photoBySlot(photos, stage) : {}), [photos, stage]);
+  const requiredSlots = stage ? REQUIRED_SLOTS[stage] : [];
+  const missingSlots = requiredSlots.filter((s) => !slotsFilled[s]);
+
+  // Foto tahap ini baru boleh diunggah saat status sudah masuk tahapnya.
+  const photoStageOpen =
+    (stage === "loading" && status === "loading") ||
+    (stage === "unloading" && status === "unloading") ||
+    (stage === "serah_terima" && status === "serah_terima_pool");
+
+  // Kunci uang jalan (BR-02) hanya berlaku sebelum tahap muat.
+  const lockedByUangJalan = status === "diterima" && (!posisi?.ada_bukti || posisi.pending_request);
+  const lockedByPending = Boolean(posisi?.pending_request) && status !== "diterima";
+  const needPhotos = photoStageOpen && missingSlots.length > 0;
+
+  const advanceBlockedReason = !accepted
+    ? "Terima pekerjaan dulu."
+    : lockedByUangJalan || lockedByPending
+      ? "Menunggu admin mengunggah bukti transfer uang jalan."
+      : needPhotos && stage
+        ? `Lengkapi ${missingSlots.length} foto ${STAGE_LABEL[stage].toLowerCase()} dulu.`
+        : null;
+
+  async function run(action: () => Promise<{ ok: boolean; error?: string }>): Promise<boolean> {
     setIsPending(true);
+    setError(null);
     try {
       const res = await action();
       if (!res.ok) setError(res.error ?? "Terjadi kesalahan");
+      return res.ok;
     } finally {
       setIsPending(false);
     }
   }
 
-  const accepted = Boolean(job.accepted_at);
-  const closed = job.status === "selesai" || job.status === "cancelled";
-  const nextStatus = nextStatusOf[job.status];
-
-  const handleAccept = () => {
-    setError(null);
-    void run(() => driverAcceptJob(job.id));
-  };
+  const handleAccept = () => void run(() => driverAcceptJob(job.id));
 
   const handleAdvance = () => {
-    if (!nextStatus) return;
-    setError(null);
+    if (!nextStatus || advanceBlockedReason) return;
     void run(() => driverUpdateJobStatus(job.id, nextStatus));
   };
 
-  const handleSubmitPod = () => {
-    if (!pod.penerima_nama.trim()) {
-      setError("Nama penerima wajib diisi");
-      return;
-    }
-    if (!signature) {
-      setError("Minta penerima tanda tangan dulu");
-      return;
-    }
+  async function handleSlotFile(slot: PhotoSlot, e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !stage) return;
     setError(null);
-    void run(() =>
-      driverSubmitPod({
-        jobId: job.id,
-        penerima_nama: pod.penerima_nama,
-        penerima_jabatan: pod.penerima_jabatan,
-        catatan: pod.catatan,
-        signature_data_url: signature
-      })
-    );
-  };
+    setUploadingSlot(slot);
+    const res = await driverUploadPhoto(job.id, stage, slot, file, {
+      fileName: file.name,
+      takenAt: new Date().toISOString()
+    });
+    setUploadingSlot(null);
+    if (!res.ok) setError(res.error);
+  }
 
-  const handleUpload = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!uploadFor) return;
-    const input = e.currentTarget.elements.namedItem("photo") as HTMLInputElement | null;
-    const file = input?.files?.[0];
-    if (!file) {
-      setError("Pilih foto dulu");
+  async function submitAjukan() {
+    const n = Number(nominal);
+    if (!Number.isFinite(n) || n <= 0) {
+      setError("Nominal harus lebih dari nol");
       return;
     }
-    setError(null);
-    setUploading(true);
-    const res = await driverUploadPhoto(job.id, uploadFor, file, file.name);
-    setUploading(false);
-    if (!res.ok) {
-      setError(res.error);
+    if (!window.confirm(AJUKAN_ALERT)) return;
+    setAjukanOpen(false);
+    const ok = await run(() => driverRequestUangJalan(job.id, Math.round(n), catatanAjukan));
+    if (!ok) {
+      // Isian tetap ada supaya driver tinggal memperbaiki lalu mengirim ulang.
+      setAjukanOpen(true);
       return;
     }
-    setUploadFor(null);
-  };
+    setNominal("");
+    setCatatanAjukan("");
+  }
 
-  const canUploadLoading =
-    accepted && (job.status === "loading" || job.status === "dalam_perjalanan");
-  const canUploadUnloading =
-    accepted && (job.status === "unloading" || job.status === "selesai");
+  const canAjukan =
+    accepted &&
+    !closed &&
+    status !== "menunggu_validasi" &&
+    (posisi?.sisa ?? 0) > 0 &&
+    !posisi?.pending_request;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <Link to="/driver/dashboard">
-          <Button
-            variant="ghost"
-            size="sm"
-            leftIcon={<ArrowLeft className="w-4 h-4" />}
-          />
+          <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />} />
         </Link>
         <div className="min-w-0">
           <h1 className="text-lg font-bold truncate">{job.job_number}</h1>
@@ -184,9 +205,7 @@ export function DriverJobDetailView({ job }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`badge ${statusColor[job.status]}`}>
-          {statusLabel[job.status]}
-        </span>
+        <span className={`badge ${STATUS_CLASS[status]}`}>{JOB_STATUS_LABEL[status]}</span>
         {accepted ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800">
             <CheckCircle className="w-3 h-3" />
@@ -203,18 +222,25 @@ export function DriverJobDetailView({ job }: Props) {
       </div>
 
       {error && (
-        <p className="text-[13px] text-danger bg-status-cancelled-bg px-3 py-2 rounded-md">
-          {error}
-        </p>
+        <p className="text-[13px] text-danger bg-status-cancelled-bg px-3 py-2 rounded-md">{error}</p>
       )}
 
-      {/* Konfirmasi job — pintu pertama sebelum tombol lain terbuka. */}
+      {job.validation_note && status !== "selesai" && (
+        <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[13px] text-amber-900">
+            <span className="font-semibold">Dikembalikan admin:</span> {job.validation_note}
+          </p>
+        </div>
+      )}
+
+      {/* Fase 2: Terima pekerjaan */}
       {!accepted && !closed && (
         <Card className="p-4 border-amber-300">
           <h3 className="font-bold mb-1">Job baru untuk Anda</h3>
           <p className="text-[13px] text-text-muted mb-3">
-            Periksa rute, unit, dan jam berangkat di bawah. Tekan Terima Job
-            kalau sudah dibaca — kantor akan tahu job ini sudah sampai ke Anda.
+            Periksa rute, unit, dan jam berangkat di bawah. Tekan Terima Pekerjaan kalau sudah
+            dibaca — kantor akan tahu job ini sudah sampai ke Anda.
           </p>
           <Button
             fullWidth
@@ -223,8 +249,158 @@ export function DriverJobDetailView({ job }: Props) {
             loading={isPending}
             leftIcon={<CheckCircle className="w-4 h-4" />}
           >
-            Terima Job
+            Terima Pekerjaan
           </Button>
+        </Card>
+      )}
+
+      {/* Fase 3: uang jalan */}
+      {accepted && !closed && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-bold flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-brand-primary" />
+              Uang jalan
+            </h3>
+            {uangJalan.isFetching && <RefreshCw className="w-3.5 h-3.5 animate-spin text-text-subtle" />}
+          </div>
+          {posisi ? (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-md bg-page p-2">
+                <div className="text-[11px] text-text-muted">Pagu</div>
+                <div className="font-semibold text-[13px]">{formatRupiah(posisi.pagu)}</div>
+              </div>
+              <div className="rounded-md bg-page p-2">
+                <div className="text-[11px] text-text-muted">Diterima</div>
+                <div className="font-semibold text-[13px]">{formatRupiah(posisi.cair)}</div>
+              </div>
+              <div className="rounded-md bg-page p-2">
+                <div className="text-[11px] text-text-muted">Sisa</div>
+                <div className="font-semibold text-[13px]">{formatRupiah(posisi.sisa)}</div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[13px] text-text-muted">Memuat posisi uang jalan…</p>
+          )}
+          {pengajuanPending && (
+            <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
+              <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-[13px] text-amber-900">
+                Pengajuan {formatRupiah(pengajuanPending.nominal)} menunggu admin kasir mengunggah
+                bukti transfer.
+              </p>
+            </div>
+          )}
+          {lockedByUangJalan && !pengajuanPending && (
+            <div className="flex items-start gap-2 rounded-md bg-page px-3 py-2">
+              <Lock className="w-4 h-4 text-text-subtle flex-shrink-0 mt-0.5" />
+              <p className="text-[13px] text-text-muted">
+                Tahap muat terbuka setelah admin mengunggah bukti transfer uang jalan pertama.
+              </p>
+            </div>
+          )}
+          <Button
+            fullWidth
+            variant="secondary"
+            onClick={() => setAjukanOpen(true)}
+            disabled={!canAjukan || isPending}
+            leftIcon={<Wallet className="w-4 h-4" />}
+          >
+            Ajukan Uang Jalan
+          </Button>
+        </Card>
+      )}
+
+      {/* Fase 4–6: foto per slot */}
+      {accepted && !closed && stage && (
+        <Card className="p-4 space-y-3">
+          <div>
+            <h3 className="font-bold flex items-center gap-2">
+              <Camera className="w-4 h-4 text-brand-primary" />
+              Foto {STAGE_LABEL[stage].toLowerCase()}
+            </h3>
+            <p className="text-[12px] text-text-muted">
+              {photoStageOpen
+                ? `${requiredSlots.length - missingSlots.length}/${requiredSlots.length} foto terisi. Ambil dari kamera, satu foto per slot.`
+                : "Slot foto terbuka setelah status masuk tahap ini."}
+            </p>
+          </div>
+          <div className="grid gap-2">
+            {requiredSlots.map((slot) => {
+              const photo = slotsFilled[slot];
+              const busy = uploadingSlot === slot;
+              return (
+                <div
+                  key={slot}
+                  className="flex items-center gap-3 rounded-md border border-border bg-card p-2"
+                >
+                  <div className="w-14 h-14 rounded-md bg-page overflow-hidden flex items-center justify-center flex-shrink-0">
+                    {photo ? (
+                      <img src={photo.file_url} alt={SLOT_LABEL[slot]} className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera className="w-5 h-5 text-text-subtle" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium">{SLOT_LABEL[slot]}</div>
+                    {photo?.kualitas_rendah && (
+                      <div className="text-[11px] text-amber-700">Tampak buram — disarankan ambil ulang</div>
+                    )}
+                    {photo && !photo.kualitas_rendah && (
+                      <div className="text-[11px] text-green-700">Terisi</div>
+                    )}
+                  </div>
+                  <label
+                    className={`btn btn-sm ${photo ? "btn-secondary" : "btn-primary"} ${
+                      !photoStageOpen || busy ? "opacity-50 pointer-events-none" : ""
+                    }`}
+                  >
+                    {busy ? "Mengunggah…" : photo ? "Ulangi" : "Ambil"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={!photoStageOpen || busy}
+                      onChange={(e) => void handleSlotFile(slot, e)}
+                    />
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Tombol maju */}
+      {accepted && !closed && nextStatus && (
+        <Card className="p-4 space-y-2">
+          <Button
+            fullWidth
+            size="lg"
+            onClick={handleAdvance}
+            loading={isPending}
+            disabled={Boolean(advanceBlockedReason)}
+            leftIcon={<Truck className="w-4 h-4" />}
+          >
+            {ADVANCE_LABEL[status]}
+          </Button>
+          {advanceBlockedReason && (
+            <p className="text-[12px] text-text-muted flex items-center gap-1 justify-center">
+              <Lock className="w-3 h-3" />
+              {advanceBlockedReason}
+            </p>
+          )}
+        </Card>
+      )}
+
+      {status === "menunggu_validasi" && (
+        <Card className="p-4 border-amber-300">
+          <h3 className="font-bold mb-1">Menunggu validasi admin</h3>
+          <p className="text-[13px] text-text-muted">
+            Orderan sudah Anda selesaikan. Status Anda tetap In Job sampai admin memvalidasi
+            semua foto dan data.
+          </p>
         </Card>
       )}
 
@@ -239,7 +415,6 @@ export function DriverJobDetailView({ job }: Props) {
               <div className="font-medium">{job.asal}</div>
             </div>
           </div>
-
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-brand-light flex items-center justify-center flex-shrink-0">
               <MapPin className="w-4 h-4 text-brand-primary" />
@@ -250,248 +425,80 @@ export function DriverJobDetailView({ job }: Props) {
             </div>
           </div>
         </div>
-
         <div className="divider" />
-
         <div className="flex items-center gap-2 text-sm">
           <Package className="w-4 h-4 text-text-subtle" />
           <span>{job.alat_diangkut}</span>
         </div>
-
-        {(job.unit_kode || job.unit_no_polisi) && (
+        <div className="flex items-center gap-2 text-sm">
+          <Clock className="w-4 h-4 text-text-subtle" />
+          <span>Berangkat {formatDateTime(job.etd)}</span>
+        </div>
+        {job.eta && (
+          <div className="flex items-center gap-2 text-sm">
+            <Clock className="w-4 h-4 text-text-subtle" />
+            <span>
+              Estimasi sampai {formatDateTime(job.eta)}
+              {job.eta_is_estimated ? " (perkiraan sistem)" : ""}
+            </span>
+          </div>
+        )}
+        {job.unit_kode && (
           <div className="flex items-center gap-2 text-sm">
             <Truck className="w-4 h-4 text-text-subtle" />
             <span>
               {job.unit_kode}
-              {job.unit_no_polisi ? ` (${job.unit_no_polisi})` : ""}
+              {job.unit_no_polisi ? ` · ${job.unit_no_polisi}` : ""}
             </span>
           </div>
         )}
-
-        <div className="flex items-center gap-2 text-sm">
-          <Clock className="w-4 h-4 text-text-subtle" />
-          <span>Berangkat: {formatDateTime(job.etd)}</span>
-        </div>
-
-        {job.eta && (
-          <div className="flex items-center gap-2 text-sm">
-            <Clock className="w-4 h-4 text-text-subtle" />
-            <span>Perkiraan tiba: {formatDateTime(job.eta)}</span>
-          </div>
-        )}
-
-        {(job.pic_nama || job.pic_no_hp) && <div className="divider" />}
-
         {job.pic_nama && (
           <div className="flex items-center gap-2 text-sm">
             <User className="w-4 h-4 text-text-subtle" />
-            <span>{job.pic_nama}</span>
+            <span>PIC: {job.pic_nama}</span>
+            {job.pic_no_hp && (
+              <a href={`tel:${job.pic_no_hp}`} className="ml-auto inline-flex items-center gap-1 text-brand-dark">
+                <Phone className="w-4 h-4" />
+                {job.pic_no_hp}
+              </a>
+            )}
           </div>
-        )}
-        {job.pic_no_hp && (
-          <a
-            href={`tel:${job.pic_no_hp}`}
-            className="flex items-center gap-2 text-sm text-brand-primary hover:underline"
-          >
-            <Phone className="w-4 h-4" />
-            {job.pic_no_hp}
-          </a>
-        )}
-
-        {job.catatan && (
-          <>
-            <div className="divider" />
-            <div>
-              <div className="text-xs text-text-muted mb-1">Catatan</div>
-              <div className="text-sm whitespace-pre-wrap">{job.catatan}</div>
-            </div>
-          </>
         )}
       </Card>
 
-      {(canUploadLoading || canUploadUnloading) && (
-        <Card className="p-4">
-          <h3 className="font-bold mb-3">Dokumentasi Foto</h3>
-          <div className="flex gap-2">
-            {canUploadLoading && (
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() => setUploadFor("loading")}
-                leftIcon={<Upload className="w-4 h-4" />}
-              >
-                Foto Loading
-              </Button>
-            )}
-            {canUploadUnloading && (
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() => setUploadFor("unloading")}
-                leftIcon={<Upload className="w-4 h-4" />}
-              >
-                Foto Unloading
-              </Button>
-            )}
-          </div>
-          {job.photos && job.photos.length > 0 && (
-            <p className="mt-3 text-[12px] text-text-muted">
-              {job.photos.length} foto sudah terkirim ke kantor.
-            </p>
-          )}
-        </Card>
-      )}
-
-      {/* Serah terima — pintu keluar job, menggantikan tombol "Selesai".
-          Ditaruh setelah kartu foto supaya driver melihat dokumentasi dulu
-          sebelum menutup pekerjaan. */}
-      {accepted && job.status === "unloading" && (
-        <Card className="p-4">
-          <h3 className="font-bold mb-1">Serah terima barang</h3>
-          <p className="text-[13px] text-text-muted mb-3">
-            Isi nama penerima dan minta tanda tangannya di layar. Setelah
-            tersimpan, job otomatis ditandai selesai dan kantor bisa langsung
-            menagihkan tanpa menunggu surat jalan kembali.
-          </p>
-
-          <Field label="Nama penerima" required>
-            <Input
-              value={pod.penerima_nama}
-              onChange={(e) =>
-                setPod((p) => ({ ...p, penerima_nama: e.target.value }))
-              }
-              placeholder="Nama orang yang menerima di lokasi"
-            />
-          </Field>
-          <Field label="Jabatan / keterangan">
-            <Input
-              value={pod.penerima_jabatan}
-              onChange={(e) =>
-                setPod((p) => ({ ...p, penerima_jabatan: e.target.value }))
-              }
-              placeholder="mis. Kepala gudang"
-            />
-          </Field>
-          <Field label="Tanda tangan penerima" required>
-            <SignaturePad onChange={setSignature} disabled={isPending} />
-          </Field>
-          <Field label="Catatan serah terima">
-            <Textarea
-              value={pod.catatan}
-              onChange={(e) =>
-                setPod((p) => ({ ...p, catatan: e.target.value }))
-              }
-              placeholder="Opsional — mis. ada lecet di bodi kanan"
-            />
-          </Field>
-
-          <Button
-            fullWidth
-            size="lg"
-            loading={isPending}
-            onClick={handleSubmitPod}
-            leftIcon={<CheckCircle className="w-4 h-4" />}
-          >
-            Simpan serah terima & selesaikan job
-          </Button>
-        </Card>
-      )}
-
-      {/* Bukti terima yang sudah tersimpan. */}
-      {job.pod_at && (
-        <Card className="p-4">
-          <h3 className="font-bold mb-2">Bukti terima</h3>
-          <div className="text-[13px] space-y-1">
-            <div>
-              Diterima oleh <strong>{job.pod_penerima_nama}</strong>
-              {job.pod_penerima_jabatan ? ` (${job.pod_penerima_jabatan})` : ""}
-            </div>
-            <div className="text-text-muted">
-              {formatDateTime(job.pod_at)}
-            </div>
-            {job.pod_catatan && (
-              <div className="text-text-muted">{job.pod_catatan}</div>
-            )}
-          </div>
-          {job.pod_signature_url && (
-            <img
-              src={job.pod_signature_url}
-              alt="Tanda tangan penerima"
-              className="mt-3 h-24 w-auto border border-border rounded-md bg-white"
-            />
-          )}
-        </Card>
-      )}
-
-      {!closed && nextStatus && (
-        <Card className="p-4">
-          <h3 className="font-bold mb-3">Update Status</h3>
-          {accepted ? (
-            <Button
-              fullWidth
-              size="lg"
-              onClick={handleAdvance}
-              loading={isPending}
-              leftIcon={
-                nextStatus === "loading" || nextStatus === "unloading" ? (
-                  <Package className="w-4 h-4" />
-                ) : nextStatus === "dalam_perjalanan" ? (
-                  <Truck className="w-4 h-4" />
-                ) : (
-                  <CheckCircle className="w-4 h-4" />
-                )
-              }
-            >
-              {actionLabel[nextStatus]}
+      <Modal
+        open={ajukanOpen}
+        onClose={() => setAjukanOpen(false)}
+        title="Ajukan uang jalan"
+        description={posisi ? `Sisa pagu ${formatRupiah(posisi.sisa)}` : undefined}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAjukanOpen(false)}>
+              Batal
             </Button>
-          ) : (
-            <div className="flex items-start gap-2 text-[13px] text-text-muted">
-              <Lock className="w-4 h-4 flex-shrink-0 mt-0.5 text-text-subtle" />
-              <span>
-                Terima job dulu di atas. Setelah itu tombol{" "}
-                {actionLabel[nextStatus]} terbuka.
-              </span>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {uploadFor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md p-4">
-            <h3 className="font-bold mb-4">
-              Upload Foto {uploadFor === "loading" ? "Loading" : "Unloading"}
-            </h3>
-            <form onSubmit={handleUpload} className="space-y-4">
-              <input
-                type="file"
-                name="photo"
-                accept="image/jpeg,image/png,image/webp"
-                capture="environment"
-                required
-                className="w-full text-sm"
-              />
-              <p className="text-[12px] text-text-muted">
-                Maksimal 5 MB per foto.
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  fullWidth
-                  onClick={() => setUploadFor(null)}
-                  disabled={uploading}
-                >
-                  Batal
-                </Button>
-                <Button type="submit" fullWidth loading={uploading}>
-                  Upload
-                </Button>
-              </div>
-            </form>
-          </Card>
+            <Button onClick={() => void submitAjukan()} loading={isPending}>
+              Ajukan
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <Field label="Nominal (Rp)" required>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={posisi?.sisa ?? undefined}
+              value={nominal}
+              onChange={(e) => setNominal(e.target.value)}
+              placeholder="contoh: 500000"
+            />
+          </Field>
+          <Field label="Keperluan" hint="Opsional — mis. solar, tol, makan">
+            <Textarea value={catatanAjukan} onChange={(e) => setCatatanAjukan(e.target.value)} rows={2} />
+          </Field>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
