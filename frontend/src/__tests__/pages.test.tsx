@@ -13,7 +13,7 @@ import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { DriverLoginPage } from "@/features/driver-portal/pages/DriverPages";
 import { TrackingExpiredPage } from "@/features/public-tracking/pages/TrackPages";
 import { AdminLayout } from "@/app/layouts/AdminLayout";
-import { RequireAuth } from "@/app/guards";
+import { RedirectIfAuthed, RequireAuth } from "@/app/guards";
 import { DashboardPage } from "@/features/dashboard/pages/DashboardPage";
 import { CustomersPage } from "@/features/customers/pages/CustomersPage";
 import { NotFoundPage } from "@/app/NotFoundPage";
@@ -91,10 +91,12 @@ describe("halaman publik", () => {
       "/auth/login": { access_token: "jwt", refresh_token: "r", expires_at: 9999999999, user: multi },
       "/auth/role": { ...multi, role: "superadmin" }
     });
+    // Susunan rute sama dengan aplikasi: /login di bawah RedirectIfAuthed,
+    // dashboard di bawah RequireAuth.
     renderAt(
       [
-        { path: "/login", element: <LoginPage /> },
-        { path: "/dashboard", element: <div>halaman dashboard</div> }
+        { element: <RedirectIfAuthed />, children: [{ path: "/login", element: <LoginPage /> }] },
+        { element: <RequireAuth />, children: [{ path: "/dashboard", element: <div>halaman dashboard</div> }] }
       ],
       "/login"
     );
@@ -102,6 +104,7 @@ describe("halaman publik", () => {
     fireEvent.change(screen.getByPlaceholderText("Masukkan password"), { target: { value: "rahasia" } });
     fireEvent.click(screen.getByText("Masuk"));
     expect(await screen.findByText("Masuk sebagai")).toBeTruthy();
+    expect(screen.queryByText("halaman dashboard")).toBeNull();
     fireEvent.click(screen.getByText("Super Administrator"));
     expect(await screen.findByText("halaman dashboard")).toBeTruthy();
     const roleCall = fetchMock.mock.calls.find(([u]) => String(u).includes("/auth/role"));

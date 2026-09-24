@@ -134,12 +134,13 @@ export function DriverJobDetailView({ job }: Props) {
         ? `Lengkapi ${missingSlots.length} foto ${STAGE_LABEL[stage].toLowerCase()} dulu.`
         : null;
 
-  async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+  async function run(action: () => Promise<{ ok: boolean; error?: string }>): Promise<boolean> {
     setIsPending(true);
     setError(null);
     try {
       const res = await action();
       if (!res.ok) setError(res.error ?? "Terjadi kesalahan");
+      return res.ok;
     } finally {
       setIsPending(false);
     }
@@ -174,7 +175,12 @@ export function DriverJobDetailView({ job }: Props) {
     }
     if (!window.confirm(AJUKAN_ALERT)) return;
     setAjukanOpen(false);
-    await run(() => driverRequestUangJalan(job.id, Math.round(n), catatanAjukan));
+    const ok = await run(() => driverRequestUangJalan(job.id, Math.round(n), catatanAjukan));
+    if (!ok) {
+      // Isian tetap ada supaya driver tinggal memperbaiki lalu mengirim ulang.
+      setAjukanOpen(true);
+      return;
+    }
     setNominal("");
     setCatatanAjukan("");
   }

@@ -158,7 +158,27 @@ export function UsersView({ users, jenisUnit, currentUserId }: Props) {
   const selectedKaryawan = karyawan.data?.find(
     (k) => k.id === create?.karyawanId
   );
-  const karyawanEdit = useKaryawanTersedia(edit !== null);
+  const karyawanEditAktif = useKaryawanTersedia(edit !== null);
+  // Pilihan hanya berisi karyawan aktif. Karyawan milik akun yang sedang
+  // diedit tetap dimasukkan walau nonaktif, supaya email/role/scope akun itu
+  // tetap bisa diubah (mengaktifkan akunnya tetap ditolak).
+  const karyawanEdit = {
+    ...karyawanEditAktif,
+    data:
+      edit?.user.karyawan_id &&
+      karyawanEditAktif.data &&
+      !karyawanEditAktif.data.some((k) => k.id === edit.user.karyawan_id)
+        ? [
+            ...karyawanEditAktif.data,
+            {
+              id: edit.user.karyawan_id,
+              nama: `${edit.user.nama} (nonaktif)`,
+              tanggal_lahir: null,
+              akun: [{ user_id: edit.user.id, role: edit.user.role }]
+            }
+          ]
+        : karyawanEditAktif.data
+  };
   const selectedKaryawanEdit = karyawanEdit.data?.find(
     (k) => k.id === edit?.karyawanId
   );

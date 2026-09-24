@@ -18,17 +18,18 @@ ip_klien: ContextVar[str | None] = ContextVar("ip_klien", default=None)
 ua_klien: ContextVar[str | None] = ContextVar("ua_klien", default=None)
 
 
-def ip_dari_request(request: Request) -> str | None:
-    """IP asli pengguna.
+def ip_dari_request(request: Request, trusted_proxy_count: int = 1) -> str | None:
+    """IP asli pengguna (untuk sesi login & log sistem).
 
-    Di belakang reverse proxy/load balancer, IP pengguna ada di header
-    `X-Forwarded-For` (entri pertama) atau `X-Real-IP`; tanpa proxy, pakai
-    alamat koneksi langsung.
+    Setiap proxy MENAMBAHKAN alamat yang ia lihat di ujung kanan
+    `X-Forwarded-For`, sedangkan entri kiri bisa dikarang klien. Jadi IP
+    pengguna = entri ke-N dari kanan, N = jumlah proxy tepercaya
+    (`TRUSTED_PROXY_COUNT`). Tanpa header atau N = 0: alamat koneksi langsung.
     """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded.strip():
-        return forwarded.split(",")[0].strip()[:100]
-    real_ip = request.headers.get("x-real-ip", "").strip()
-    if real_ip:
-        return real_ip[:100]
-    return request.client.host if request.client else None
+    langsung = request.client.host if request.client else None
+    if trusted_proxy_count <= 0:
+        return langsung
+    entri = [e.strip() for e in request.headers.get("x-forwarded-for", "").split(",") if e.strip()]
+    if entri:
+        return entri[-min(trusted_proxy_count, len(entri))][:100]
+    return langsung

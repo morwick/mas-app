@@ -76,6 +76,21 @@ diawali tanggal, jadi urutan abjad = urutan jalan). Yang terbaru:
 | `20260924000027_aktifkan_pengguna_cek_karyawan.sql` | Pengguna **hanya bisa diaktifkan bila karyawannya berstatus Aktif** (juga saat akun dibuat atau dipindah karyawan). Menu Pengguna menandai akun yang karyawannya nonaktif. Naikkan backend & frontend bersamaan. |
 | `20260924000028_unit_terjual.sql` | Status unit baru **Terjual**: tidak bisa dipakai job, tidak ikut dashboard/peta/jadwal/jumlah armada, tidak berubah otomatis oleh job/insiden. Hanya bisa dijual bila tidak ada job yang belum selesai. Bisa dikoreksi kembali ke Stand by. Laporan utilisasi tidak menghitung hari setelah terjual. Naikkan backend & frontend bersamaan. |
 | `20260924000029_unit_diafkirkan.sql` | Status unit baru **Diafkirkan** — perlakuan sama dengan Terjual (tidak bisa dipakai job, keluar dari armada, bisa dikoreksi ke Stand by). Naikkan backend & frontend bersamaan. |
+| `20260924000030_perbaikan_review.sql` | **Perbaikan keamanan hasil code review.** Langkah transaksi tidak lagi bisa memalsukan pelaku log / hapus permanen; pembuatan akun hanya lewat menu Pengguna (sign up mandiri ditolak, data titipan lewat `app_metadata`) dan kini tercatat di log; halaman tracking publik menyembunyikan data terhapus; pencairan uang jalan hanya menandai pengajuan job yang sama; edit tagihan lama tidak lagi ditolak; logout driver sesi lama tidak gagal; ganti truk aman dari dua admin bersamaan. **Wajib naikkan backend versi baru bersamaan** (tanpa itu tambah pengguna ditolak). Tambah pengguna lewat Supabase Dashboard (Add user) juga ditolak — pakai menu Pengguna. |
+
+> **Cek setelah migration 000019 (data produksi).** Driver lama dihubungkan ke
+> karyawan berdasarkan kesamaan nama. Periksa apakah ada driver yang tersambung
+> ke karyawan yang salah (mis. karyawan kantor yang punya akun pengguna):
+>
+> ```sql
+> SELECT d.nama AS driver, d.no_hp, k.nama AS karyawan, d.status AS status_driver,
+>        (SELECT string_agg(p.email, ', ') FROM transport.profiles p
+>          WHERE p.karyawan_id = k.id AND p.status = 1) AS akun_pengguna
+>   FROM transport.drivers d JOIN hr.karyawan k ON k.id = d.karyawan_id
+>  ORDER BY akun_pengguna NULLS LAST, d.nama;
+> ```
+> Baris dengan `akun_pengguna` terisi perlu dicek; koreksi lewat menu Driver
+> (ganti nama driver ke karyawan yang benar).
 
 > **Mengubah data lewat SQL Editor.** Sejak migration 000019, perubahan data
 > di luar aplikasi ditolak kecuali identitas diisi dulu (karyawan superadmin):

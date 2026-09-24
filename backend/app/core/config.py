@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # Firebase Cloud Messaging — path berkas service account JSON. Kosong = push nonaktif.
     firebase_credentials_file: str = ""
 
+    # Jumlah reverse proxy tepercaya di depan backend (load balancer, nginx, …).
+    # IP pengguna diambil dari X-Forwarded-For posisi ke-N dari KANAN — entri
+    # paling kiri bisa diisi sembarang oleh klien. 0 = abaikan header proxy.
+    trusted_proxy_count: int = 1
+
     # URL frontend — dipakai redirect tautan reset password
     app_url: str = "http://localhost:5173"
 

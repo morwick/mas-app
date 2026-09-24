@@ -79,11 +79,14 @@ def build_current_user(*, user_id: str, email: str | None, profile: dict[str, ob
     roles: list[UserRole] = [r for r in (raw_roles if isinstance(raw_roles, list) else []) if _role_valid(r)]
     if not roles and _role_valid(profile.get("role")):
         roles = [profile["role"]]  # type: ignore[list-item]
-    # Fail-safe: hak penuh hanya bila role AKTIF benar-benar 'superadmin'.
-    # Tanpa role aktif (mis. sesi belum dibuat) dipakai role paling terbatas.
+    # Fail-safe: hak penuh hanya bila database mengonfirmasi role AKTIF
+    # 'superadmin'. Tanpa role aktif dipakai role paling terbatas — tidak pernah
+    # superadmin (akun dinonaktifkan / sesi berakhir juga berujung di sini).
     aktif = _role_valid(profile.get("role_aktif"))
     if aktif is None:
-        aktif = "superadmin" if roles == ["superadmin"] else "operator"
+        # Bentuk lama (hanya kolom `role`, tanpa roles/role_aktif) masih dihormati.
+        bentuk_lama = "roles" not in profile and "role_aktif" not in profile
+        aktif = (_role_valid(profile.get("role")) if bentuk_lama else None) or "operator"
     role: UserRole = aktif
     scope = profile.get("allowed_jenis_unit_ids")
     allowed = None if role == "superadmin" else (list(scope) if isinstance(scope, list) else None)
@@ -128,10 +131,16 @@ async def load_current_user(client: AsyncClient, token: str) -> CurrentUser:
     if res is None or res.user is None:
         raise UnauthorizedError("Sesi tidak valid. Silakan login lagi.")
 
+    profil = await fetch_profil(client)
+    # role_aktif NULL = akun/karyawan nonaktif atau sesi login sudah berakhir
+    # (lihat transport.role_aktif()). Token Supabase yang masih berlaku tidak
+    # cukup — tolak supaya tidak ada hak yang tidak dikonfirmasi database.
+    if not profil or not profil.get("is_active", True) or profil.get("role_aktif") is None:
+        raise UnauthorizedError("Sesi tidak ditemukan atau akun dinonaktifkan. Silakan login lagi.")
     user = build_current_user(
         user_id=res.user.id,
         email=res.user.email,
-        profile=await fetch_profil(client),
+        profile=profil,
     )
     _IDENTITY_CACHE[key] = user
     return user

@@ -60,12 +60,19 @@ def test_escape_like_menetralkan_wildcard() -> None:
 
 def test_ilike_any_merangkai_semua_kolom() -> None:
     out = ilike_any(["nama", "no_hp"], "budi")
-    assert out == "nama.ilike.%budi%,no_hp.ilike.%budi%"
+    assert out == 'nama.ilike."%budi%",no_hp.ilike."%budi%"'
 
 
 def test_ilike_any_ikut_mengamankan_term() -> None:
     out = ilike_any(["nama"], "100%")
-    assert out == "nama.ilike.%100\%%"
+    # Backslash escape LIKE digandakan karena berada di dalam kutip PostgREST.
+    assert out == 'nama.ilike."%100\\\\%%"'
+
+
+def test_ilike_any_aman_untuk_tanda_kurung_dan_kutip() -> None:
+    """Dulu "PT Maju (Persero)" memecah sintaks or=(...) → PostgREST 400."""
+    out = ilike_any(["nama"], 'PT Maju (Persero) "A"')
+    assert out == 'nama.ilike."%PT Maju (Persero) \\"A\\"%"'
 
 
 def test_page_params_query_default() -> None:

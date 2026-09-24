@@ -196,6 +196,8 @@ export function EditJobView({
     );
     if (!form.pic_nama.trim()) errs.pic_nama = "PIC wajib diisi";
     if (trailer.isPending) errs.unit_trailer_id = "Tunggu, pilihan unit trailer sedang dimuat";
+    else if (trailer.isError)
+      errs.unit_trailer_id = "Pilihan unit trailer gagal dimuat — muat ulang halaman lalu coba lagi";
     else if (trailerWajib && !form.unit_trailer_id) errs.unit_trailer_id = "Unit trailer wajib dipilih";
     if (!form.pic_no_hp.trim()) errs.pic_no_hp = "No HP PIC wajib diisi";
     else if (!/^(08|\+628)\d{7,12}$/.test(form.pic_no_hp.trim()))

@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { RolePicker } from "../components/role-picker";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, perluPilihRole, selesaiPilihRole } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [show, setShow] = useState(false);
@@ -17,10 +17,12 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  // Akun dengan beberapa role memilih role dulu sebelum masuk.
-  const [pilihRole, setPilihRole] = useState(false);
+  // Akun dengan beberapa role memilih role dulu sebelum masuk (state di
+  // AuthContext, supaya penjaga rute ikut menahan).
+  const pilihRole = perluPilihRole;
 
   function masuk() {
+    selesaiPilihRole();
     const next = params.get("next");
     navigate(next && next.startsWith("/") ? next : "/dashboard", { replace: true });
   }
@@ -35,8 +37,7 @@ export function LoginPage() {
     setError(null);
     try {
       const user = await login(email.trim(), password);
-      if ((user.roles ?? []).length > 1) setPilihRole(true);
-      else masuk();
+      if ((user.roles ?? []).length <= 1) masuk();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login gagal");
     } finally {

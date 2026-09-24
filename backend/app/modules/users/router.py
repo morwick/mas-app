@@ -250,9 +250,12 @@ async def create_user(
                     # `dibuat_oleh` & `ip_pembuat`: akun dibuat server Supabase Auth
                     # lewat koneksinya sendiri (tanpa identitas & IP superadmin),
                     # jadi pelakunya dititipkan di sini untuk log sistem
-                    # (divalidasi database, lihat migration 20260924000012).
-                    "user_metadata": {
-                        "nama": nama,
+                    # (divalidasi database, lihat migration 20260924000012 & 000030).
+                    "user_metadata": {"nama": nama},
+                    # app_metadata hanya bisa diisi service role (tidak lewat
+                    # sign up), jadi database mempercayainya: karyawan, role,
+                    # dan pembuat akun untuk log sistem (migration 000030).
+                    "app_metadata": {
                         "karyawan_id": karyawan.id,
                         "roles": roles,
                         "dibuat_oleh": auth.user.id,

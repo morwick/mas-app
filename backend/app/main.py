@@ -87,7 +87,7 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def simpan_ip_klien(request: Request, call_next):  # type: ignore[no-untyped-def]
         # IP pengguna untuk log sistem — dipakai semua query di permintaan ini.
-        token = ip_klien.set(ip_dari_request(request))
+        token = ip_klien.set(ip_dari_request(request, settings.trusted_proxy_count))
         token_ua = ua_klien.set((request.headers.get("user-agent") or "")[:300] or None)
         try:
             return await call_next(request)

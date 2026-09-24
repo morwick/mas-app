@@ -202,3 +202,17 @@ describe("Aktifkan pengguna — status karyawan", () => {
     expect(posts.find((p) => p.url.includes("/active"))!.body).toEqual({ is_active: true });
   });
 });
+
+describe("Edit pengguna — karyawan nonaktif", () => {
+  it("akun yang karyawannya nonaktif tetap bisa diedit (karyawannya tetap jadi pilihan)", async () => {
+    const AKUN: UserRow = { ...USERS[0], id: "u7", nama: "Sari Lama", karyawan_id: "k-nonaktif", karyawan_aktif: false };
+    renderView({ users: [AKUN] });
+    fireEvent.click(screen.getByTitle("Edit pengguna"));
+    const modal = (await screen.findByText(/Edit/, { selector: "h2" })).closest("div.bg-white") as HTMLElement;
+    await waitFor(() => expect(modal.querySelector<HTMLButtonElement>(".combobox-trigger")?.disabled).toBe(false));
+    expect(modal.querySelector(".combobox-trigger")?.textContent).toContain("Sari Lama (nonaktif)");
+    fireEvent.click(within(modal).getByRole("button", { name: "Simpan" }));
+    await waitFor(() => expect(posts.some((p) => p.url.includes("/users/u7"))).toBe(true));
+    expect(posts.find((p) => p.url.includes("/users/u7"))!.body).toMatchObject({ karyawan_id: "k-nonaktif" });
+  });
+});

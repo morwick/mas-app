@@ -109,12 +109,14 @@ class AuthService:
         async with self._factory.for_user(session.access_token) as client:
             await _mulai_sesi(client)
             profil = await fetch_profil(client)
+        if not profil or profil.get("role_aktif") is None:
+            raise UnauthorizedError("Login gagal: sesi tidak bisa dibuat. Silakan coba lagi.")
 
         return SessionResponse(
             access_token=session.access_token,
             refresh_token=session.refresh_token,
             expires_at=session.expires_at,
-            user=build_current_user(user_id=res.user.id, email=res.user.email, profile=profil or profile),
+            user=build_current_user(user_id=res.user.id, email=res.user.email, profile=profil),
         )
 
     async def refresh(self, refresh_token: str) -> SessionResponse:

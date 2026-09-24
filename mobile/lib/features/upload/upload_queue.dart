@@ -100,11 +100,18 @@ class UploadQueue extends Notifier<List<UploadTask>> {
   static const _maxAutoAttempts = 5;
 
   bool _running = false;
-  Timer? _retryTimer;
+  // Satu timer per tugas: kegagalan foto berikutnya tidak boleh membatalkan
+  // jadwal ulang foto-foto sebelumnya.
+  final Map<String, Timer> _retryTimers = {};
 
   @override
   List<UploadTask> build() {
-    ref.onDispose(() => _retryTimer?.cancel());
+    ref.onDispose(() {
+      for (final t in _retryTimers.values) {
+        t.cancel();
+      }
+      _retryTimers.clear();
+    });
     _restore();
     return const [];
   }
@@ -249,8 +256,9 @@ class UploadQueue extends Notifier<List<UploadTask>> {
 
   void _scheduleRetry(String id, int attempts) {
     final delay = Duration(seconds: 5 * (1 << (attempts - 1))); // 5, 10, 20, 40…
-    _retryTimer?.cancel();
-    _retryTimer = Timer(delay, () {
+    _retryTimers.remove(id)?.cancel();
+    _retryTimers[id] = Timer(delay, () {
+      _retryTimers.remove(id);
       if (state.any((t) => t.id == id && t.state == UploadState.failed)) {
         _update(id, (t) => t.copyWith(state: UploadState.queued, error: null));
         _pump();

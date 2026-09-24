@@ -103,7 +103,13 @@ def escape_like(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace(",", " ")
 
 
+def _kutip_postgrest(nilai: str) -> str:
+    """Nilai di dalam `or=(...)` dibungkus kutip ganda supaya `(`, `)`, `,`, dan
+    `"` tidak dibaca sebagai sintaks PostgREST (mis. "PT Maju (Persero)")."""
+    return '"' + nilai.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def ilike_any(columns: list[str], term: str) -> str:
     """Rangkai filter `or=` PostgREST: cocok bila salah satu kolom mengandung term."""
-    safe = escape_like(term.strip())
-    return ",".join(f"{c}.ilike.%{safe}%" for c in columns)
+    pola = _kutip_postgrest(f"%{escape_like(term.strip())}%")
+    return ",".join(f"{c}.ilike.{pola}" for c in columns)

@@ -23,9 +23,18 @@ def _request(headers: dict[str, str], host: str = "10.0.0.5") -> Request:
     return Request(scope)
 
 
-def test_ip_dari_proxy_diambil_entri_pertama() -> None:
-    req = _request({"X-Forwarded-For": "203.0.113.7, 10.0.0.1"})
-    assert ip_dari_request(req) == "203.0.113.7"
+def test_ip_dari_proxy_diambil_dari_kanan_sesuai_jumlah_proxy() -> None:
+    # Klien mengarang "1.1.1.1"; proxy tepercaya menambahkan IP asli di kanan.
+    req = _request({"X-Forwarded-For": "1.1.1.1, 203.0.113.7"})
+    assert ip_dari_request(req, 1) == "203.0.113.7"
+    # Dua proxy (mis. CDN + load balancer): entri ke-2 dari kanan.
+    req2 = _request({"X-Forwarded-For": "1.1.1.1, 203.0.113.7, 172.16.0.9"})
+    assert ip_dari_request(req2, 2) == "203.0.113.7"
+
+
+def test_ip_header_proxy_diabaikan_tanpa_proxy_tepercaya() -> None:
+    req = _request({"X-Forwarded-For": "1.1.1.1"})
+    assert ip_dari_request(req, 0) == "10.0.0.5"
 
 
 def test_ip_tanpa_proxy_pakai_koneksi_langsung() -> None:
