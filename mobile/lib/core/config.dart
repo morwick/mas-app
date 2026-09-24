@@ -13,7 +13,7 @@ class AppConfig {
   /// Ambang ketajaman (variance of Laplacian) di sisi aplikasi — hanya
   /// peringatan (FR-PHOTO-04). Dikalibrasi ulang dengan foto lapangan.
   static const double blurThresholdDefault = 60;
-  static const double blurThresholdSuratTimbang = 120;
+  static const double blurThresholdSuratJalan = 120;
 
   /// Sisi pendek minimum foto (px).
   static const int minShortSidePx = 1280;

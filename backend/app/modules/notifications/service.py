@@ -16,7 +16,9 @@ from typing import Any, Literal
 from pydantic import BaseModel
 from supabase import AsyncClient
 
+from app.core.paging import Page, PageParams, build_page
 from app.core.pg import first, num, rows
+from app.core.soft_delete import AKTIF
 from app.core.timeutil import iso_utc, now_utc, parse_iso
 from app.domain.job_conflicts import ACTIVE_JOB_STATUSES
 from app.domain.service_status import derive_service_status, format_km
@@ -113,6 +115,28 @@ class NotificationService:
             .execute()
         )
 
+    async def mark_all_read(self, user_id: str) -> None:
+        """Tandai seluruh notifikasi admin sebagai dibaca oleh user ini."""
+        res = await self._db.table("notifications").select("id").eq("recipient_type", "admin").execute()
+        # mark_read menerima id mentah, tanpa awalan "event-".
+        ids = [r["id"] for r in rows(res)]
+        if ids:
+            await self.mark_read(user_id, ids)
+
+    async def page(self, params: PageParams, *, user_id: str | None = None) -> Page[AppNotification]:
+        """Halaman Notifikasi — isinya sama persis dengan lonceng.
+
+        Dipotong di memori, bukan di database: sebagian besar baris di sini
+        adalah keadaan yang dihitung ulang (servis lewat jadwal, dokumen mau
+        habis, job belum dikonfirmasi) dan tidak punya baris tabel untuk
+        di-`range()`. Daftarnya dibatasi per jenis, jadi tetap kecil.
+        """
+        semua = await self.build(user_id=user_id)
+        if params.is_all:
+            return build_page(semua, len(semua), params)
+        potong = semua[params.offset : params.offset + params.page_size]
+        return build_page(potong, len(semua), params)
+
     async def build(self, now: datetime | None = None, *, user_id: str | None = None) -> list[AppNotification]:
         now = now or now_utc()
         now_iso = iso_utc(now)
@@ -128,8 +152,8 @@ class NotificationService:
             invoices_res,
         ) = await asyncio.gather(
             db.table("jobs")
-            .select("id, job_number, etd, status, accepted_at, driver:drivers(nama), unit:units(kode_unit)")
-            .in_("status", list(ACTIVE_JOB_STATUSES))
+            .select("id, job_number, etd, status_job, accepted_at, driver:drivers(nama), unit:units(kode_unit)")
+            .in_("status_job", list(ACTIVE_JOB_STATUSES))
             .order("etd")
             .execute(),
             db.table("units")
@@ -141,13 +165,13 @@ class NotificationService:
             .execute(),
             db.table("service_records").select("unit_id, odometer_km").execute(),
             db.table("incident_logs")
-            .select("id, tipe, tanggal, status, created_at, unit:units(kode_unit)")
-            .in_("status", ["open", "in_progress"])
+            .select("id, tipe, tanggal, status_penanganan, created_at, unit:units(kode_unit)")
+            .in_("status_penanganan", ["open", "in_progress"])
             .order("created_at", desc=True)
             .execute(),
             db.table("quotations")
-            .select("id, quote_number, customer_nama, status, tanggal, berlaku_sampai, total")
-            .in_("status", ["terkirim", "deal"])
+            .select("id, quote_number, customer_nama, status_penawaran, tanggal, berlaku_sampai, total")
+            .in_("status_penawaran", ["terkirim", "deal"])
             .execute(),
             db.table("drivers")
             .select("id, nama, sim_berlaku_sampai")
@@ -156,7 +180,7 @@ class NotificationService:
             .execute(),
             db.table("invoices")
             .select("id, invoice_number, customer_nama, jatuh_tempo, total, dibayar")
-            .eq("status", "terkirim")
+            .eq("status_tagihan", "terkirim")
             .not_.is_("jatuh_tempo", "null")
             .lt("jatuh_tempo", now_iso[:10])
             .order("jatuh_tempo")
@@ -190,7 +214,7 @@ class NotificationService:
         # ── Job yang mestinya sudah jalan ────────────────────────────────────
         anomaly_count = 0
         for j in jobs:
-            if j.get("status") not in ("ditugaskan", "diterima") or parse_iso(j["etd"]) >= now:
+            if j.get("status_job") not in ("ditugaskan", "diterima") or parse_iso(j["etd"]) >= now:
                 continue
             if any(n.id == f"job-belum-konfirmasi-{j['id']}" for n in out):
                 continue
@@ -305,7 +329,7 @@ class NotificationService:
         # ── Insiden belum selesai ────────────────────────────────────────────
         for i in rows(incidents_res)[:MAX_PER_KIND]:
             unit_kode = (first(i.get("unit")) or {}).get("kode_unit") or "Unit"
-            open_ = i.get("status") == "open"
+            open_ = i.get("status_penanganan") == "open"
             out.append(
                 AppNotification(
                     id=f"incident-{i['id']}",
@@ -320,7 +344,7 @@ class NotificationService:
 
         # ── Penawaran ────────────────────────────────────────────────────────
         quotations = rows(quotations_res)
-        deal_ids = [q["id"] for q in quotations if q.get("status") == "deal"]
+        deal_ids = [q["id"] for q in quotations if q.get("status_penawaran") == "deal"]
         deal_tanpa_job: set[str] = set()
         if deal_ids:
             job_rows = rows(await db.table("jobs").select("quotation_id").in_("quotation_id", deal_ids).execute())
@@ -328,7 +352,7 @@ class NotificationService:
             deal_tanpa_job = {qid for qid in deal_ids if qid not in punya_job}
 
         for q in quotations:
-            if q.get("status") == "deal" and q["id"] in deal_tanpa_job:
+            if q.get("status_penawaran") == "deal" and q["id"] in deal_tanpa_job:
                 out.append(
                     AppNotification(
                         id=f"quotation-deal-{q['id']}",
@@ -341,7 +365,7 @@ class NotificationService:
                     )
                 )
                 continue
-            if q.get("status") == "terkirim" and q.get("berlaku_sampai"):
+            if q.get("status_penawaran") == "terkirim" and q.get("berlaku_sampai"):
                 sisa = _days_until_date(q["berlaku_sampai"], now)
                 if sisa <= PENAWARAN_KEDALUWARSA_HARI:
                     out.append(
@@ -397,12 +421,17 @@ async def load_event_notifications(db: AsyncClient, *, user_id: str | None, limi
         db.table("notifications")
         .select("id, kind, title, body, href, job_id, created_at, notification_reads(user_id)")
         .eq("recipient_type", "admin")
+        .eq("notification_reads.status", AKTIF)
         .order("created_at", desc=True)
         .limit(limit)
         .execute()
     )
+    return _to_notifications(rows(res), user_id)
+
+
+def _to_notifications(raw: list[dict[str, Any]], user_id: str | None) -> list[AppNotification]:
     out: list[AppNotification] = []
-    for r in rows(res):
+    for r in raw:
         kind = r["kind"] if r["kind"] in _EVENT_SEVERITY else "anomaly"
         reads = r.get("notification_reads") or []
         out.append(

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../core/widgets_paging.dart';
 import '../jobs/models.dart';
 import '../jobs/providers.dart';
 
@@ -28,7 +29,7 @@ class NotificationsScreen extends ConsumerWidget {
     if (n.isUnread) {
       try {
         await ref.read(driverRepositoryProvider).markRead([n.id]);
-        ref.invalidate(notificationsProvider);
+        refreshNotifikasiFromWidget(ref);
       } catch (_) {}
     }
     if (n.jobId != null && context.mounted) context.push('/jobs/${n.jobId}');
@@ -39,7 +40,7 @@ class NotificationsScreen extends ConsumerWidget {
     if (ids.isEmpty) return;
     try {
       await ref.read(driverRepositoryProvider).markRead(ids);
-      ref.invalidate(notificationsProvider);
+      refreshNotifikasiFromWidget(ref);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal menandai dibaca')));
@@ -49,38 +50,42 @@ class NotificationsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(notificationsProvider);
+    final async = ref.watch(notificationsPageProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notifikasi'),
         actions: [
-          if ((async.valueOrNull?.any((n) => n.isUnread)) ?? false)
+          // Hanya yang sudah termuat yang bisa ditandai — menandai baris yang
+          // belum pernah diunduh berarti menebak.
+          if ((async.valueOrNull?.items.any((n) => n.isUnread)) ?? false)
             TextButton(
-              onPressed: () => _markAll(context, ref, async.valueOrNull ?? const []),
+              onPressed: () => _markAll(context, ref, async.valueOrNull?.items ?? const []),
               child: const Text('Tandai semua dibaca'),
             ),
         ],
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(message: e.toString(), onRetry: () => ref.invalidate(notificationsProvider)),
-        data: (items) => RefreshIndicator(
+        error: (e, _) =>
+            ErrorView(message: e.toString(), onRetry: () => ref.invalidate(notificationsPageProvider)),
+        data: (daftar) => RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(notificationsProvider);
-            await ref.read(notificationsProvider.future);
+            ref.invalidate(notificationsPageProvider);
+            await ref.read(notificationsPageProvider.future);
           },
-          child: items.isEmpty
+          child: daftar.kosong
               ? ListView(
                   children: const [
                     SizedBox(height: 80),
                     EmptyView(icon: Icons.notifications_none, title: 'Belum ada notifikasi'),
                   ],
                 )
-              : ListView.separated(
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final n = items[i];
+              : DaftarBergulirBertahap<DriverNotification>(
+                  daftar: daftar,
+                  onMuatLagi: () => ref.read(notificationsPageProvider.notifier).muatLagi(),
+                  padding: EdgeInsets.zero,
+                  separator: const Divider(height: 1),
+                  itemBuilder: (_, n) {
                     return ListTile(
                       tileColor: n.isUnread ? MasColors.brandLight.withValues(alpha: 0.5) : Colors.white,
                       leading: CircleAvatar(

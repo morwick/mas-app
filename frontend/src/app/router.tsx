@@ -16,6 +16,7 @@ import {
   RequireSuperadmin
 } from "./guards";
 import { NotFoundPage } from "./NotFoundPage";
+import { NotificationsPage } from "@/features/notifications/pages/NotificationsPage";
 
 import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { ResetPasswordPage } from "@/features/auth/pages/ResetPasswordPage";
@@ -52,6 +53,9 @@ import { InvoiceDetailPage } from "@/features/invoices/pages/InvoiceDetailPage";
 import { EditInvoicePage, NewInvoicePage } from "@/features/invoices/pages/InvoiceFormPages";
 import { InvoicePrintPage } from "@/features/invoices/pages/InvoicePrintPage";
 import { PiutangPage } from "@/features/invoices/pages/PiutangPage";
+import { LogSistemPage } from "@/features/log-sistem/pages/LogSistemPage";
+import { KaryawanPage } from "@/features/karyawan/pages/KaryawanPage";
+import { UnitTrailerPage } from "@/features/unit-trailer/pages/UnitTrailerPage";
 import {
   CustomersReportPage,
   LabaReportPage,
@@ -103,6 +107,7 @@ export const router = createBrowserRouter([
           { path: "/units/new", element: <NewUnitPage /> },
           { path: "/units/:id", element: <UnitDetailPage /> },
           { path: "/units/:id/edit", element: <EditUnitPage /> },
+          { path: "/unit-trailer", element: <UnitTrailerPage /> },
 
           { path: "/drivers", element: <DriversPage /> },
           { path: "/drivers/new", element: <NewDriverPage /> },
@@ -135,6 +140,7 @@ export const router = createBrowserRouter([
           { path: "/invoices/:id", element: <InvoiceDetailPage /> },
           { path: "/invoices/:id/edit", element: <EditInvoicePage /> },
 
+          { path: "/notifikasi", element: <NotificationsPage /> },
           { path: "/profil", element: <ProfilePage /> },
           // Menu "Pengaturan" sudah dihapus; alamat lamanya tetap hidup.
           { path: "/settings", element: <Navigate to="/profil" replace /> },
@@ -153,8 +159,10 @@ export const router = createBrowserRouter([
               { path: "/reports/utilisasi", element: <UtilisasiReportPage /> },
               { path: "/reports/laba", element: <LabaReportPage /> },
               { path: "/reports/customers", element: <CustomersReportPage /> },
+              { path: "/karyawan", element: <KaryawanPage /> },
               { path: "/pengguna", element: <UsersPage /> },
               { path: "/jenis-unit", element: <JenisUnitPage /> },
+              { path: "/log-sistem", element: <LogSistemPage /> },
               // Alamat lama sebelum Jenis Unit pindah ke menu Master.
               {
                 path: "/settings/jenis-unit",

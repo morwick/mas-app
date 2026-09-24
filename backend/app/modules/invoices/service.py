@@ -10,7 +10,9 @@ from supabase import AsyncClient
 
 from app.core.errors import NotFoundError, ValidationError
 from app.core.pg import clean_text, first, num, rows, single
+from app.core.soft_delete import AKTIF, DIHAPUS, STATUS
 from app.core.timeutil import iso_utc, roman_month, today_wib, today_wib_str
+from app.core.transaksi import Transaksi
 from app.modules.invoices.schemas import (
     Invoice,
     InvoiceCreated,
@@ -34,7 +36,7 @@ INVOICE_SELECT = """
   quotation_id,
   kota_terbit, tanggal, termin_hari, jatuh_tempo,
   ppn_aktif, ppn_persen, subtotal, ppn_nominal, total, dibayar,
-  status, ttd_nama, ttd_jabatan,
+  status_tagihan, ttd_nama, ttd_jabatan,
   bank_nama, bank_rekening, bank_atas_nama,
   catatan, alasan_batal,
   sent_at, lunas_at, created_at, updated_at,
@@ -108,7 +110,7 @@ def _to_payment(r: dict[str, Any]) -> InvoicePayment:
 def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
     total = num(r.get("total"))
     dibayar = num(r.get("dibayar"))
-    status_tampil, hari_terlambat = derive_tampil(r["status"], r.get("jatuh_tempo"))
+    status_tampil, hari_terlambat = derive_tampil(r["status_tagihan"], r.get("jatuh_tempo"))
     return {
         "id": r["id"],
         "invoice_number": r["invoice_number"],
@@ -133,7 +135,7 @@ def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
         "total": total,
         "dibayar": dibayar,
         "sisa": total - dibayar,
-        "status": r["status"],
+        "status": r["status_tagihan"],
         "status_tampil": status_tampil,
         "hari_terlambat": hari_terlambat,
         "ttd_nama": r.get("ttd_nama"),
@@ -231,11 +233,12 @@ class InvoiceService:
         q = (
             self._db.table("invoices")
             .select(f"{INVOICE_SELECT}, invoice_items(id)")
+            .eq("invoice_items.status", AKTIF)
             .order("seq_tahun", desc=True)
             .order("seq_no", desc=True)
         )
         if status:
-            q = q.eq("status", status)
+            q = q.eq("status_tagihan", status)
         if customer_id:
             q = q.eq("customer_id", customer_id)
         if limit:
@@ -281,24 +284,26 @@ class InvoiceService:
         return f"{nxt:04d}/INV/MAS/{roman_month(today.month)}/{today.year}"
 
     async def jobs_belum_ditagih(self, customer_id: str | None = None) -> dict[str, list[JobBelumDitagihRow]]:
-        """Job selesai yang belum masuk tagihan mana pun, dikelompokkan per customer.
+        """Job selesai & sudah divalidasi admin yang belum masuk tagihan mana pun, dikelompokkan per customer.
         Tagihan yang dibatalkan tidak menghalangi job ditagih ulang."""
         sudah_res = await (
             self._db.table("invoice_items")
-            .select("job_id, invoice:invoices(status)")
+            .select("job_id, invoice:invoices(status_tagihan)")
             .not_.is_("job_id", "null")
             .execute()
         )
         sudah = {
             r["job_id"]
             for r in rows(sudah_res)
-            if r.get("job_id") and (first(r.get("invoice")) or {}).get("status") != "batal"
+            if r.get("job_id") and (first(r.get("invoice")) or {}).get("status_tagihan") != "batal"
         }
 
         q = (
             self._db.table("jobs")
             .select("id, customer_id, job_number, asal, tujuan, alat_diangkut, etd, completed_at")
-            .eq("status", "selesai")
+            # Hanya job yang sudah divalidasi admin yang bisa ditagihkan.
+            .eq("status_job", "selesai")
+            .not_.is_("validated_at", "null")
             .order("completed_at", desc=True)
         )
         if customer_id:
@@ -364,70 +369,68 @@ class InvoiceService:
 
         termin = payload.termin_hari if payload.termin_hari is not None else cust.get("termin_hari")
 
-        num_res = await self._db.rpc("next_invoice_number").execute()
-        nomor = first(num_res.data) or {}
-        if not nomor.get("nomor"):
-            raise ValidationError("Gagal ambil nomor tagihan dari database")
-
-        res = await (
-            self._db.table("invoices")
-            .insert(
-                {
-                    "invoice_number": nomor["nomor"],
-                    "seq_no": nomor["seq"],
-                    "seq_tahun": nomor["tahun"],
-                    "customer_id": payload.customer_id,
-                    "customer_nama": cust["nama_perusahaan"],
-                    "customer_alamat": cust.get("alamat"),
-                    "customer_npwp": cust.get("npwp"),
-                    "pic_sapaan": payload.pic_sapaan or cust.get("pic_sapaan"),
-                    "pic_nama": clean_text(payload.pic_nama) or cust.get("pic_nama"),
-                    **_header_payload(payload, termin),
-                    "created_by": created_by,
-                }
-            )
-            .execute()
+        # Satu transaksi: nomor, header, dan rincian tersimpan bersama — atau
+        # tidak sama sekali (nomor pun ikut dibatalkan, jadi tidak loncat).
+        tx = Transaksi(self._db)
+        nomor = tx.nomor_dokumen("invoice")
+        inv = tx.insert(
+            "invoices",
+            {
+                "invoice_number": nomor["nomor"],
+                "seq_no": nomor["seq"],
+                "seq_tahun": nomor["tahun"],
+                "customer_id": payload.customer_id,
+                "customer_nama": cust["nama_perusahaan"],
+                "customer_alamat": cust.get("alamat"),
+                "customer_npwp": cust.get("npwp"),
+                "pic_sapaan": payload.pic_sapaan or cust.get("pic_sapaan"),
+                "pic_nama": clean_text(payload.pic_nama) or cust.get("pic_nama"),
+                **_header_payload(payload, termin),
+                "created_by": created_by,
+            },
         )
-        row = rows(res)[0]
-        try:
-            await self._db.table("invoice_items").insert(_item_rows(row["id"], payload.items)).execute()
-        except Exception:
-            await self._db.table("invoices").delete().eq("id", row["id"]).execute()
-            raise
+        tx.insert("invoice_items", _item_rows(inv["id"], payload.items))
+        hasil = await tx.jalankan()
+        row = hasil[1][0]
         return InvoiceCreated(id=row["id"], invoice_number=row["invoice_number"])
 
     async def update(self, invoice_id: str, payload: InvoiceInput) -> None:
         _validate(payload)
         existing = single(
-            await self._db.table("invoices").select("status, termin_hari").eq("id", invoice_id).maybe_single().execute()
+            await self._db.table("invoices")
+            .select("status_tagihan, termin_hari")
+            .eq("id", invoice_id)
+            .maybe_single()
+            .execute()
         )
         if existing is None:
             raise NotFoundError("Tagihan tidak ditemukan")
-        if existing["status"] not in EDITABLE_STATUSES:
+        if existing["status_tagihan"] not in EDITABLE_STATUSES:
             raise ValidationError(
                 "Tagihan yang sudah lunas tidak bisa diubah. Hapus pembayarannya dulu bila memang perlu direvisi."
-                if existing["status"] == "lunas"
+                if existing["status_tagihan"] == "lunas"
                 else "Tagihan yang dibatalkan tidak bisa diubah. Terbitkan tagihan baru."
             )
 
         termin = payload.termin_hari if payload.termin_hari is not None else existing.get("termin_hari")
-        await (
-            self._db.table("invoices")
-            .update(
-                {
-                    "pic_sapaan": payload.pic_sapaan,
-                    "pic_nama": clean_text(payload.pic_nama),
-                    **_header_payload(payload, termin),
-                }
-            )
-            .eq("id", invoice_id)
-            .execute()
+        # Satu transaksi: header, penghapusan rincian lama, dan rincian baru.
+        # Kalau rincian baru gagal disimpan, rincian lama tidak ikut hilang.
+        tx = Transaksi(self._db)
+        tx.update(
+            "invoices",
+            {
+                "pic_sapaan": payload.pic_sapaan,
+                "pic_nama": clean_text(payload.pic_nama),
+                **_header_payload(payload, termin),
+            },
+            {"id": invoice_id},
         )
-        await self._db.table("invoice_items").delete().eq("invoice_id", invoice_id).execute()
-        await self._db.table("invoice_items").insert(_item_rows(invoice_id, payload.items)).execute()
+        tx.hapus("invoice_items", {"invoice_id": invoice_id})
+        tx.insert("invoice_items", _item_rows(invoice_id, payload.items))
+        await tx.jalankan()
 
     async def set_status(self, invoice_id: str, payload: SetInvoiceStatusRequest) -> None:
-        data: dict[str, Any] = {"status": payload.status}
+        data: dict[str, Any] = {"status_tagihan": payload.status}
         if payload.status == "terkirim":
             data["sent_at"] = iso_utc()
         if payload.status == "batal":
@@ -439,12 +442,14 @@ class InvoiceService:
     async def add_payment(self, invoice_id: str, payload: PaymentInput, *, created_by: str | None) -> None:
         if payload.jumlah <= 0:
             raise ValidationError("Jumlah pembayaran harus lebih dari 0")
-        inv = single(await self._db.table("invoices").select("status").eq("id", invoice_id).maybe_single().execute())
+        inv = single(
+            await self._db.table("invoices").select("status_tagihan").eq("id", invoice_id).maybe_single().execute()
+        )
         if inv is None:
             raise NotFoundError("Tagihan tidak ditemukan")
-        if inv["status"] == "draft":
+        if inv["status_tagihan"] == "draft":
             raise ValidationError("Tandai tagihan sebagai terkirim dulu sebelum mencatat pembayaran.")
-        if inv["status"] == "batal":
+        if inv["status_tagihan"] == "batal":
             raise ValidationError("Tagihan sudah dibatalkan.")
         await (
             self._db.table("invoice_payments")
@@ -464,7 +469,7 @@ class InvoiceService:
         )
 
     async def delete_payment(self, payment_id: str) -> None:
-        await self._db.table("invoice_payments").delete().eq("id", payment_id).execute()
+        await self._db.table("invoice_payments").update({STATUS: DIHAPUS}).eq("id", payment_id).execute()
 
     async def delete(self, invoice_id: str) -> None:
-        await self._db.table("invoices").delete().eq("id", invoice_id).execute()
+        await self._db.table("invoices").update({STATUS: DIHAPUS}).eq("id", invoice_id).execute()

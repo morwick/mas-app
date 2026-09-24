@@ -7,6 +7,7 @@ import { InvoiceStatusBadge } from "./invoice-status-badge";
 import type { InvoiceListRow, PiutangSummaryRow } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   summary: PiutangSummaryRow[];
@@ -56,6 +57,10 @@ export function PiutangView({ summary, outstanding }: Props) {
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
+      <PageHeader
+        title="Piutang"
+        description="Tagihan yang belum lunas per customer beserta umur piutangnya."
+      />
       {/* Ringkasan umur piutang.
           Yang menentukan tindakan bukan total piutangnya, melainkan berapa
           yang sudah lama lewat — itu yang perlu ditelepon hari ini. */}

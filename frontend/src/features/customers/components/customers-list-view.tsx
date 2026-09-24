@@ -8,6 +8,7 @@ import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
 import type { Customer } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   customers: Customer[];
@@ -53,6 +54,10 @@ export function CustomersListView({ customers, jobCounts }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Customer"
+        description="Daftar perusahaan pelanggan beserta PIC dan jumlah job-nya."
+      />
       {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-search">

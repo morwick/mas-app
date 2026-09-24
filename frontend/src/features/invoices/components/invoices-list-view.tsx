@@ -10,6 +10,7 @@ import { InvoiceStatusBadge } from "./invoice-status-badge";
 import type { InvoiceListRow, InvoiceTampilStatus } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   invoices: InvoiceListRow[];
@@ -63,6 +64,10 @@ export function InvoicesListView({ invoices }: Props) {
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
+      <PageHeader
+        title="Tagihan"
+        description="Tagihan (invoice) ke customer beserta status pembayarannya."
+      />
       <div className="toolbar">
         <div style={{ flex: 1, minWidth: 240 }}>
           <Input

@@ -4,7 +4,8 @@ import { Plus, Pencil, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { Field, Input, Textarea } from "@/components/ui/input";
+import { Field, Textarea } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Modal } from "@/components/ui/modal";
 import { UangJalanModal } from "./uang-jalan-modal";
 import { deleteUangJalan, rejectRequest, setPagu } from "@/features/uang-jalan/api";
@@ -79,7 +80,7 @@ export function UangJalanCard({
   }
   const [hapus, setHapus] = useState<UangJalan | null>(null);
   const [editPagu, setEditPagu] = useState(false);
-  const [paguDraft, setPaguDraft] = useState(String(ringkasan.pagu_awal));
+  const [paguDraft, setPaguDraft] = useState(String(Math.round(ringkasan.pagu_awal)));
   const [saving, setSaving] = useState(false);
 
   const belumAdaPagu = ringkasan.pagu === 0;
@@ -139,11 +140,10 @@ export function UangJalanCard({
             <div className="eyebrow" style={{ marginBottom: 4 }}>
               Pagu borongan
             </div>
-            <Input
-              inputMode="numeric"
+            <CurrencyInput
               autoFocus
               value={paguDraft}
-              onChange={(e) => setPaguDraft(e.target.value.replace(/[^\d]/g, ""))}
+              onChange={setPaguDraft}
             />
           </div>
           <Button size="sm" onClick={simpanPagu} loading={saving}>
@@ -153,7 +153,7 @@ export function UangJalanCard({
             size="sm"
             variant="secondary"
             onClick={() => {
-              setPaguDraft(String(ringkasan.pagu_awal));
+              setPaguDraft(String(Math.round(ringkasan.pagu_awal)));
               setEditPagu(false);
             }}
           >
@@ -185,7 +185,7 @@ export function UangJalanCard({
               className="btn-link"
               style={{ fontSize: 11, marginTop: 2 }}
               onClick={() => {
-                setPaguDraft(String(ringkasan.pagu_awal));
+                setPaguDraft(String(Math.round(ringkasan.pagu_awal)));
                 setEditPagu(true);
               }}
             >

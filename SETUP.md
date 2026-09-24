@@ -47,6 +47,56 @@ diawali tanggal, jadi urutan abjad = urutan jalan). Yang terbaru:
 | `20260907000004_pod.sql`            | Bukti terima barang: kolom `jobs.pod_*` dan RPC `driver_submit_pod()` yang menutup job sekaligus menyimpan tanda tangan penerima |
 | `20260922000001_alur_job_v2_enum.sql` | **Jalankan sendiri dulu, lalu klik Run lagi untuk file berikutnya.** Menambah nilai enum status job v2 (`ditugaskan`, `diterima`, `serah_terima_pool`, `menunggu_validasi`) dan tipe foto `serah_terima`. Postgres melarang nilai enum baru dipakai di transaksi yang sama, karena itu dipisah. |
 | `20260922000002_alur_job_v2.sql`    | Alur job v2 sesuai `PRD-Alur-Kerja-Job-v2.md`: Lock System driver, Sequence Lock uang jalan, slot foto per sisi (`job_photos.stage/slot`), pengajuan uang jalan (`uang_jalan_requests`), bukti transfer (`uang_jalan.bukti_transfer_path` + bucket privat `bukti-transfer`), validasi admin (`admin_validate_job`, `admin_return_job`), perangkat push (`driver_devices`), notifikasi kejadian (`notifications`). Menonaktifkan `driver_submit_pod` (e-POD dihapus). |
+| `20260924000001_profiles_email_unique.sql` | Email pengguna unik di `profiles` (tanpa membedakan huruf besar/kecil). Berhenti dengan daftar email ganda kalau data lama masih bentrok. |
+| `20260924000002_move_to_transport_schema.sql` | **Pindahkan seluruh tabel, enum, dan fungsi aplikasi dari `public` ke schema `transport`.** Setelah menjalankannya, buka **Project Settings → Data API → Exposed schemas** dan tambahkan `transport` — tanpa itu semua request API ditolak. Backend membaca schema dari `SUPABASE_DB_SCHEMA` (default `transport`). |
+| `20260924000003_hr_karyawan.sql` | Schema `hr` dengan tabel `hr.karyawan` (id, nama, tanggal lahir, alamat). RLS aktif, hanya superadmin yang boleh akses. |
+| `20260924000004_pengguna_wajib_karyawan.sql` | Pengguna wajib terhubung ke karyawan (`profiles.karyawan_id` → `hr.karyawan`, satu karyawan satu akun). Membuat karyawan dummy bernama sama untuk setiap pengguna lama. Pendaftaran akun tanpa karyawan ditolak database. |
+| `20260924000005_tambah_karyawan.sql` | Fungsi `tambah_karyawan()` (tombol Tambah karyawan) dan `karyawan_pilihan_pengguna()` (pilihan nama di Edit pengguna). Hanya superadmin. |
+| `20260924000006_jenis_unit_nama_unik.sql` | Nama jenis unit unik tanpa membedakan huruf besar/kecil dan spasi berlebih. Berhenti dengan daftar nama ganda kalau data lama masih bentrok. |
+| `20260924000007_soft_delete.sql` | **Soft delete di semua tabel.** Kolom `status` (1 = aktif, 2 = dihapus) di setiap tabel `transport` & `hr`; kolom `status` lama diganti nama (`units.status_operasional`, `jobs.status_job`, `incident_logs.status_penanganan`, `quotations.status_penawaran`, `invoices.status_tagihan`, `uang_jalan_requests.status_pengajuan`). DELETE apa pun diubah database jadi `status = 2`. **Naikkan backend versi baru bersamaan** — backend lama memakai nama kolom lama. Sekaligus memperbaiki `next_invoice_number()` yang gagal dengan *column reference "tahun" is ambiguous*. |
+| `20260924000008_transaksi.sql` | Fungsi `jalankan_transaksi()`: proses tulis beberapa langkah (tambah/edit invoice & penawaran, ubah status + catatan, selesaikan insiden, ganti foto) dijalankan dalam **satu transaksi** — semua tersimpan, atau semua dibatalkan (rollback). Logout driver juga jadi satu transaksi. **Naikkan backend versi baru bersamaan.** |
+| `20260924000009_log_sistem.sql` | **Log sistem** (`transport.log_sistem`): karyawan, aksi (Login/Logout/Tambah Data/Update Data/Hapus Data), keterangan, waktu, IP address. Tambah/ubah/hapus dicatat trigger dalam transaksi yang sama; login/logout admin dicatat backend, login/logout driver di fungsi database. Hanya superadmin yang bisa membaca. |
+| `20260924000010_log_sistem_daftar.sql` | Fungsi `daftar_log_sistem()` untuk halaman **Log Sistem** (menu superadmin): filter tanggal, karyawan, aksi, pencarian, dan paging di server. |
+| `20260924000011_zona_waktu_wib.sql` | **Zona waktu database → Asia/Jakarta (WIB).** Dashboard Supabase & API menampilkan jam WIB (kolom `TIMESTAMPTZ` seperti `log_sistem.waktu` tidak perlu dikonversi). Fungsi penomoran job/tagihan/penawaran, umur piutang, dan cek tanggal lahir dibuat eksplisit memakai tanggal WIB. Setelah menjalankan, restart project Supabase supaya koneksi baru memakai WIB. |
+| `20260924000012_log_tambah_pengguna.sql` | Log "Tambah Data Pengguna" terisi karyawan pembuat & IP (akun dibuat lewat Supabase Auth yang tidak membawa identitas). Titipan pembuat hanya dipercaya bila milik superadmin aktif. **Naikkan backend versi baru bersamaan.** |
+| `20260924000013_unit_trailer.sql` | **Master Unit Trailer** (menu Master → Unit Trailer): kode trailer (unik), tahun, jenis unit trailer, kapasitas muatan (ton), status trailer. Soft delete + log sistem. Baca sesuai scope jenis unit, tambah/edit/hapus superadmin. |
+| `20260924000014_jenis_unit_trailer.sql` | **Master Jenis Unit Trailer** (tabel sendiri, beda dengan Jenis Unit truk). Unit Trailer memakai `jenis_unit_trailer_id`; trailer lama dipindahkan otomatis ke jenis unit trailer bernama sama. Pencatat log tidak lagi bisa gagal karena label tabel belum terdaftar. |
+| `20260924000015_unit_trailer_status.sql` | Status unit trailer hanya **Standby / Perbaikan** (trailer berstatus "terpakai" dikembalikan ke standby). |
+| `20260924000016_jenis_unit_trailer_jenis_unit.sql` | Jenis Unit Trailer **wajib terhubung ke Jenis Unit** (`jenis_unit_id`). Jenis unit trailer yang sudah terdaftar dihubungkan ke jenis unit **Tractor Head** (`4cf7792f-b353-4f2c-8b49-bfb9a9eb7b4f`). Akses operator ke Unit Trailer mengikuti scope Jenis Unit. |
+| `20260924000017_job_unit_trailer.sql` | **Unit Trailer di Job** (`jobs.unit_trailer_id`). Bila jenis unit dari unit yang dipilih punya jenis unit trailer, unit trailer wajib & harus yang cocok; bila tidak, harus kosong — dijaga trigger database. Fungsi `unit_trailer_untuk_unit()` untuk pilihan di form job. **Naikkan backend & frontend versi baru bersamaan.** |
+| `20260924000018_karyawan_akun_per_role.sql` | Satu karyawan boleh punya **akun per role** (mis. Operator + Super Administrator); karyawan + role yang sama ditolak ("data sudah terdaftar"). Form Tambah/Edit Pengguna menampilkan semua karyawan. **Naikkan backend & frontend versi baru bersamaan.** |
+| `20260924000019_sesi_login_log_wajib.sql` | **Sesi login + karyawan & IP wajib di log sistem.** Login menyimpan karyawan & IP ke `sesi_pengguna`; setiap aksi memakainya — sesi tidak ditemukan → diminta login lagi; sesi dihapus hanya saat logout. Driver wajib terhubung ke karyawan (driver lama dihubungkan/dibuatkan karyawan otomatis). **Semua pengguna perlu login ulang setelah deploy.** Naikkan backend versi baru bersamaan. |
+| `20260924000020_menu_karyawan.sql` | **Menu Karyawan** (superadmin): tambah/edit/hapus karyawan + status aktif. Karyawan **nonaktif** → akun pengguna & driver miliknya tidak bisa login/dipakai. Nama driver dipilih dari karyawan (nama driver & akun mengikuti nama karyawan). Tombol "Tambah karyawan" di Pengguna dihapus. Naikkan backend & frontend bersamaan. |
+| `20260924000021_tagihan_job_tervalidasi.sql` | Rincian tagihan hanya boleh berisi job yang **sudah divalidasi admin** (dijaga juga di database). |
+| `20260924000022_job_ganti_unit.sql` | **Ganti truk** di job (saat loading / dalam perjalanan / unloading): truk pengganti Stand by, driver opsional ikut diganti, alasan wajib; truk lama otomatis Perbaikan. Riwayat di tabel `job_ganti_unit`, tampil di detail job. Naikkan backend & frontend bersamaan. |
+| `20260924000023_istilah_surat_jalan.sql` | Istilah foto "surat timbang" → **"surat jalan"** di pesan aplikasi driver (kode slot tetap `surat_timbang`). |
+| `20260924000024_slot_surat_jalan.sql` | Kode slot foto `surat_timbang` → **`surat_jalan`** (data foto lama ikut diubah, tercatat di log sistem). Aplikasi driver versi lama yang masih mengirim `surat_timbang` tetap diterima. **Urutan: migration + backend dulu, baru rilis aplikasi driver baru.** |
+| `20260924000025_pengguna_multi_role.sql` | **Satu akun, banyak role.** `profiles.roles` (role lama ikut terisi); role yang dipakai dipilih per sesi login (pilihan role setelah login & dari menu profil, tercatat di log). Karyawan + role yang sama tidak boleh di dua akun aktif. Menutup celah: pengguna non-superadmin tidak bisa mengubah role/scope/status akunnya sendiri. **Naikkan backend & frontend bersamaan.** |
+| `20260924000026_edit_akun_sendiri.sql` | Superadmin boleh **mengedit akunnya sendiri** di menu Pengguna (email, karyawan, role, scope) — role Super Administrator tidak bisa dilepas dari akun sendiri dan akun sendiri tidak bisa dinonaktifkan. Naikkan backend & frontend bersamaan. |
+| `20260924000027_aktifkan_pengguna_cek_karyawan.sql` | Pengguna **hanya bisa diaktifkan bila karyawannya berstatus Aktif** (juga saat akun dibuat atau dipindah karyawan). Menu Pengguna menandai akun yang karyawannya nonaktif. Naikkan backend & frontend bersamaan. |
+| `20260924000028_unit_terjual.sql` | Status unit baru **Terjual**: tidak bisa dipakai job, tidak ikut dashboard/peta/jadwal/jumlah armada, tidak berubah otomatis oleh job/insiden. Hanya bisa dijual bila tidak ada job yang belum selesai. Bisa dikoreksi kembali ke Stand by. Laporan utilisasi tidak menghitung hari setelah terjual. Naikkan backend & frontend bersamaan. |
+| `20260924000029_unit_diafkirkan.sql` | Status unit baru **Diafkirkan** — perlakuan sama dengan Terjual (tidak bisa dipakai job, keluar dari armada, bisa dikoreksi ke Stand by). Naikkan backend & frontend bersamaan. |
+
+> **Mengubah data lewat SQL Editor.** Sejak migration 000019, perubahan data
+> di luar aplikasi ditolak kecuali identitas diisi dulu (karyawan superadmin):
+>
+> ```sql
+> SELECT transport.mulai_sesi_manual('<karyawan_id superadmin>', 'SQL Editor - alasan');
+> UPDATE transport.invoices SET status = 1 WHERE invoice_number = '...';
+> SELECT transport.selesai_sesi_manual();
+> ```
+
+> **Mengembalikan data yang terhapus.** Baris yang dihapus pengguna tetap ada
+> dengan `status = 2`. Kembalikan lewat SQL Editor, mis.
+> `UPDATE transport.invoices SET status = 1 WHERE invoice_number = '...';`
+> — anak yang ikut terhapus (item, pembayaran) dikembalikan dengan cara yang
+> sama. Hapus permanen hanya bila memang disengaja:
+> `BEGIN; SET LOCAL app.hard_delete = 'on'; DELETE FROM ...; COMMIT;`
+
+> **Migration baru setelah pindah schema.** Objek tanpa nama schema akan
+> dibuat di `public`. Awali setiap file migration baru dengan
+> `SET search_path = transport, extensions;`, dan beri fungsi baru
+> `SET search_path = transport, extensions`.
 
 > **Migration alur job v2 mengubah status job.** `menunggu_pickup` dimigrasikan
 > ke `ditugaskan`; job yang sudah `selesai` dianggap tervalidasi. Jalankan
@@ -102,6 +152,7 @@ Ada dua sisi yang perlu dikonfigurasi.
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_ANON_KEY=...            # Settings → API → anon / publishable key
 SUPABASE_SERVICE_ROLE_KEY=...    # service role / secret key — hanya untuk cron & snapshot mileage
+SUPABASE_DB_SCHEMA=transport     # schema tabel aplikasi (harus ada di Data API → Exposed schemas)
 TRACKSOLID_ACCOUNT=...
 TRACKSOLID_PASSWORD=...
 OPENROUTESERVICE_API_KEY=...

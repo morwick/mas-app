@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import {
   createPencairan,
   createUangJalan,
@@ -60,7 +62,7 @@ export function UangJalanModal({
     if (existing) {
       setJenis(existing.jenis);
       setTanggal(existing.tanggal.slice(0, 10));
-      setJumlah(String(existing.jumlah));
+      setJumlah(String(Math.round(existing.jumlah)));
       setSumberId(existing.sumber_dana_id ?? "");
       setKeperluan(existing.keperluan ?? "");
       setCatatan(existing.catatan ?? "");
@@ -187,33 +189,24 @@ export function UangJalanModal({
             onChange={(e) => setTanggal(e.target.value)}
           />
         </Field>
-        <Field
-          label="Jumlah"
-          required
-          hint={angka > 0 ? formatRupiah(angka) : undefined}
-        >
-          <Input
-            inputMode="numeric"
+        <Field label="Jumlah" required>
+          <CurrencyInput
             placeholder="0"
             value={jumlah}
-            onChange={(e) => setJumlah(e.target.value.replace(/[^\d]/g, ""))}
+            onChange={setJumlah}
           />
         </Field>
       </div>
 
       {pencairan && (
         <Field label="Dari kas" required>
-          <Select
+          <Combobox
             value={sumberId}
-            onChange={(e) => setSumberId(e.target.value)}
-          >
-            <option value="">— pilih —</option>
-            {sumberDana.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nama}
-              </option>
-            ))}
-          </Select>
+            onChange={setSumberId}
+            options={sumberDana.map((s) => ({ value: s.id, label: s.nama }))}
+            placeholder="— pilih —"
+            searchPlaceholder="Cari kas / rekening…"
+          />
         </Field>
       )}
 

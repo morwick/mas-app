@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getDriver, listDrivers } from "./api";
+import { getDriver, listDrivers, listKaryawanDriver } from "./api";
 
 export const driverKeys = {
   list: (includeInactive: boolean) => ["drivers", "list", includeInactive] as const,
@@ -14,3 +14,6 @@ export const useDrivers = (includeInactive = false, onlyStandBy = false) =>
 
 export const useDriver = (id: string | undefined) =>
   useQuery({ queryKey: driverKeys.detail(id ?? ""), queryFn: () => getDriver(id!), enabled: !!id });
+
+export const useKaryawanDriver = () =>
+  useQuery({ queryKey: ["drivers", "karyawan-pilihan"], queryFn: listKaryawanDriver });

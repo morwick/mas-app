@@ -14,7 +14,8 @@ import {
 } from "react";
 import { adminSession, type AdminSession } from "@/lib/auth/session";
 import { api, onUnauthorized } from "@/lib/api/client";
-import type { CurrentUser } from "@/types";
+import { queryClient } from "@/lib/api/query";
+import type { CurrentUser, UserRole } from "@/types";
 
 interface AuthApi {
   session: AdminSession | null;
@@ -24,6 +25,8 @@ interface AuthApi {
   logout: () => Promise<void>;
   /** Muat ulang profil (setelah ganti nama, dsb). */
   refreshUser: () => Promise<void>;
+  /** Ganti role aktif (akun dengan beberapa role). Tercatat di log sistem. */
+  gantiRole: (role: UserRole) => Promise<CurrentUser>;
 }
 
 const AuthContext = createContext<AuthApi | null>(null);
@@ -75,6 +78,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(next);
   }, []);
 
+  const gantiRole = useCallback(async (role: UserRole) => {
+    const user = await api.post<CurrentUser>("/auth/role", { role });
+    const current = adminSession.get();
+    if (current) {
+      const next = { ...current, user };
+      adminSession.set(next);
+      setSession(next);
+    }
+    // Data yang tampil bergantung role (scope, menu) — buang cache lama.
+    queryClient.clear();
+    return user;
+  }, []);
+
   const value = useMemo<AuthApi>(
     () => ({
       session,
@@ -82,9 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isSuperadmin: session?.user.role === "superadmin",
       login,
       logout,
-      refreshUser
+      refreshUser,
+      gantiRole
     }),
-    [session, login, logout, refreshUser]
+    [session, login, logout, refreshUser, gantiRole]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

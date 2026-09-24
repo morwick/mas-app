@@ -15,6 +15,8 @@ import { Fab } from "@/components/layout/fab";
 import type { JenisUnit, Unit } from "@/types";
 import { fleetLocations } from "@/features/tracking/api";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { Combobox } from "@/components/ui/combobox";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   units: Unit[];
@@ -85,6 +87,11 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Unit"
+        description="Daftar armada beserta jenis, no polisi, dan status operasionalnya."
+      />
+
       {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-search">
@@ -96,17 +103,14 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
           />
         </div>
         <div className="toolbar-filter">
-          <Select
+          <Combobox
             value={jenis}
-            onChange={(e) => setJenis(e.target.value)}
-          >
-            <option value="">Semua jenis</option>
-            {jenisUnitList.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.nama}
-              </option>
-            ))}
-          </Select>
+            onChange={setJenis}
+            options={jenisUnitList.map((j) => ({ value: j.id, label: j.nama }))}
+            placeholder="Semua jenis"
+            searchPlaceholder="Cari jenis unit…"
+            clearable
+          />
         </div>
         <div className="toolbar-filter">
           <Select
@@ -117,6 +121,8 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
             <option value="standby">Standby</option>
             <option value="bertugas">Bertugas</option>
             <option value="perbaikan">Perbaikan</option>
+            <option value="terjual">Terjual</option>
+            <option value="diafkirkan">Diafkirkan</option>
           </Select>
         </div>
         <Link to="/units/new" className="hidden lg:inline-flex">

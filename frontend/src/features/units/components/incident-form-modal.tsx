@@ -3,8 +3,9 @@ import { Upload, X } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Input, Select, Textarea, Field } from "@/components/ui/input";
+import { Input, Textarea, Field } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import { createIncident, uploadIncidentPhoto } from "@/features/units/api";
 import { incidentTypeLabel } from "@/types";
 import type { IncidentType, Job } from "@/types";
@@ -211,17 +212,18 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
             label="Job terkait (opsional)"
             hint="Pilih job aktif kalau insiden terjadi saat job berlangsung"
           >
-            <Select
+            <Combobox
               value={form.job_id}
-              onChange={(e) => set("job_id", e.target.value)}
-            >
-              <option value="">— Tidak terkait job —</option>
-              {activeJobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.job_number} — {j.customer_nama}
-                </option>
-              ))}
-            </Select>
+              onChange={(v) => set("job_id", v)}
+              options={activeJobs.map((j) => ({
+                value: j.id,
+                label: j.job_number,
+                hint: j.customer_nama
+              }))}
+              placeholder="— Tidak terkait job —"
+              searchPlaceholder="Cari nomor job atau customer…"
+              clearable
+            />
           </Field>
         )}
         <Field label="Deskripsi insiden" required>

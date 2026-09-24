@@ -68,6 +68,7 @@ const superadmin = {
   nama: "Rika Sari",
   initials: "RS",
   role: "superadmin" as const,
+  roles: ["superadmin" as const],
   allowed_jenis_unit_ids: null
 };
 
@@ -82,6 +83,30 @@ describe("halaman publik", () => {
     renderAt([{ path: "/login", element: <LoginPage /> }], "/login");
     expect(screen.getByPlaceholderText("admin@mas.id")).toBeTruthy();
     expect(screen.getByText("Masuk")).toBeTruthy();
+  });
+
+  it("akun dengan beberapa role memilih role setelah login", async () => {
+    const multi = { ...superadmin, role: "operator" as const, roles: ["operator" as const, "superadmin" as const] };
+    const fetchMock = mockApi({
+      "/auth/login": { access_token: "jwt", refresh_token: "r", expires_at: 9999999999, user: multi },
+      "/auth/role": { ...multi, role: "superadmin" }
+    });
+    renderAt(
+      [
+        { path: "/login", element: <LoginPage /> },
+        { path: "/dashboard", element: <div>halaman dashboard</div> }
+      ],
+      "/login"
+    );
+    fireEvent.change(screen.getByPlaceholderText("admin@mas.id"), { target: { value: "rika@mas.id" } });
+    fireEvent.change(screen.getByPlaceholderText("Masukkan password"), { target: { value: "rahasia" } });
+    fireEvent.click(screen.getByText("Masuk"));
+    expect(await screen.findByText("Masuk sebagai")).toBeTruthy();
+    fireEvent.click(screen.getByText("Super Administrator"));
+    expect(await screen.findByText("halaman dashboard")).toBeTruthy();
+    const roleCall = fetchMock.mock.calls.find(([u]) => String(u).includes("/auth/role"));
+    expect(JSON.parse(String(roleCall?.[1]?.body))).toEqual({ role: "superadmin" });
+    expect(adminSession.get()?.user.role).toBe("superadmin");
   });
 
   it("login driver", () => {

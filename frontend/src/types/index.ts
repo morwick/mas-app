@@ -1,7 +1,7 @@
 // Tipe domain yang dipakai di seluruh aplikasi. Bentuknya mengikuti skema
 // respons API backend (Pydantic) — kolom dan namanya sama persis.
 
-export type UnitStatus = "standby" | "bertugas" | "perbaikan";
+export type UnitStatus = "standby" | "bertugas" | "perbaikan" | "terjual" | "diafkirkan";
 
 export type JobStatus =
   | "menunggu_pickup" // nilai lama, tidak dipakai lagi setelah migrasi v2
@@ -16,7 +16,7 @@ export type JobStatus =
   | "cancelled";
 
 export type PhotoStage = "loading" | "unloading" | "serah_terima";
-export type PhotoSlot = "depan" | "belakang" | "kanan" | "kiri" | "surat_timbang" | "serah_terima";
+export type PhotoSlot = "depan" | "belakang" | "kanan" | "kiri" | "surat_jalan" | "serah_terima";
 export type DriverStatus = "stand_by" | "in_job";
 
 export interface JenisUnit {
@@ -57,7 +57,9 @@ export interface Unit {
 
 export interface Driver {
   id: string;
+  /** Mengikuti nama karyawan (hr.karyawan). */
   nama: string;
+  karyawan_id?: string | null;
   no_hp: string;
   no_sim?: string | null;
   /** Tanggal habis berlaku SIM (YYYY-MM-DD). Null = belum dicatat. */
@@ -158,6 +160,9 @@ export interface Job {
   /** Borongan uang jalan yang disepakati di awal. */
   uang_jalan_pagu?: number | null;
   unit_id: string;
+  /** Unit trailer yang ditarik (wajib bila jenis unit-nya punya jenis unit trailer). */
+  unit_trailer_id?: string | null;
+  unit_trailer_kode?: string | null;
   driver_id: string;
   etd: string;
   eta?: string | null;
@@ -184,6 +189,15 @@ export interface Job {
   quotation_id?: string | null;
   quotation_number?: string | null;
   photos: JobPhoto[];
+  /**
+   * Driver sudah mengajukan pencairan uang jalan dan menunggu keputusan admin.
+   * Hanya terisi pada payload admin; portal driver & halaman publik selalu false.
+   */
+  /** Total uang jalan yang sudah ditransfer ke driver. > 0 = tidak bisa dibatalkan. */
+  uang_jalan_cair?: number;
+  uang_jalan_pending?: boolean;
+  uang_jalan_pending_nominal?: number | null;
+  uang_jalan_pending_at?: string | null;
   /** Diisi hanya oleh portal driver / halaman publik. */
   unit_kode?: string | null;
   unit_no_polisi?: string | null;
@@ -631,7 +645,10 @@ export interface CurrentUser {
   email: string;
   nama: string;
   initials: string;
+  /** Role yang sedang dipakai di sesi login ini (menentukan hak akses). */
   role: UserRole;
+  /** Semua role yang dimiliki akun; lebih dari satu = bisa ganti role. */
+  roles: UserRole[];
   /**
    * superadmin: selalu null (akses semua).
    * operator: daftar jenis_unit_id yang boleh diakses; null/kosong = belum
@@ -644,10 +661,29 @@ export interface UserRow {
   id: string;
   email: string;
   nama: string;
+  /** Role tertinggi (untuk tampilan ringkas). */
   role: UserRole;
+  /** Semua role yang dimiliki akun (satu email bisa beberapa role). */
+  roles: UserRole[];
   is_active: boolean;
   allowed_jenis_unit_ids: string[] | null;
+  /** Relasi ke hr.karyawan — hanya karyawan yang boleh jadi pengguna. */
+  karyawan_id: string | null;
+  /** Status karyawan pemilik akun. false = akun tidak bisa diaktifkan. */
+  karyawan_aktif?: boolean;
   created_at: string;
+}
+
+/** Karyawan yang belum punya akun pengguna (pilihan form tambah pengguna). */
+export interface KaryawanOption {
+  id: string;
+  nama: string;
+  tanggal_lahir: string | null;
+  /**
+   * Role yang sudah dimiliki karyawan ini (satu baris per akun + role).
+   * Karyawan + role yang sama tidak boleh ada di dua akun.
+   */
+  akun?: { user_id: string; role: UserRole }[];
 }
 
 export interface DriverSession {

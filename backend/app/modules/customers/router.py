@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
-from app.core.paging import Page, PageParams, page_params
 from app.core.auth import user_client
+from app.core.paging import Page, PageParams, page_params
 from app.modules.auth.schemas import OkResponse
 from app.modules.customers.schemas import Customer, CustomerCreate, CustomerUpdate
 from app.modules.customers.service import CustomerService

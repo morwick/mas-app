@@ -5,17 +5,18 @@ from typing import Any
 from postgrest.types import CountMethod
 from supabase import AsyncClient
 
-from app.core.errors import NotFoundError
-from app.core.pg import clean_text, rows, single
+from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
+from app.core.pg import clean_text, rows, single
 from app.domain.job_conflicts import ACTIVE_JOB_STATUSES
-from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate
+from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate, KaryawanDriverOption
 
 
 def _to_driver(row: dict[str, Any]) -> Driver:
     return Driver(
         id=row["id"],
         nama=row["nama"],
+        karyawan_id=row.get("karyawan_id"),
         no_hp=row["no_hp"],
         no_sim=row.get("no_sim"),
         sim_berlaku_sampai=row.get("sim_berlaku_sampai"),
@@ -33,7 +34,7 @@ class DriverService:
 
     async def _active_jobs_by_driver(self, driver_ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
         """driver_id → job aktif (BR-01). Satu driver paling banyak satu job aktif."""
-        q = self._db.table("jobs").select("id, job_number, driver_id").in_("status", list(ACTIVE_JOB_STATUSES))
+        q = self._db.table("jobs").select("id, job_number, driver_id").in_("status_job", list(ACTIVE_JOB_STATUSES))
         if driver_ids:
             q = q.in_("driver_id", driver_ids)
         return {r["driver_id"]: r for r in rows(await q.execute())}
@@ -48,8 +49,9 @@ class DriverService:
 
     _SEARCH_COLUMNS = ["nama", "no_hp", "no_sim"]
 
-    async def list_page(self, *, params: PageParams, include_inactive: bool = False,
-                        q: str | None = None) -> Page[Driver]:
+    async def list_page(
+        self, *, params: PageParams, include_inactive: bool = False, q: str | None = None
+    ) -> Page[Driver]:
         """Satu halaman driver. Status (stand_by/in_job) diturunkan dari job
         aktif setelah pemotongan — kolomnya tidak ada di tabel, jadi tidak bisa
         ikut jadi kriteria filter di database."""
@@ -98,12 +100,30 @@ class DriverService:
         )
         return res.count or 0
 
+    async def karyawan_pilihan(self) -> list[KaryawanDriverOption]:
+        res = await self._db.rpc("karyawan_untuk_driver").execute()
+        return [
+            KaryawanDriverOption(id=str(r["id"]), nama=r["nama"], driver_id=r.get("driver_id") and str(r["driver_id"]))
+            for r in rows(res)
+        ]
+
+    async def _cek_karyawan(self, karyawan_id: str, awal: str, kecuali_driver: str | None = None) -> str:
+        """Karyawan harus aktif dan belum menjadi driver lain. Mengembalikan namanya."""
+        pilihan = next((k for k in await self.karyawan_pilihan() if k.id == karyawan_id), None)
+        if pilihan is None:
+            raise ValidationError(f"{awal}: karyawan tidak ditemukan atau berstatus nonaktif.")
+        if pilihan.driver_id and pilihan.driver_id != kecuali_driver:
+            raise ConflictError(f"{awal} karena data sudah terdaftar: {pilihan.nama} sudah menjadi driver.")
+        return pilihan.nama
+
     async def create(self, payload: DriverCreate) -> Driver:
+        nama = await self._cek_karyawan(payload.karyawan_id, "Driver gagal ditambahkan")
         res = await (
             self._db.table("drivers")
             .insert(
                 {
-                    "nama": payload.nama.strip(),
+                    "karyawan_id": payload.karyawan_id,
+                    "nama": nama,  # database tetap menyamakan dengan nama karyawan
                     "no_hp": payload.no_hp.strip(),
                     "no_sim": clean_text(payload.no_sim),
                     "sim_berlaku_sampai": payload.sim_berlaku_sampai or None,
@@ -118,8 +138,13 @@ class DriverService:
     async def update(self, driver_id: str, payload: DriverUpdate) -> None:
         data: dict[str, Any] = {}
         fields = payload.model_dump(exclude_unset=True)
-        if "nama" in fields and payload.nama is not None:
-            data["nama"] = payload.nama.strip()
+        if "karyawan_id" in fields and payload.karyawan_id:
+            lama = await self.get(driver_id)
+            if payload.karyawan_id != lama.karyawan_id:
+                await self._cek_karyawan(
+                    payload.karyawan_id, "Perubahan driver gagal disimpan", kecuali_driver=driver_id
+                )
+                data["karyawan_id"] = payload.karyawan_id
         if "no_hp" in fields and payload.no_hp is not None:
             data["no_hp"] = payload.no_hp.strip()
         for key in ("no_sim", "alamat", "catatan"):

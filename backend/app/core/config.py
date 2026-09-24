@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     # Menembus semua RLS. Hanya dipakai untuk cron dan operasi sistem internal.
     supabase_service_role_key: str = ""
+    # Schema Postgres tempat seluruh tabel & fungsi aplikasi (lihat migration
+    # 20260924000002). Harus terdaftar di Data API → Exposed schemas.
+    supabase_db_schema: str = "transport"
 
     # Integrasi eksternal
     tracksolid_account: str = ""

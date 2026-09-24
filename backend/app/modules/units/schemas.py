@@ -4,7 +4,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-UnitStatus = Literal["standby", "bertugas", "perbaikan"]
+# terjual / diafkirkan: unit keluar dari armada — tidak bisa dipakai job
+# (migration 20260924000028 & 000029).
+UnitStatus = Literal["standby", "bertugas", "perbaikan", "terjual", "diafkirkan"]
+BUKAN_ARMADA: tuple[str, ...] = ("terjual", "diafkirkan")
 
 
 class Unit(BaseModel):
@@ -96,3 +99,5 @@ class UnitStatusCounts(BaseModel):
     standby: int = 0
     bertugas: int = 0
     perbaikan: int = 0
+    terjual: int = 0
+    diafkirkan: int = 0

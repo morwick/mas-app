@@ -32,14 +32,25 @@ class UangJalanCard extends ConsumerWidget {
   }
 }
 
-class _Body extends ConsumerWidget {
+class _Body extends ConsumerStatefulWidget {
   const _Body({required this.job, required this.data});
 
   final Job job;
   final JobUangJalan data;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Body> createState() => _BodyState();
+}
+
+class _BodyState extends ConsumerState<_Body> {
+  /// Mulai tertutup. Di jalan yang dicari driver cuma dua hal — sisa uang jalan
+  /// dan tombol ajukan — sisanya menggeser isi job ke bawah layar.
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final job = widget.job;
+    final data = widget.data;
     final posisi = data.posisi;
     final pending = data.pending;
     final status = job.status;
@@ -58,77 +69,13 @@ class _Body extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Row(
-          children: [
-            Icon(Icons.account_balance_wallet_outlined, size: 20, color: MasColors.brandDark),
-            SizedBox(width: 8),
-            Text('Uang jalan', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (posisi != null) ...[
-          _Row('Pagu job', formatRupiah(posisi.pagu)),
-          _Row('Sudah diterima', formatRupiah(posisi.cair)),
-          _Row('Sisa pagu', formatRupiah(posisi.sisa), bold: true),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: posisi.pagu > 0 ? (posisi.cair / posisi.pagu).clamp(0.0, 1.0) : 0,
-              minHeight: 6,
-              backgroundColor: MasColors.page,
-            ),
-          ),
-        ],
-        if (pending != null) ...[
+        _header(),
+        if (_expanded)
+          ..._detail(posisi, pending, status, data)
+        else if (posisi != null) ...[
           const SizedBox(height: 10),
-          _Notice(
-            icon: Icons.hourglass_top,
-            color: MasColors.warning,
-            bg: MasColors.warningBg,
-            text: 'Pengajuan ${formatRupiah(pending.nominal)} (${formatRelative(pending.requestedAt)}) '
-                'menunggu bukti transfer dari admin.',
-          ),
-        ] else if (posisi != null && !posisi.adaBukti && status == JobStatus.diterima) ...[
-          const SizedBox(height: 10),
-          const _Notice(
-            icon: Icons.lock_outline,
-            color: MasColors.info,
-            bg: MasColors.infoBg,
-            text: 'Tahap muat terkunci sampai ada pencairan uang jalan pertama yang berbukti.',
-          ),
+          _Row('Sisa uang jalan', formatRupiah(posisi.sisa), bold: true),
         ],
-        if (data.transaksi.any((t) => t.isPencairan)) ...[
-          const SizedBox(height: 10),
-          const Text('Pencairan', style: TextStyle(fontSize: 12, color: MasColors.muted, fontWeight: FontWeight.w600)),
-          for (final t in data.transaksi.where((t) => t.isPencairan))
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    t.buktiTransferUrl != null ? Icons.receipt_long : Icons.receipt_long_outlined,
-                    size: 16,
-                    color: t.buktiTransferUrl != null ? MasColors.brand : MasColors.subtle,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(formatDate(t.tanggal), style: const TextStyle(fontSize: 13))),
-                  Text(formatRupiah(t.jumlah), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-        ],
-        for (final r in data.pengajuan.where((r) => r.status == RequestStatus.ditolak).take(1))
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: _Notice(
-              icon: Icons.cancel_outlined,
-              color: MasColors.danger,
-              bg: MasColors.dangerBg,
-              text: 'Pengajuan ${formatRupiah(r.nominal)} ditolak'
-                  '${r.alasanTolak == null || r.alasanTolak!.isEmpty ? '.' : ': ${r.alasanTolak}'}',
-            ),
-          ),
         if (!status.isClosed && status != JobStatus.menungguValidasi) ...[
           const SizedBox(height: 12),
           FilledButton.icon(
@@ -136,6 +83,8 @@ class _Body extends ConsumerWidget {
             icon: const Icon(Icons.send_outlined, size: 18),
             label: const Text('Ajukan Uang Jalan'),
           ),
+          // Alasan tombol mati ikut ditampilkan meski panel tertutup — tombol
+          // pucat tanpa keterangan hanya bikin driver menebak.
           if (hint != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -146,15 +95,117 @@ class _Body extends ConsumerWidget {
     );
   }
 
+  Widget _header() {
+    return Semantics(
+      button: true,
+      label: _expanded ? 'Tutup rincian uang jalan' : 'Buka rincian uang jalan',
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              const Icon(Icons.account_balance_wallet_outlined, size: 20, color: MasColors.brandDark),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Uang jalan', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              ),
+              Icon(
+                _expanded ? Icons.expand_less : Icons.expand_more,
+                size: 22,
+                color: MasColors.muted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Rincian lengkap — hanya saat panel dibuka.
+  List<Widget> _detail(
+    UangJalanPosisi? posisi,
+    UangJalanRequest? pending,
+    JobStatus status,
+    JobUangJalan data,
+  ) {
+    return [
+      const SizedBox(height: 10),
+      if (posisi != null) ...[
+        _Row('Pagu job', formatRupiah(posisi.pagu)),
+        _Row('Sudah diterima', formatRupiah(posisi.cair)),
+        _Row('Sisa pagu', formatRupiah(posisi.sisa), bold: true),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: posisi.pagu > 0 ? (posisi.cair / posisi.pagu).clamp(0.0, 1.0) : 0,
+            minHeight: 6,
+            backgroundColor: MasColors.page,
+          ),
+        ),
+      ],
+      if (pending != null) ...[
+        const SizedBox(height: 10),
+        _Notice(
+          icon: Icons.hourglass_top,
+          color: MasColors.warning,
+          bg: MasColors.warningBg,
+          text: 'Pengajuan ${formatRupiah(pending.nominal)} (${formatRelative(pending.requestedAt)}) '
+              'menunggu bukti transfer dari admin.',
+        ),
+      ] else if (posisi != null && !posisi.adaBukti && status == JobStatus.diterima) ...[
+        const SizedBox(height: 10),
+        const _Notice(
+          icon: Icons.lock_outline,
+          color: MasColors.info,
+          bg: MasColors.infoBg,
+          text: 'Tahap muat terkunci sampai ada pencairan uang jalan pertama yang berbukti.',
+        ),
+      ],
+      if (data.transaksi.any((t) => t.isPencairan)) ...[
+        const SizedBox(height: 10),
+        const Text('Pencairan', style: TextStyle(fontSize: 12, color: MasColors.muted, fontWeight: FontWeight.w600)),
+        for (final t in data.transaksi.where((t) => t.isPencairan))
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(
+              children: [
+                Icon(
+                  t.buktiTransferUrl != null ? Icons.receipt_long : Icons.receipt_long_outlined,
+                  size: 16,
+                  color: t.buktiTransferUrl != null ? MasColors.brand : MasColors.subtle,
+                ),
+                const SizedBox(width: 6),
+                Expanded(child: Text(formatDate(t.tanggal), style: const TextStyle(fontSize: 13))),
+                Text(formatRupiah(t.jumlah), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+      ],
+      for (final r in data.pengajuan.where((r) => r.status == RequestStatus.ditolak).take(1))
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: _Notice(
+            icon: Icons.cancel_outlined,
+            color: MasColors.danger,
+            bg: MasColors.dangerBg,
+            text: 'Pengajuan ${formatRupiah(r.nominal)} ditolak'
+                '${r.alasanTolak == null || r.alasanTolak!.isEmpty ? '.' : ': ${r.alasanTolak}'}',
+          ),
+        ),
+    ];
+  }
+
   Future<void> _openSheet(BuildContext context, WidgetRef ref, UangJalanPosisi posisi) async {
     final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => AjukanUangJalanSheet(jobId: job.id, sisa: posisi.sisa),
+      builder: (_) => AjukanUangJalanSheet(jobId: widget.job.id, sisa: posisi.sisa),
     );
     if (ok == true && context.mounted) {
-      refreshJobDataFromWidget(ref, job.id);
+      refreshJobDataFromWidget(ref, widget.job.id);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pengajuan uang jalan terkirim. Menunggu admin mengunggah bukti transfer.')),
       );

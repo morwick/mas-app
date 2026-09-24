@@ -82,3 +82,33 @@ def test_page_generic_menjaga_tipe_item() -> None:
 def test_window_tidak_pernah_negatif(size: int) -> None:
     p = PageParams(page=1, page_size=size)
     assert p.offset == 0 and p.last_index == size - 1
+
+
+# ── Opsi "tampilkan semua" ──────────────────────────────────────────────────
+
+def test_page_size_semua() -> None:
+    from app.core.paging import ALL_PAGE_SIZE
+
+    p = PageParams(page=1, page_size=ALL_PAGE_SIZE)
+    assert p.is_all is True
+    assert p.offset == 0
+    # Tetap ada pagar atas supaya satu permintaan tidak menarik jutaan baris.
+    assert p.last_index > 1000
+
+
+def test_semua_mengabaikan_nomor_halaman() -> None:
+    from app.core.paging import ALL_PAGE_SIZE, page_params
+
+    p = page_params(page=7, page_size=ALL_PAGE_SIZE)
+    assert p.page == 1 and p.is_all
+
+
+def test_page_size_nol_jatuh_ke_default() -> None:
+    from app.core.paging import page_params
+
+    assert page_params(page=1, page_size=0).page_size == DEFAULT_PAGE_SIZE
+
+
+def test_ukuran_halaman_biasa_tidak_dianggap_semua() -> None:
+    for size in (10, 20, 50, 100, 200):
+        assert PageParams(page=1, page_size=size).is_all is False

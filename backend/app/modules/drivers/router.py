@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
-from app.core.paging import Page, PageParams, page_params
 from app.core.auth import user_client
+from app.core.paging import Page, PageParams, page_params
 from app.modules.auth.schemas import OkResponse
-from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate, SetPinRequest
+from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate, KaryawanDriverOption, SetPinRequest
 from app.modules.drivers.service import DriverService
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
@@ -27,9 +27,7 @@ async def list_drivers_page(
 
 
 @router.get("/counts", response_model=dict[str, int])
-async def driver_counts(
-    q: str | None = Query(None), svc: DriverService = Depends(get_service)
-) -> dict[str, int]:
+async def driver_counts(q: str | None = Query(None), svc: DriverService = Depends(get_service)) -> dict[str, int]:
     return await svc.count_by_active(q=q)
 
 
@@ -41,6 +39,12 @@ async def list_drivers(
 ) -> list[Driver]:
     """Tanpa potongan — untuk dropdown driver di form job."""
     return await svc.list_all(include_inactive=include_inactive, only_stand_by=only_stand_by)
+
+
+@router.get("/karyawan-pilihan", response_model=list[KaryawanDriverOption])
+async def karyawan_pilihan(svc: DriverService = Depends(get_service)) -> list[KaryawanDriverOption]:
+    """Pilihan nama di form tambah/edit driver: semua karyawan aktif."""
+    return await svc.karyawan_pilihan()
 
 
 @router.get("/{driver_id}", response_model=Driver)

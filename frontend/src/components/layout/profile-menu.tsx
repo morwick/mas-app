@@ -4,15 +4,37 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { LogOut, UserRound } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { LogOut, Repeat, UserRound } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { useToast } from "@/components/ui/toast";
+import { LABEL_ROLE } from "@/features/auth/components/role-picker";
+import type { UserRole } from "@/types";
 import { profileItem } from "./nav-items";
 
 export function ProfileMenu() {
-  const { user, logout } = useAuth();
+  const { user, logout, gantiRole } = useAuth();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function beralih(role: UserRole) {
+    setOpen(false);
+    setBusy(`Beralih ke ${LABEL_ROLE[role]}…`);
+    try {
+      await gantiRole(role);
+      toast.success(`Sekarang memakai role ${LABEL_ROLE[role]}`);
+      // Halaman saat ini bisa jadi tidak boleh dibuka role baru.
+      navigate("/dashboard");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal mengganti role");
+    } finally {
+      setBusy(null);
+    }
+  }
   const wrapRef = useRef<HTMLDivElement>(null);
 
   // Tutup saat pindah halaman — kalau tidak, menunya menggantung terbuka.
@@ -36,7 +58,8 @@ export function ProfileMenu() {
     };
   }, [open]);
 
-  if (!user) return null;
+  if (!user) return <LoadingOverlay message={busy} />;
+  const roleLain = (user.roles ?? []).filter((r) => r !== user.role);
 
   const isSuperadmin = user.role === "superadmin";
   const roleLabel = isSuperadmin ? "Super Administrator" : "Operator";
@@ -160,6 +183,39 @@ export function ProfileMenu() {
               <UserRound style={{ width: 16, height: 16 }} />
               Ubah profil
             </Link>
+            {roleLain.map((r) => (
+              <button
+                key={r}
+                type="button"
+                role="menuitem"
+                onClick={() => void beralih(r)}
+                disabled={busy !== null}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  width: "100%",
+                  padding: "9px 10px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "transparent",
+                  color: "var(--text-primary)",
+                  fontSize: 13.5,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  textAlign: "left"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "var(--bg-muted)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
+              >
+                <Repeat style={{ width: 16, height: 16 }} />
+                Ganti ke {LABEL_ROLE[r]}
+              </button>
+            ))}
             <button
               type="button"
               role="menuitem"
@@ -195,6 +251,7 @@ export function ProfileMenu() {
           </div>
         </div>
       )}
+      <LoadingOverlay message={busy} />
     </div>
   );
 }

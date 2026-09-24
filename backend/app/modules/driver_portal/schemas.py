@@ -60,4 +60,6 @@ class MarkReadRequest(BaseModel):
     ids: list[str] = Field(default_factory=list)
 
 
-DriverJobFilter = Literal["active", "all"]
+# "active" & "all" dipakai portal web; tiga sisanya memetakan tab aplikasi
+# mobile supaya penyaringannya di server, bukan setelah semua baris diunduh.
+DriverJobFilter = Literal["active", "all", "konfirmasi", "aktif", "selesai"]

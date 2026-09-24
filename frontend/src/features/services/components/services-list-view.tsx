@@ -8,6 +8,8 @@ import type { JenisUnit, ServiceStatus, UnitWithService } from "@/types";
 import { deriveServiceStatus, formatKm } from "@/lib/service";
 import { syncAllMileage } from "@/features/services/api";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { Combobox } from "@/components/ui/combobox";
+import { PageHeader } from "@/components/ui/page-header";
 
 const MILEAGE_POLL_MS = 5 * 60 * 1000; // 5 menit
 
@@ -130,14 +132,10 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
           flexWrap: "wrap"
         }}
       >
-        <div>
-          <h1 className="h1" style={{ fontSize: 22, marginBottom: 4 }}>
-            Service Unit
-          </h1>
-          <p className="body-sm muted">
-            Pantau jadwal servis berkala tiap unit (per 10.000 km).
-          </p>
-        </div>
+        <PageHeader
+          title="Service Unit"
+          description="Pantau jadwal servis berkala tiap unit (per 10.000 km)."
+        />
         <SyncIndicator polling={polling} lastSyncAt={lastSyncAt} />
       </div>
 
@@ -179,17 +177,14 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
           />
         </div>
         <div className="toolbar-filter">
-          <Select
+          <Combobox
             value={jenis}
-            onChange={(e) => setJenis(e.target.value)}
-          >
-            <option value="">Semua jenis</option>
-            {jenisUnitList.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.nama}
-              </option>
-            ))}
-          </Select>
+            onChange={setJenis}
+            options={jenisUnitList.map((j) => ({ value: j.id, label: j.nama }))}
+            placeholder="Semua jenis"
+            searchPlaceholder="Cari jenis unit…"
+            clearable
+          />
         </div>
         <div className="toolbar-filter">
           <Select

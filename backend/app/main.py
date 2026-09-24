@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.errors import install_exception_handlers
+from app.core.request_context import ip_dari_request, ip_klien, ua_klien
 from app.modules.auth.router import router as auth_router
 from app.modules.cron.router import router as cron_router
 from app.modules.customers.router import router as customers_router
@@ -19,6 +20,8 @@ from app.modules.incidents.router import router as incidents_router
 from app.modules.invoices.router import router as invoices_router
 from app.modules.jenis_unit.router import router as jenis_unit_router
 from app.modules.jobs.router import router as jobs_router
+from app.modules.karyawan.router import router as karyawan_router
+from app.modules.log_sistem.router import router as log_sistem_router
 from app.modules.maintenance.router import router as maintenance_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.quotations.router import router as quotations_router
@@ -26,6 +29,7 @@ from app.modules.reports.router import router as reports_router
 from app.modules.search.router import router as search_router
 from app.modules.tracking.router import router as tracking_router
 from app.modules.uang_jalan.router import router as uang_jalan_router
+from app.modules.unit_trailer.router import router as unit_trailer_router
 from app.modules.units.router import router as units_router
 from app.modules.users.router import router as users_router
 
@@ -39,6 +43,7 @@ def build_api_router() -> APIRouter:
         users_router,
         jenis_unit_router,
         units_router,
+        unit_trailer_router,
         drivers_router,
         customers_router,
         jobs_router,
@@ -51,6 +56,8 @@ def build_api_router() -> APIRouter:
         reports_router,
         search_router,
         notifications_router,
+        log_sistem_router,
+        karyawan_router,
         dashboard_router,
         driver_portal_router,
         cron_router,
@@ -76,6 +83,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     install_exception_handlers(app)
+
+    @app.middleware("http")
+    async def simpan_ip_klien(request: Request, call_next):  # type: ignore[no-untyped-def]
+        # IP pengguna untuk log sistem — dipakai semua query di permintaan ini.
+        token = ip_klien.set(ip_dari_request(request))
+        token_ua = ua_klien.set((request.headers.get("user-agent") or "")[:300] or None)
+        try:
+            return await call_next(request)
+        finally:
+            ip_klien.reset(token)
+            ua_klien.reset(token_ua)
+
     app.include_router(build_api_router())
 
     @app.get("/health", tags=["meta"])

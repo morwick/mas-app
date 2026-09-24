@@ -17,17 +17,19 @@ function group(key: string): NavGroup {
 }
 
 describe("susunan menu", () => {
-  it("urutannya Dashboard, Master, Monitoring, Laporan", () => {
+  it("urutannya Dashboard, Master, Monitoring, Laporan, Log Sistem, Notifikasi", () => {
     expect(
       navTree.map((e) => (isNavGroup(e) ? e.label : e.label))
-    ).toEqual(["Dashboard", "Master", "Monitoring", "Laporan"]);
+    ).toEqual(["Dashboard", "Master", "Monitoring", "Laporan", "Log Sistem", "Notifikasi"]);
   });
 
-  it("Master urut: Pengguna, Jenis Unit, Unit, Driver, Customer", () => {
+  it("Master urut: Karyawan, Pengguna, Jenis Unit, Unit, Unit Trailer, Driver, Customer", () => {
     expect(group("master").items.map((i) => i.label)).toEqual([
+      "Karyawan",
       "Pengguna",
       "Jenis Unit",
       "Unit",
+      "Unit Trailer",
       "Driver",
       "Customer"
     ]);
@@ -70,6 +72,12 @@ describe("susunan menu", () => {
     expect(pengguna?.superadminOnly).toBe(true);
   });
 
+  it("Karyawan di Master, superadmin-only", () => {
+    const karyawan = group("master").items.find((i) => i.label === "Karyawan");
+    expect(karyawan?.href).toBe("/karyawan");
+    expect(karyawan?.superadminOnly).toBe(true);
+  });
+
   it("tidak ada href ganda", () => {
     const hrefs = navItems.map((i) => i.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
@@ -87,21 +95,32 @@ describe("visibleNavTree", () => {
       "Dashboard",
       "Master",
       "Monitoring",
-      "Laporan"
+      "Laporan",
+      "Log Sistem",
+      "Notifikasi"
     ]);
+  });
+
+  it("Log Sistem hanya untuk superadmin", () => {
+    const log = navTree.find((e) => !isNavGroup(e) && e.href === "/log-sistem");
+    expect(log && !isNavGroup(log) && log.superadminOnly).toBe(true);
+    expect(visibleNavTree(navTree, "superadmin").map((e) => e.label)).toContain("Log Sistem");
   });
 
   it("operator kehilangan Laporan dan submenu superadmin-only", () => {
     const tree = visibleNavTree(navTree, "operator");
+    // Notifikasi terbuka untuk semua role; Laporan & Log Sistem superadmin-only.
     expect(tree.map((e) => e.label)).toEqual([
       "Dashboard",
       "Master",
-      "Monitoring"
+      "Monitoring",
+      "Notifikasi"
     ]);
     const master = tree.find((e) => isNavGroup(e) && e.key === "master");
-    // Jenis Unit superadmin-only — operator hanya melihat tiga sisanya.
+    // Jenis Unit superadmin-only. Unit Trailer terlihat (hanya baca) seperti Unit.
     expect(master && isNavGroup(master) ? master.items.map((i) => i.label) : []).toEqual([
       "Unit",
+      "Unit Trailer",
       "Driver",
       "Customer"
     ]);

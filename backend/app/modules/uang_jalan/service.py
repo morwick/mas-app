@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.errors import NotFoundError, ValidationError
 from app.core.pg import clean_text, first, num, rows, single
 from app.core.push import push_to_driver
+from app.core.soft_delete import AKTIF, DIHAPUS, STATUS
 from app.core.storage import (
     remove_object_quietly,
     unique_object_name,
@@ -47,7 +48,7 @@ UANG_JALAN_SELECT = """
 """
 
 REQUEST_SELECT = """
-  id, job_id, driver_id, nominal, catatan, status, alasan_tolak, uang_jalan_id,
+  id, job_id, driver_id, nominal, catatan, status_pengajuan, alasan_tolak, uang_jalan_id,
   requested_at, decided_at,
   job:jobs(job_number),
   driver:drivers(nama)
@@ -82,7 +83,7 @@ def to_request(r: dict[str, Any]) -> UangJalanRequest:
         driver_nama=(first(r.get("driver")) or {}).get("nama"),
         nominal=num(r.get("nominal")),
         catatan=r.get("catatan"),
-        status=r["status"],
+        status=r["status_pengajuan"],
         alasan_tolak=r.get("alasan_tolak"),
         uang_jalan_id=r.get("uang_jalan_id"),
         requested_at=r["requested_at"],
@@ -121,7 +122,7 @@ def _clean(payload: UangJalanInput) -> dict[str, Any]:
         "job_id": payload.job_id,
         "jenis": payload.jenis,
         "tanggal": payload.tanggal,
-        "jumlah": round(payload.jumlah),
+        "jumlah": payload.jumlah,
         "sumber_dana_id": payload.sumber_dana_id if payload.jenis == "pencairan" else None,
         "keperluan": clean_text(payload.keperluan),
         "catatan": clean_text(payload.catatan),
@@ -182,10 +183,13 @@ class UangJalanService:
         return [to_request(r) for r in rows(res)]
 
     async def list_pending_requests(self) -> list[UangJalanRequest]:
+        # Pengajuan dari job yang sudah dibatalkan tidak perlu ditindaklanjuti.
         res = await (
             self._db.table("uang_jalan_requests")
-            .select(REQUEST_SELECT)
-            .eq("status", "diajukan")
+            .select(REQUEST_SELECT + ", job_aktif:jobs!inner(status_job)")
+            .eq("status_pengajuan", "diajukan")
+            .neq("job_aktif.status_job", "cancelled")
+            .eq("job_aktif.status", AKTIF)
             .order("requested_at")
             .execute()
         )
@@ -213,13 +217,15 @@ class UangJalanService:
         res = await (
             self._db.table("jobs")
             .select(
-                "id, job_number, status, asal, tujuan, etd, uang_jalan_pagu,"
+                "id, job_number, status_job, asal, tujuan, etd, uang_jalan_pagu,"
                 " unit:units(kode_unit), driver:drivers(nama),"
                 " customer:customers(nama_perusahaan),"
                 " uang_jalan(id, jenis, jumlah, tanggal),"
-                " uang_jalan_requests(id, status)"
+                " uang_jalan_requests(id, status_pengajuan)"
             )
-            .neq("status", "cancelled")
+            .neq("status_job", "cancelled")
+            .eq("uang_jalan.status", AKTIF)
+            .eq("uang_jalan_requests.status", AKTIF)
             .order("etd", desc=True)
             .execute()
         )
@@ -242,7 +248,7 @@ class UangJalanService:
                 UangJalanJobRow(
                     job_id=r["id"],
                     job_number=r["job_number"],
-                    status=r["status"],
+                    status=r["status_job"],
                     asal=r["asal"],
                     tujuan=r["tujuan"],
                     etd=r["etd"],
@@ -252,7 +258,7 @@ class UangJalanService:
                     ringkasan=ringkasan,
                     pencairan_terakhir=pencairan[-1] if pencairan else None,
                     pengajuan_menunggu=sum(
-                        1 for q in (r.get("uang_jalan_requests") or []) if q.get("status") == "diajukan"
+                        1 for q in (r.get("uang_jalan_requests") or []) if q.get("status_pengajuan") == "diajukan"
                     ),
                 )
             )
@@ -327,37 +333,30 @@ class UangJalanService:
         await self._db.table("uang_jalan").update(_clean(payload)).eq("id", uang_jalan_id).execute()
 
     async def delete(self, uang_jalan_id: str) -> None:
-        row = single(
-            await self._db.table("uang_jalan")
-            .select("bukti_transfer_path")
-            .eq("id", uang_jalan_id)
-            .maybe_single()
-            .execute()
-        )
-        await self._db.table("uang_jalan").delete().eq("id", uang_jalan_id).execute()
-        if row and row.get("bukti_transfer_path"):
-            await remove_object_quietly(self._db, self._bucket, row["bukti_transfer_path"])
+        """Soft delete: baris ditandai terhapus. File bukti transfer sengaja
+        dibiarkan di bucket supaya transaksi bisa dikembalikan utuh."""
+        await self._db.table("uang_jalan").update({STATUS: DIHAPUS}).eq("id", uang_jalan_id).execute()
 
-    async def set_pagu(self, job_id: str, pagu: float) -> None:
+    async def set_pagu(self, job_id: str, pagu: int) -> None:
         """Pagu awal disimpan di job; kenaikan sesudahnya dicatat sebagai
         transaksi 'penambahan_pagu' supaya ada jejaknya."""
-        await self._db.table("jobs").update({"uang_jalan_pagu": round(pagu)}).eq("id", job_id).execute()
+        await self._db.table("jobs").update({"uang_jalan_pagu": pagu}).eq("id", job_id).execute()
 
     async def reject_request(self, request_id: str, *, alasan: str | None, decided_by: str) -> None:
         req = single(
             await self._db.table("uang_jalan_requests")
-            .select("id, status, driver_id, job_id")
+            .select("id, status_pengajuan, driver_id, job_id")
             .eq("id", request_id)
             .maybe_single()
             .execute()
         )
         if req is None:
             raise NotFoundError("Pengajuan tidak ditemukan")
-        if req["status"] != "diajukan":
+        if req["status_pengajuan"] != "diajukan":
             raise ValidationError("Pengajuan sudah diputuskan")
         await (
             self._db.table("uang_jalan_requests")
-            .update({"status": "ditolak", "alasan_tolak": clean_text(alasan), "decided_by": decided_by})
+            .update({"status_pengajuan": "ditolak", "alasan_tolak": clean_text(alasan), "decided_by": decided_by})
             .eq("id", request_id)
             .execute()
         )

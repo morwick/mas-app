@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Search, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
@@ -18,6 +18,13 @@ interface Props {
   list: JenisUnit[];
 }
 
+const DUPLIKAT_MESSAGE = "Gagal! Jenis Unit dengan nama ini sudah ada";
+
+/** Sama dengan backend: tanpa beda huruf besar/kecil dan spasi berlebih. */
+function namaKunci(nama: string) {
+  return nama.trim().split(/\s+/).join(" ").toLowerCase();
+}
+
 export function JenisUnitView({ list }: Props) {
   const toast = useToast();
   const [editOpen, setEditOpen] = useState<{
@@ -27,9 +34,16 @@ export function JenisUnitView({ list }: Props) {
   } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [q, setQ] = useState("");
 
   async function save() {
     if (!editOpen?.nama.trim()) return;
+    // Cek cepat di sisi klien; backend & index unik database tetap memeriksa ulang.
+    const kunci = namaKunci(editOpen.nama);
+    if (list.some((j) => j.id !== editOpen.id && namaKunci(j.nama) === kunci)) {
+      toast.error(DUPLIKAT_MESSAGE);
+      return;
+    }
     setPending(true);
     const res =
       editOpen.mode === "new"
@@ -55,7 +69,11 @@ export function JenisUnitView({ list }: Props) {
     } else toast.error(res.error);
   }
 
-  const pg = usePagination(list, { pageSize: 15 });
+  const needle = q.trim().toLowerCase();
+  const filtered = needle
+    ? list.filter((j) => j.nama.toLowerCase().includes(needle))
+    : list;
+  const pg = usePagination(filtered, { resetKey: q });
 
   return (
     <div className="flex flex-col gap-4 max-w-[640px]">
@@ -73,8 +91,21 @@ export function JenisUnitView({ list }: Props) {
           Tambah
         </Button>
       </div>
+      <Input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Cari jenis unit…"
+        leftIcon={<Search style={{ width: 15, height: 15 }} />}
+      />
       <Card>
         <div className="flex flex-col">
+          {filtered.length === 0 && (
+            <p className="py-6 text-center text-[13px] text-text-muted">
+              {list.length === 0
+                ? "Belum ada jenis unit."
+                : "Tidak ada jenis unit yang cocok."}
+            </p>
+          )}
           {pg.items.map((j, i) => (
             <div
               key={j.id}

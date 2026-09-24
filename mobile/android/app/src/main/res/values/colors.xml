@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand hijau MAS — sama dengan MasColors.brand di lib/core/theme.dart. -->
+    <color name="notification_accent">#FF1C9600</color>
+</resources>

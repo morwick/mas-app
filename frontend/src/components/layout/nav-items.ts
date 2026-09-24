@@ -15,7 +15,11 @@ import {
   HandCoins,
   Tags,
   Boxes,
+  Bell,
   Activity,
+  ScrollText,
+  Container,
+  IdCard,
   type LucideIcon
 } from "lucide-react";
 
@@ -55,6 +59,13 @@ const unit: NavItem = {
   label: "Unit",
   icon: Truck,
   match: (p) => p.startsWith("/units")
+};
+
+const unitTrailer: NavItem = {
+  href: "/unit-trailer",
+  label: "Unit Trailer",
+  icon: Container,
+  match: (p) => p.startsWith("/unit-trailer")
 };
 
 const jenisUnit: NavItem = {
@@ -152,6 +163,31 @@ const pengguna: NavItem = {
   superadminOnly: true
 };
 
+const karyawan: NavItem = {
+  // Data hr.karyawan: sumber nama akun pengguna dan driver.
+  href: "/karyawan",
+  label: "Karyawan",
+  icon: IdCard,
+  match: (p) => p.startsWith("/karyawan"),
+  superadminOnly: true
+};
+
+const logSistem: NavItem = {
+  // Jejak audit: siapa melakukan apa, kapan, dari IP mana.
+  href: "/log-sistem",
+  label: "Log Sistem",
+  icon: ScrollText,
+  match: (p) => p.startsWith("/log-sistem"),
+  superadminOnly: true
+};
+
+const notifikasi: NavItem = {
+  href: "/notifikasi",
+  label: "Notifikasi",
+  icon: Bell,
+  match: (p) => p.startsWith("/notifikasi")
+};
+
 /**
  * Profil tidak muncul di sidebar — dibuka dari menu profil di top bar.
  * Tetap didaftarkan supaya judul halaman & breadcrumb menemukannya.
@@ -170,7 +206,7 @@ export const navTree: NavEntry[] = [
     key: "master",
     label: "Master",
     icon: Boxes,
-    items: [pengguna, jenisUnit, unit, driver, customer]
+    items: [karyawan, pengguna, jenisUnit, unit, unitTrailer, driver, customer]
   },
   {
     key: "monitoring",
@@ -178,7 +214,9 @@ export const navTree: NavEntry[] = [
     icon: Activity,
     items: [penawaran, job, pantau, uangJalan, service, tagihan, piutang]
   },
-  laporan
+  laporan,
+  logSistem,
+  notifikasi
 ];
 
 /** Semua item dalam satu larik datar — dipakai pencarian judul halaman. */

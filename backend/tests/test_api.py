@@ -67,3 +67,13 @@ def test_role_resolution_is_fail_safe() -> None:
 
     no_profile = build_current_user(user_id="3", email="siapa@b.id", profile=None)
     assert no_profile.nama == "siapa" and no_profile.role == "operator"
+
+
+def test_build_current_user_multi_role_memakai_role_aktif() -> None:
+    profil = {"nama": "Rika", "roles": ["operator", "superadmin"], "allowed_jenis_unit_ids": ["j1"]}
+    op = build_current_user(user_id="1", email="r@b.id", profile={**profil, "role_aktif": "operator"})
+    assert op.role == "operator" and op.roles == ["operator", "superadmin"] and op.allowed_jenis_unit_ids == ["j1"]
+    sa = build_current_user(user_id="1", email="r@b.id", profile={**profil, "role_aktif": "superadmin"})
+    assert sa.is_superadmin and sa.allowed_jenis_unit_ids is None
+    # Tanpa role aktif (sesi belum ada): role paling terbatas, bukan superadmin.
+    assert build_current_user(user_id="1", email="r@b.id", profile=profil).role == "operator"

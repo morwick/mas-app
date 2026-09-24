@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../core/api_client.dart';
+import '../../core/paging.dart';
 import 'job_status.dart';
 import 'models.dart';
 
@@ -10,12 +11,18 @@ class DriverRepository {
 
   final ApiClient _api;
 
-  Future<List<Job>> jobs({bool activeOnly = false}) async {
-    final data = await _api.get<List<dynamic>>(
-      '/driver/jobs',
-      query: {'status': activeOnly ? 'active' : 'all'},
+  /// Satu halaman job untuk gulir bertahap. [status] memakai tab server:
+  /// `konfirmasi`, `aktif`, `selesai` (juga `active`/`all` untuk portal web).
+  Future<Halaman<Job>> jobsPage({
+    required String status,
+    required int page,
+    required int pageSize,
+  }) async {
+    final data = await _api.get<Map<String, dynamic>>(
+      '/driver/jobs/page',
+      query: {'status': status, 'page': page, 'page_size': pageSize},
     );
-    return data.map((e) => Job.fromJson(e as Map<String, dynamic>)).toList();
+    return Halaman.dariJson(data, Job.fromJson);
   }
 
   Future<Job> job(String id) async =>
@@ -77,9 +84,29 @@ class DriverRepository {
     return data.map((e) => DriverNotification.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  Future<Halaman<DriverNotification>> notificationsPage({
+    required int page,
+    required int pageSize,
+  }) async {
+    final data = await _api.get<Map<String, dynamic>>(
+      '/driver/notifications/page',
+      query: {'page': page, 'page_size': pageSize},
+    );
+    return Halaman.dariJson(data, DriverNotification.fromJson);
+  }
+
   Future<void> markRead(List<String> ids) =>
       _api.post<dynamic>('/driver/notifications/read', body: {'ids': ids});
 
-  Future<void> registerDevice(String fcmToken, {String platform = 'android'}) =>
-      _api.post<dynamic>('/driver/devices', body: {'fcm_token': fcmToken, 'platform': platform});
+  /// [driverToken] dipakai saat login, ketika sesi belum terpasang di state.
+  Future<void> registerDevice(
+    String fcmToken, {
+    String platform = 'android',
+    String? driverToken,
+  }) =>
+      _api.post<dynamic>(
+        '/driver/devices',
+        body: {'fcm_token': fcmToken, 'platform': platform},
+        driverToken: driverToken,
+      );
 }

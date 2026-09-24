@@ -6,6 +6,8 @@ type StatusKey =
   | "standby"
   | "bertugas"
   | "perbaikan"
+  | "terjual"
+  | "diafkirkan"
   | "info"
   | "neutral"
   | "stand_by"
@@ -16,6 +18,8 @@ const statusClass: Record<StatusKey, string> = {
   standby: "badge-standby",
   bertugas: "badge-bertugas",
   perbaikan: "badge-perbaikan",
+  terjual: "badge-terjual",
+  diafkirkan: "badge-diafkirkan",
   info: "badge-pickup",
   neutral: "",
   stand_by: "badge-standby",
@@ -27,6 +31,8 @@ const labels: Partial<Record<StatusKey, string>> = {
   standby: "Standby",
   bertugas: "Bertugas",
   perbaikan: "Perbaikan",
+  terjual: "Terjual",
+  diafkirkan: "Diafkirkan",
   stand_by: "Stand By",
   in_job: "In Job",
   ...JOB_STATUS_LABEL

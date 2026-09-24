@@ -29,6 +29,32 @@ export function formatDateTime(date: Date | string | undefined | null) {
   }).format(d);
 }
 
+const WIB_PARTS = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Jakarta",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  // h23: tengah malam "00", bukan "24".
+  hourCycle: "h23"
+});
+
+/**
+ * Waktu WIB format `Y-m-d H:i:s`, mis. "2026-09-24 08:05:09".
+ *
+ * Selalu memakai Asia/Jakarta (UTC+7, sama dengan Bangkok), tidak tergantung
+ * zona waktu komputer pengguna — server mengirim waktu dalam UTC.
+ */
+export function formatWaktuWIB(date: Date | string | undefined | null) {
+  if (!date) return "-";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "-";
+  const p = Object.fromEntries(WIB_PARTS.formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
 export function formatDate(date: Date | string | undefined | null) {
   if (!date) return "-";
   const d = typeof date === "string" ? new Date(date) : date;

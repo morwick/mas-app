@@ -5,8 +5,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from supabase import AsyncClient
 
-from app.core.paging import Page, PageParams, page_params
 from app.core.auth import AuthContext, require_auth, user_client
+from app.core.paging import Page, PageParams, page_params
 from app.domain.job_conflicts import ConflictCheckResult
 from app.modules.auth.schemas import OkResponse
 from app.modules.jobs.photos import JobPhotoService
@@ -14,6 +14,8 @@ from app.modules.jobs.schemas import (
     ActiveJobByUnit,
     CancelRequest,
     ConflictCheckRequest,
+    GantiTrukEntry,
+    GantiTrukRequest,
     Job,
     JobConflictResponse,
     JobCreate,
@@ -22,11 +24,12 @@ from app.modules.jobs.schemas import (
     JobPhoto,
     JobStatusHistoryEntry,
     JobUpdate,
-    PhotoSlot,
+    PhotoSlotMasukan,
     PhotoStage,
     ReturnJobRequest,
     StatusResponse,
     UpdateStatusRequest,
+    normalisasi_slot,
 )
 from app.modules.jobs.service import JobService
 
@@ -106,6 +109,17 @@ async def job_history(job_id: str, svc: JobService = Depends(get_service)) -> li
     return await svc.status_history(job_id)
 
 
+@router.get("/{job_id}/ganti-truk", response_model=list[GantiTrukEntry])
+async def riwayat_ganti_truk(job_id: str, svc: JobService = Depends(get_service)) -> list[GantiTrukEntry]:
+    return await svc.riwayat_ganti_truk(job_id)
+
+
+@router.post("/{job_id}/ganti-truk", response_model=OkResponse)
+async def ganti_truk(job_id: str, payload: GantiTrukRequest, svc: JobService = Depends(get_service)) -> OkResponse:
+    await svc.ganti_truk(job_id, payload)
+    return OkResponse()
+
+
 @router.post("", response_model=JobCreated, status_code=201, responses=CONFLICT_RESPONSE)
 async def create_job(
     payload: JobCreate,
@@ -151,7 +165,7 @@ async def return_job(job_id: str, payload: ReturnJobRequest, svc: JobService = D
 async def upload_photo(
     job_id: str,
     stage: PhotoStage = Form(..., alias="type"),
-    slot: PhotoSlot | None = Form(None),
+    slot: PhotoSlotMasukan | None = Form(None),
     photo: UploadFile = File(...),
     auth: AuthContext = Depends(require_auth),
     svc: JobPhotoService = Depends(get_photo_service),
@@ -161,7 +175,7 @@ async def upload_photo(
     return await svc.upload(
         job_id=job_id,
         stage=stage,
-        slot=slot,
+        slot=normalisasi_slot(slot) if slot else None,
         data=data,
         content_type=photo.content_type,
         uploaded_by=auth.user.id,

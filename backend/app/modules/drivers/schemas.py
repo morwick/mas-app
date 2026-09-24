@@ -12,7 +12,9 @@ DriverStatus = Literal["stand_by", "in_job"]
 
 class Driver(BaseModel):
     id: str
+    # Nama driver = nama karyawan (diisi database dari hr.karyawan).
     nama: str
+    karyawan_id: str | None = None
     no_hp: str
     no_sim: str | None = None
     # Tanggal habis berlaku SIM (YYYY-MM-DD). None = belum dicatat.
@@ -30,7 +32,8 @@ class Driver(BaseModel):
 
 
 class DriverCreate(BaseModel):
-    nama: str = Field(min_length=1)
+    # Driver dipilih dari data karyawan; nama mengikuti karyawan.
+    karyawan_id: str = Field(min_length=1)
     no_hp: str = Field(min_length=1)
     no_sim: str | None = None
     sim_berlaku_sampai: str | None = None
@@ -47,7 +50,7 @@ class DriverCreate(BaseModel):
 
 
 class DriverUpdate(BaseModel):
-    nama: str | None = None
+    karyawan_id: str | None = None
     no_hp: str | None = None
     no_sim: str | None = None
     sim_berlaku_sampai: str | None = None
@@ -67,3 +70,12 @@ class DriverUpdate(BaseModel):
 
 class SetPinRequest(BaseModel):
     pin: str = Field(pattern=r"^\d{6}$", description="PIN harus 6 angka")
+
+
+class KaryawanDriverOption(BaseModel):
+    """Pilihan nama di form driver: karyawan aktif. `driver_id` terisi bila
+    karyawan itu sudah menjadi driver (satu karyawan satu driver)."""
+
+    id: str
+    nama: str
+    driver_id: str | None = None

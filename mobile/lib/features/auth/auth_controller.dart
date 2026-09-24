@@ -16,13 +16,23 @@ class AuthController extends Notifier<DriverSession?> {
 
   SessionStore get _store => ref.read(sessionStoreProvider);
 
-  Future<void> login({required String noHp, required String pin}) async {
+  /// [beforeCommit] dijalankan setelah server menerima PIN tetapi sebelum sesi
+  /// ditulis. Bila ia melempar, login ikut gagal dan tidak ada yang tersimpan —
+  /// dipakai agar driver tidak pernah masuk tanpa perangkatnya terdaftar untuk
+  /// push. Urutannya sengaja begini supaya kegagalan tidak perlu dibatalkan
+  /// setelah layar job sempat terbuka.
+  Future<void> login({
+    required String noHp,
+    required String pin,
+    Future<void> Function(DriverSession session)? beforeCommit,
+  }) async {
     final api = ref.read(apiClientProvider);
     final res = await api.post<Map<String, dynamic>>(
       '/driver/login',
       body: {'no_hp': noHp.trim(), 'pin': pin},
     );
     final session = DriverSession.fromJson(res);
+    if (beforeCommit != null) await beforeCommit(session);
     await _store.write(session);
     state = session;
   }

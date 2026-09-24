@@ -80,7 +80,7 @@ QualityReport analyzeQuality(img.Image original, {bool document = false}) {
     brightness: brightness,
     width: original.width,
     height: original.height,
-    threshold: document ? AppConfig.blurThresholdSuratTimbang : AppConfig.blurThresholdDefault,
+    threshold: document ? AppConfig.blurThresholdSuratJalan : AppConfig.blurThresholdDefault,
   );
 }
 

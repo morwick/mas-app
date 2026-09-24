@@ -19,6 +19,14 @@ T = TypeVar("T")
 
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 200
+# page_size = -1 berarti "tampilkan semua". Dipilih sebagai sentinel karena
+# 0 ambigu dengan "tidak diisi" pada query string.
+ALL_PAGE_SIZE = -1
+
+
+# Pagar untuk opsi "semua" — kalau data melebihi ini, sisanya tetap terpotong
+# dan `total` di respons memperlihatkan selisihnya.
+_ALL_HARD_CAP = 5000
 
 
 class PageParams(BaseModel):
@@ -28,13 +36,19 @@ class PageParams(BaseModel):
     page_size: int = DEFAULT_PAGE_SIZE
 
     @property
+    def is_all(self) -> bool:
+        return self.page_size == ALL_PAGE_SIZE
+
+    @property
     def offset(self) -> int:
-        return (self.page - 1) * self.page_size
+        return 0 if self.is_all else (self.page - 1) * self.page_size
 
     @property
     def last_index(self) -> int:
         """Indeks terakhir untuk `.range()` PostgREST — inklusif."""
-        return self.offset + self.page_size - 1
+        # Batas atas tetap dipasang walau "semua", sebagai pagar agar satu
+        # permintaan tidak bisa menarik jutaan baris sekaligus.
+        return _ALL_HARD_CAP - 1 if self.is_all else self.offset + self.page_size - 1
 
 
 # Annotated dipakai (bukan default `= Query(...)`) supaya fungsinya tetap bisa
@@ -42,10 +56,17 @@ class PageParams(BaseModel):
 def page_params(
     page: Annotated[int, Query(ge=1, description="Nomor halaman, mulai dari 1")] = 1,
     page_size: Annotated[
-        int, Query(ge=1, le=MAX_PAGE_SIZE, description="Jumlah baris per halaman")
+        int,
+        Query(
+            ge=ALL_PAGE_SIZE,
+            le=MAX_PAGE_SIZE,
+            description=f"Baris per halaman; {ALL_PAGE_SIZE} berarti semua",
+        ),
     ] = DEFAULT_PAGE_SIZE,
 ) -> PageParams:
-    return PageParams(page=page, page_size=page_size)
+    if page_size == 0:
+        page_size = DEFAULT_PAGE_SIZE
+    return PageParams(page=1 if page_size == ALL_PAGE_SIZE else page, page_size=page_size)
 
 
 class Page(BaseModel, Generic[T]):

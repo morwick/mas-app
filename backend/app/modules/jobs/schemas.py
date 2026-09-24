@@ -21,13 +21,21 @@ JobStatus = Literal[
 ]
 PhotoStage = Literal["loading", "unloading", "serah_terima"]
 PhotoType = PhotoStage
-PhotoSlot = Literal["depan", "belakang", "kanan", "kiri", "surat_timbang", "serah_terima"]
+PhotoSlot = Literal["depan", "belakang", "kanan", "kiri", "surat_jalan", "serah_terima"]
+# Yang diterima saat unggah: aplikasi driver versi lama masih mengirim
+# 'surat_timbang' (nama lama slot surat jalan) — dinormalkan ke 'surat_jalan'.
+PhotoSlotMasukan = Literal["depan", "belakang", "kanan", "kiri", "surat_jalan", "surat_timbang", "serah_terima"]
+
+
+def normalisasi_slot(slot: PhotoSlotMasukan) -> PhotoSlot:
+    return "surat_jalan" if slot == "surat_timbang" else slot
+
 JobListFilter = Literal["active", "menunggu_validasi", "selesai", "cancelled", "all"]
 
 # Slot yang wajib terisi per tahap (BR-06).
 REQUIRED_SLOTS: dict[str, tuple[str, ...]] = {
-    "loading": ("depan", "belakang", "kanan", "kiri", "surat_timbang"),
-    "unloading": ("depan", "belakang", "kanan", "kiri", "surat_timbang"),
+    "loading": ("depan", "belakang", "kanan", "kiri", "surat_jalan"),
+    "unloading": ("depan", "belakang", "kanan", "kiri", "surat_jalan"),
     "serah_terima": ("serah_terima",),
 }
 
@@ -72,6 +80,9 @@ class Job(BaseModel):
     # Borongan uang jalan yang disepakati di awal. Tidak dikirim ke halaman publik.
     uang_jalan_pagu: float | None = None
     unit_id: str
+    # Wajib bila jenis unit dari unit-nya punya jenis unit trailer (dijaga database).
+    unit_trailer_id: str | None = None
+    unit_trailer_kode: str | None = None
     driver_id: str
     etd: str
     eta: str | None = None
@@ -96,6 +107,15 @@ class Job(BaseModel):
     eta_is_estimated: bool = False
     quotation_id: str | None = None
     quotation_number: str | None = None
+    # Total uang jalan yang sudah dicairkan ke driver. Lebih dari nol berarti
+    # job tidak bisa dibatalkan lagi.
+    uang_jalan_cair: float = 0.0
+    # Pengajuan pencairan uang jalan yang masih menunggu keputusan admin.
+    # Hanya terisi pada payload internal; portal driver dan halaman publik
+    # memakai select tanpa kolom ini, jadi nilainya tetap False di sana.
+    uang_jalan_pending: bool = False
+    uang_jalan_pending_nominal: float | None = None
+    uang_jalan_pending_at: str | None = None
     photos: list[JobPhoto] = Field(default_factory=list)
     # Diisi hanya oleh portal driver / halaman publik.
     unit_kode: str | None = None
@@ -111,6 +131,41 @@ class JobStatusHistoryEntry(BaseModel):
     changed_by_driver: bool
     changed_at: str
     notes: str | None = None
+
+
+class GantiTrukRequest(BaseModel):
+    """Ganti truk di tengah perjalanan (truk rusak). Driver opsional ikut diganti."""
+
+    unit_id: str = Field(min_length=1)
+    alasan: str = Field(min_length=1, max_length=1000)
+    # None = driver tetap.
+    driver_id: str | None = None
+    # Wajib bila jenis unit truk baru memakai trailer (dijaga database).
+    unit_trailer_id: str | None = None
+
+    @field_validator("alasan")
+    @classmethod
+    def _alasan(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Alasan ganti truk wajib diisi")
+        return v
+
+
+class GantiTrukEntry(BaseModel):
+    """Satu baris riwayat pergantian truk pada job."""
+
+    id: str
+    diganti_pada: str
+    status_job_saat_ganti: str
+    alasan: str
+    unit_lama_kode: str | None = None
+    unit_baru_kode: str | None = None
+    driver_lama_nama: str | None = None
+    driver_baru_nama: str | None = None
+    unit_trailer_lama_kode: str | None = None
+    unit_trailer_baru_kode: str | None = None
+    diganti_oleh_nama: str | None = None
 
 
 class _JobFields(BaseModel):
@@ -143,6 +198,8 @@ class JobCreate(_JobFields):
     asal: str = Field(min_length=1)
     tujuan: str = Field(min_length=1)
     unit_id: str = Field(min_length=1)
+    # Wajib bila jenis unit dari unit-nya punya jenis unit trailer (dijaga database).
+    unit_trailer_id: str | None = None
     driver_id: str = Field(min_length=1)
     etd: str = Field(min_length=1)
     # BR-04: uang jalan sudah diketahui sejak awal — wajib.
@@ -167,6 +224,8 @@ class JobUpdate(_JobFields):
     asal: str | None = None
     tujuan: str | None = None
     unit_id: str | None = None
+    # Dikirim bersama unit_id saat unit diganti; null = tanpa unit trailer.
+    unit_trailer_id: str | None = None
     driver_id: str | None = None
     etd: str | None = None
     allow_conflict: bool = False

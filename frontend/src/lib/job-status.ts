@@ -114,7 +114,7 @@ export const SLOT_LABEL: Record<PhotoSlot, string> = {
   belakang: "Foto sisi belakang kendaraan",
   kanan: "Foto sisi kanan kendaraan",
   kiri: "Foto sisi kiri kendaraan",
-  surat_timbang: "Foto surat timbang",
+  surat_jalan: "Foto surat jalan",
   serah_terima: "Foto serah terima dokumen"
 };
 
@@ -125,8 +125,8 @@ export const STAGE_LABEL: Record<PhotoStage, string> = {
 };
 
 export const REQUIRED_SLOTS: Record<PhotoStage, PhotoSlot[]> = {
-  loading: ["depan", "belakang", "kanan", "kiri", "surat_timbang"],
-  unloading: ["depan", "belakang", "kanan", "kiri", "surat_timbang"],
+  loading: ["depan", "belakang", "kanan", "kiri", "surat_jalan"],
+  unloading: ["depan", "belakang", "kanan", "kiri", "surat_jalan"],
   serah_terima: ["serah_terima"]
 };
 

@@ -410,6 +410,15 @@ select {
   background: var(--status-perbaikan-bg);
   color: var(--status-perbaikan-text);
 }
+/* Unit sudah dijual / diafkirkan — bukan lagi armada. */
+.badge-terjual {
+  background: #eceef1;
+  color: #4b5563;
+}
+.badge-diafkirkan {
+  background: #e5e7eb;
+  color: #374151;
+}
 .badge-cancelled {
   background: var(--status-cancelled-bg);
   color: var(--status-cancelled-text);
@@ -1326,4 +1335,117 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Pemilih jumlah baris di bilah pagination */
+.pagination-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pagination-size-label {
+  color: var(--text-secondary);
+}
+.pagination-size {
+  height: 28px;
+  padding: 0 24px 0 8px;
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-default);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12.5px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235F5E5A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  cursor: pointer;
+}
+
+/* ============================================
+   Daftar notifikasi (halaman Notifikasi)
+   ============================================ */
+.notif-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 0.5px solid var(--border-default);
+  text-decoration: none;
+  color: inherit;
+}
+.notif-row:hover {
+  background: var(--bg-muted);
+}
+.notif-row[data-unread="true"] {
+  background: var(--brand-primary-light);
+}
+.notif-row[data-unread="true"]:hover {
+  background: #dff0d2;
+}
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.notif-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notif-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.notif-text {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.notif-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.notif-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--brand-primary);
+  color: #fff;
+}
+@media (max-width: 767px) {
+  .notif-meta {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+  }
+}
+
+/* Kaki panel lonceng — jalan menuju halaman Notifikasi */
+.notif-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 11px 14px;
+  border-top: 0.5px solid var(--border-default);
+  background: var(--bg-muted);
+  color: var(--brand-primary-dark);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.notif-panel-footer:hover {
+  background: var(--bg-subtle);
 }

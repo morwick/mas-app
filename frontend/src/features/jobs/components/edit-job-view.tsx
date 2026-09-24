@@ -8,7 +8,10 @@ import { Input, Textarea, Field } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-import { ConflictWarning } from "@/features/jobs/components/conflict-warning";
+import {
+  ConflictCheckUnavailable,
+  ConflictWarning
+} from "@/features/jobs/components/conflict-warning";
 import { LocationPicker } from "@/features/jobs/components/location-picker";
 import { updateJob } from "@/features/jobs/api";
 import {
@@ -17,6 +20,8 @@ import {
 } from "@/lib/job-conflicts";
 import { minEtdValue, validateSchedule } from "@/lib/job-schedule";
 import type { Customer, Driver, Job, Unit } from "@/types";
+import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
+import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
 
 interface Props {
   job: Job;
@@ -24,6 +29,9 @@ interface Props {
   drivers: Driver[];
   units: Unit[];
   activeJobs: Job[];
+  /** True bila daftar job aktif gagal dimuat — peringatan bentrok tidak jalan. */
+  conflictCheckError?: boolean;
+  onRetryConflictCheck?: () => void;
 }
 
 function toLocalDateTime(iso: string | null | undefined): string {
@@ -39,7 +47,9 @@ export function EditJobView({
   customers,
   drivers,
   units,
-  activeJobs
+  activeJobs,
+  conflictCheckError,
+  onRetryConflictCheck
 }: Props) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -58,6 +68,7 @@ export function EditJobView({
     tujuan_lat: job.tujuan_lat ?? null,
     tujuan_lng: job.tujuan_lng ?? null,
     unit_id: job.unit_id,
+    unit_trailer_id: job.unit_trailer_id ?? "",
     driver_id: job.driver_id,
     etd: toLocalDateTime(job.etd),
     eta: toLocalDateTime(job.eta),
@@ -141,6 +152,12 @@ export function EditJobView({
   // Sama seperti form tambah: ganti unit ke yang tanpa GPS → beri tahu
   // konsekuensinya ke halaman tracking customer.
   const selectedUnit = units.find((u) => u.id === form.unit_id);
+  const trailer = useTrailerUntukUnit(form.unit_id);
+  const trailerTampil = Boolean(trailer.data?.wajib);
+  // Wajib bila unit diganti, atau job ini memang sudah memakai trailer. Job lama
+  // (dibuat sebelum aturan trailer) tetap bisa diedit hal lainnya.
+  const trailerWajib =
+    trailerTampil && (form.unit_id !== job.unit_id || Boolean(job.unit_trailer_id));
   const unitWithoutGps =
     selectedUnit && !selectedUnit.imei_gps ? selectedUnit : null;
 
@@ -149,7 +166,11 @@ export function EditJobView({
 
   async function doSubmit(allowConflict: boolean) {
     setLoading(true);
-    const res = await updateJob(job.id, form, { allowConflict });
+    const res = await updateJob(
+      job.id,
+      { ...form, unit_trailer_id: trailerTampil ? form.unit_trailer_id || null : null },
+      { allowConflict }
+    );
     setLoading(false);
     if (res.ok) {
       toast.success("Perubahan disimpan");
@@ -174,6 +195,8 @@ export function EditJobView({
       })
     );
     if (!form.pic_nama.trim()) errs.pic_nama = "PIC wajib diisi";
+    if (trailer.isPending) errs.unit_trailer_id = "Tunggu, pilihan unit trailer sedang dimuat";
+    else if (trailerWajib && !form.unit_trailer_id) errs.unit_trailer_id = "Unit trailer wajib dipilih";
     if (!form.pic_no_hp.trim()) errs.pic_no_hp = "No HP PIC wajib diisi";
     else if (!/^(08|\+628)\d{7,12}$/.test(form.pic_no_hp.trim()))
       errs.pic_no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
@@ -263,7 +286,10 @@ export function EditJobView({
           <Field label="Unit" required>
             <Combobox
               value={form.unit_id}
-              onChange={(v) => set("unit_id", v)}
+              onChange={(v) =>
+                // Unit berganti → pilihan unit trailer ikut berganti.
+                setForm((f) => ({ ...f, unit_id: v, unit_trailer_id: "" }))
+              }
               options={unitOptions}
               placeholder="Pilih unit"
               searchPlaceholder="Cari kode unit, jenis, no polisi…"
@@ -280,6 +306,17 @@ export function EditJobView({
               </p>
             )}
           </Field>
+          <UnitTrailerField
+            pilihan={trailer.data}
+            loading={trailer.isPending}
+            value={form.unit_trailer_id}
+            onChange={(v) => {
+              setForm((f) => ({ ...f, unit_trailer_id: v }));
+              setError(({ unit_trailer_id: _t, ...rest }) => rest);
+            }}
+            error={error.unit_trailer_id}
+            required={trailerWajib}
+          />
           <Field label="Driver" required>
             <Combobox
               value={form.driver_id}
@@ -303,7 +340,7 @@ export function EditJobView({
           </Field>
           <Field
             label="ETA"
-            hint="Bila kosong, sistem cek konflik dengan asumsi durasi 12 jam"
+            hint="Boleh dikosongkan — sistem menghitungnya dari durasi rute, asalkan lokasi asal & tujuan sudah dipin di peta."
           >
             <Input
               type="datetime-local"
@@ -321,10 +358,16 @@ export function EditJobView({
           </Field>
         </div>
 
-        {conflicts.hasAny && (
+        {conflictCheckError ? (
           <div className="mt-4">
-            <ConflictWarning conflicts={conflicts} />
+            <ConflictCheckUnavailable onRetry={onRetryConflictCheck} />
           </div>
+        ) : (
+          conflicts.hasAny && (
+            <div className="mt-4">
+              <ConflictWarning conflicts={conflicts} />
+            </div>
+          )
         )}
       </Card>
       <div className="flex items-center justify-end gap-2">

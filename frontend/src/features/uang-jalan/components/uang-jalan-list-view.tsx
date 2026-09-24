@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatRupiah, formatDate, formatDateTime } from "@/lib/utils";
 import type { UangJalanJobRow, UangJalanRequest } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Filter = "semua" | "pengajuan" | "berjalan" | "belum_cair" | "lewat_pagu";
 
@@ -72,6 +73,11 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
 
   return (
     <div>
+      <PageHeader
+        title="Uang Jalan"
+        description="Posisi uang jalan per job serta pengajuan dari driver yang perlu dicairkan."
+        style={{ marginBottom: 16 }}
+      />
       {pengajuan.length > 0 && (
         <div
           className="card card-pad"

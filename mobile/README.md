@@ -11,7 +11,7 @@ Aplikasi Android untuk driver PT. Mitra Angkutan Sejati, mengikuti
 | Daftar job: *Perlu dikonfirmasi / Aktif / Selesai* | `features/jobs/jobs_list_screen.dart` |
 | **Swipe untuk menerima** job | `features/jobs/widgets/swipe_to_accept.dart` |
 | Uang jalan: pagu, sisa, **Ajukan Uang Jalan** (nominal ≤ sisa pagu) + alert konfirmasi | `features/jobs/widgets/uang_jalan_card.dart` |
-| Slot foto bernama per tahap (depan/belakang/kanan/kiri/surat timbang; serah terima) | `features/jobs/widgets/photo_slot_card.dart` |
+| Slot foto bernama per tahap (depan/belakang/kanan/kiri/surat jalan; serah terima) | `features/jobs/widgets/photo_slot_card.dart` |
 | Kamera saja (bukan galeri), cek buram/gelap/resolusi, peringatan *Ambil ulang / Tetap gunakan* | `features/camera/photo_capture.dart`, `image_quality.dart` |
 | Stempel tanggal-jam + GPS pada gambar, kirim `taken_at/lat/lng` | `image_quality.dart` (`stampImage`) |
 | Antrean unggah tahan koneksi buruk (retry otomatis, progres, bertahan saat app ditutup) | `features/upload/upload_queue.dart` |
@@ -77,6 +77,6 @@ flutter analyze
 flutter test
 ```
 
-Ambang buram (`AppConfig.blurThresholdDefault` / `blurThresholdSuratTimbang`)
+Ambang buram (`AppConfig.blurThresholdDefault` / `blurThresholdSuratJalan`)
 sebaiknya dikalibrasi dengan foto lapangan; backend memakai ambang yang sama
 (`BLUR_THRESHOLD_*` di `.env`).

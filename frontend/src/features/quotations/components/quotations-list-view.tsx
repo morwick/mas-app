@@ -10,6 +10,7 @@ import { QuotationStatusBadge } from "./quotation-status-badge";
 import type { QuotationListRow, QuotationStatus } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   quotations: QuotationListRow[];
@@ -107,6 +108,10 @@ export function QuotationsListView({ quotations }: Props) {
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
+      <PageHeader
+        title="Penawaran"
+        description="Surat penawaran harga ke customer beserta statusnya."
+      />
       <div className="toolbar">
         <div style={{ flex: 1, minWidth: 240 }}>
           <Input

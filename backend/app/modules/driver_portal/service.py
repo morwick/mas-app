@@ -11,11 +11,13 @@ from __future__ import annotations
 import logging
 from typing import cast
 
+from postgrest.types import CountMethod
 from supabase import AsyncClient
 
 from app.core.config import get_settings
 from app.core.errors import NotFoundError, UnauthorizedError, ValidationError
 from app.core.image_quality import assess_photo_safely
+from app.core.paging import Page, PageParams, apply_window, build_page
 from app.core.pg import clean_text, first, rows, single
 from app.core.storage import (
     remove_object_quietly,
@@ -23,7 +25,7 @@ from app.core.storage import (
     upload_object,
     validate_photo,
 )
-from app.core.supabase import get_client_factory, storage_public_url
+from app.core.supabase import storage_public_url
 from app.domain.job_conflicts import ACTIVE_JOB_STATUSES
 from app.modules.driver_portal.schemas import (
     DriverJobFilter,
@@ -31,7 +33,7 @@ from app.modules.driver_portal.schemas import (
     DriverNotification,
     DriverSessionResponse,
 )
-from app.modules.jobs.mappers import DRIVER_JOB_SELECT, to_job
+from app.modules.jobs.mappers import DRIVER_JOB_SELECT, active_children, to_job
 from app.modules.jobs.schemas import Job, JobPhoto, JobStatus, PhotoSlot, PhotoStage
 from app.modules.uang_jalan.schemas import JobUangJalan, UangJalanRequest
 from app.modules.uang_jalan.service import UangJalanService
@@ -70,9 +72,8 @@ class DriverPortalService:
 
     async def logout(self, *, fcm_token: str | None = None) -> None:
         try:
-            if fcm_token:
-                await self._db.rpc("driver_unregister_device", {"p_fcm_token": fcm_token}).execute()
-            await self._db.rpc("driver_logout").execute()
+            # Satu transaksi di database: perangkat dilepas + sesi ditutup.
+            await self._db.rpc("driver_logout", {"p_fcm_token": fcm_token}).execute()
         except Exception:  # noqa: BLE001 — sesi yang sudah mati tetap dianggap logout
             pass
 
@@ -81,15 +82,40 @@ class DriverPortalService:
 
     # ── Job ─────────────────────────────────────────────────────────────────
 
-    async def my_jobs(self, *, status: DriverJobFilter = "all") -> list[Job]:
-        # Belum dikonfirmasi lebih dulu, lalu yang paling dekat berangkat.
-        q = self._db.table("jobs").select(DRIVER_JOB_SELECT).order("accepted_at", nullsfirst=True).order("etd")
+    def _jobs_query(self, *, status: DriverJobFilter, select: str, count: CountMethod | None = None):
+        """Belum dikonfirmasi lebih dulu, lalu yang paling dekat berangkat.
+
+        `id` jadi pemecah seri terakhir: tanpa urutan yang pasti, dua job dengan
+        etd sama bisa bertukar tempat antar-permintaan sehingga satu baris
+        terlewat dan baris lain muncul dua kali saat halaman berikutnya diambil.
+        """
+        q = self._db.table("jobs").select(select, count=count) if count else self._db.table("jobs").select(select)
+        # Foto yang sudah dihapus (status = 2) tidak ikut di daftar foto job.
+        q = active_children(q, select)
+        q = q.order("accepted_at", nullsfirst=True).order("etd").order("id")
         if status == "active":
-            q = q.in_("status", list(ACTIVE_JOB_STATUSES))
+            q = q.in_("status_job", list(ACTIVE_JOB_STATUSES))
+        elif status == "konfirmasi":
+            q = q.eq("status_job", "ditugaskan")
+        elif status == "aktif":
+            q = q.in_("status_job", [s for s in ACTIVE_JOB_STATUSES if s != "ditugaskan"])
+        elif status == "selesai":
+            q = q.in_("status_job", ["selesai", "cancelled"])
+        return q
+
+    async def my_jobs(self, *, status: DriverJobFilter = "all") -> list[Job]:
+        q = self._jobs_query(status=status, select=DRIVER_JOB_SELECT)
         return [to_job(r) for r in rows(await q.execute())]
 
+    async def my_jobs_page(self, *, status: DriverJobFilter, params: PageParams) -> Page[Job]:
+        """Satu halaman job — dipakai gulir bertahap di aplikasi driver."""
+        q = self._jobs_query(status=status, select=DRIVER_JOB_SELECT, count=CountMethod.exact)
+        res = await apply_window(q, params).execute()
+        return build_page([to_job(r) for r in rows(res)], res.count, params)
+
     async def my_job(self, job_id: str) -> Job:
-        row = single(await self._db.table("jobs").select(DRIVER_JOB_SELECT).eq("id", job_id).maybe_single().execute())
+        query = active_children(self._db.table("jobs").select(DRIVER_JOB_SELECT), DRIVER_JOB_SELECT)
+        row = single(await query.eq("id", job_id).maybe_single().execute())
         # Job orang lain sampai di sini sebagai None — sama seperti yang memang tidak ada.
         if row is None:
             raise NotFoundError("Job tidak ditemukan")
@@ -152,13 +178,9 @@ class DriverPortalService:
             await remove_object_quietly(self._db, self._bucket, path)
             raise
 
+        # Foto lama pada slot yang sama di-soft-delete oleh RPC (`replaced_path`);
+        # file-nya sengaja tetap di bucket supaya foto bisa dikembalikan.
         row = first(res.data) or {}
-        # Foto lama pada slot yang sama dihapus dari bucket lewat service role:
-        # driver tidak punya hak hapus objek, dan itu memang urusan sistem.
-        replaced = row.get("replaced_path")
-        if replaced:
-            async with get_client_factory().admin() as admin:
-                await remove_object_quietly(admin, self._bucket, replaced)
 
         return JobPhoto(
             id=str(row.get("id")),
@@ -187,15 +209,29 @@ class DriverPortalService:
 
     # ── Notifikasi ──────────────────────────────────────────────────────────
 
+    _NOTIF_SELECT = "id, kind, title, body, href, job_id, read_at, created_at"
+
     async def notifications(self, *, limit: int = 50) -> list[DriverNotification]:
         res = await (
             self._db.table("notifications")
-            .select("id, kind, title, body, href, job_id, read_at, created_at")
+            .select(self._NOTIF_SELECT)
             .order("created_at", desc=True)
+            .order("id")
             .limit(limit)
             .execute()
         )
         return [DriverNotification(**r) for r in rows(res)]
+
+    async def notifications_page(self, *, params: PageParams) -> Page[DriverNotification]:
+        """Satu halaman notifikasi, terbaru dulu."""
+        q = (
+            self._db.table("notifications")
+            .select(self._NOTIF_SELECT, count=CountMethod.exact)
+            .order("created_at", desc=True)
+            .order("id")
+        )
+        res = await apply_window(q, params).execute()
+        return build_page([DriverNotification(**r) for r in rows(res)], res.count, params)
 
     async def mark_read(self, ids: list[str]) -> None:
         from app.core.timeutil import iso_utc

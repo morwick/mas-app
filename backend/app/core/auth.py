@@ -5,7 +5,8 @@ Frontend menyimpan JWT hasil login dan mengirimnya sebagai
 
 1. Token diverifikasi ke Supabase Auth (`/auth/v1/user`) — hasilnya dicache
    sebentar per token supaya tidak ada dua round-trip tambahan di tiap request.
-2. Baris `profiles` dibaca untuk nama, role, dan scope jenis unit.
+2. Profil dibaca lewat `profil_saya()`: nama, role yang dimiliki (`roles`),
+   role AKTIF sesi login ini (`role_aktif`), dan scope jenis unit.
 3. Klien Supabase yang membawa token yang sama diberikan ke service, sehingga
    RLS tetap menjadi penjaga akses yang sebenarnya — bukan kode di sini.
 """
@@ -23,7 +24,6 @@ from pydantic import BaseModel
 from supabase import AsyncClient
 
 from app.core.errors import ForbiddenError, UnauthorizedError
-from app.core.pg import single
 from app.core.supabase import SupabaseClientFactory, get_client_factory
 
 UserRole = Literal["superadmin", "operator"]
@@ -39,7 +39,10 @@ class CurrentUser(BaseModel):
     email: str
     nama: str
     initials: str
+    # Role yang sedang dipakai di sesi login ini (menentukan hak akses).
     role: UserRole
+    # Semua role yang dimiliki akun — > 1 berarti pengguna bisa ganti role.
+    roles: list[UserRole] = []
     # superadmin: None (akses semua). operator: daftar jenis_unit_id yang boleh
     # diakses; None/kosong berarti belum diberi scope oleh superadmin.
     allowed_jenis_unit_ids: list[str] | None
@@ -60,15 +63,28 @@ def _initials(nama: str) -> str:
     return "".join(p[0] for p in parts).upper() or "A"
 
 
+def _role_valid(nilai: object) -> UserRole | None:
+    return nilai if nilai in ("superadmin", "operator") else None  # type: ignore[return-value]
+
+
 def build_current_user(*, user_id: str, email: str | None, profile: dict[str, object] | None) -> CurrentUser:
-    """Susun identitas dari row auth + row profiles (boleh None bila belum ada)."""
+    """Susun identitas dari row auth + profil (boleh None bila belum ada).
+
+    `profile` berasal dari `profil_saya()` (roles + role_aktif). Bentuk lama
+    dengan satu kolom `role` tetap diterima.
+    """
     profile = profile or {}
     nama = str(profile.get("nama") or (email or "").split("@")[0] or "Admin")
-    # Fail-safe: hanya nilai 'superadmin' yang memberi hak penuh. Sebelumnya
-    # apa pun selain 'operator' dianggap owner — dengan itu baris yang belum
-    # ikut migrasi (masih 'owner') akan lolos di backend padahal RLS sudah
-    # menolaknya, menghasilkan kondisi setengah jalan yang membingungkan.
-    role: UserRole = "superadmin" if profile.get("role") == "superadmin" else "operator"
+    raw_roles = profile.get("roles")
+    roles: list[UserRole] = [r for r in (raw_roles if isinstance(raw_roles, list) else []) if _role_valid(r)]
+    if not roles and _role_valid(profile.get("role")):
+        roles = [profile["role"]]  # type: ignore[list-item]
+    # Fail-safe: hak penuh hanya bila role AKTIF benar-benar 'superadmin'.
+    # Tanpa role aktif (mis. sesi belum dibuat) dipakai role paling terbatas.
+    aktif = _role_valid(profile.get("role_aktif"))
+    if aktif is None:
+        aktif = "superadmin" if roles == ["superadmin"] else "operator"
+    role: UserRole = aktif
     scope = profile.get("allowed_jenis_unit_ids")
     allowed = None if role == "superadmin" else (list(scope) if isinstance(scope, list) else None)
     return CurrentUser(
@@ -77,8 +93,18 @@ def build_current_user(*, user_id: str, email: str | None, profile: dict[str, ob
         nama=nama,
         initials=_initials(nama),
         role=role,
+        roles=sorted(roles) or [role],
         allowed_jenis_unit_ids=allowed,
     )
+
+
+async def fetch_profil(client: AsyncClient) -> dict[str, object] | None:
+    """Profil + role aktif sesi ini (fungsi database `profil_saya`)."""
+    res = await client.rpc("profil_saya").execute()
+    data = res.data
+    if isinstance(data, list):
+        return data[0] if data else None
+    return data if isinstance(data, dict) else None
 
 
 def bearer_token(request: Request) -> str | None:
@@ -102,17 +128,10 @@ async def load_current_user(client: AsyncClient, token: str) -> CurrentUser:
     if res is None or res.user is None:
         raise UnauthorizedError("Sesi tidak valid. Silakan login lagi.")
 
-    profile = (
-        await client.table("profiles")
-        .select("nama, email, role, allowed_jenis_unit_ids")
-        .eq("id", res.user.id)
-        .maybe_single()
-        .execute()
-    )
     user = build_current_user(
         user_id=res.user.id,
         email=res.user.email,
-        profile=single(profile),
+        profile=await fetch_profil(client),
     )
     _IDENTITY_CACHE[key] = user
     return user

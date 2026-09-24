@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from supabase import AsyncClient
 
 from app.core.auth import AuthContext, require_auth, user_client
+from app.core.paging import Page, PageParams, page_params
 from app.modules.auth.schemas import OkResponse
 from app.modules.notifications.service import AppNotification, NotificationService
 
@@ -32,6 +33,25 @@ async def list_notifications(
     except Exception as exc:  # noqa: BLE001
         log.warning("gagal menyusun notifikasi: %s", exc)
         return []
+
+
+@router.get("/page", response_model=Page[AppNotification])
+async def list_notifications_page(
+    params: PageParams = Depends(page_params),
+    auth: AuthContext = Depends(require_auth),
+    client: AsyncClient = Depends(user_client),
+) -> Page[AppNotification]:
+    """Halaman Notifikasi: isi yang sama dengan lonceng, sudah maupun belum dibaca."""
+    return await NotificationService(client).page(params, user_id=auth.user.id)
+
+
+@router.post("/read-all", response_model=OkResponse)
+async def mark_all_read(
+    auth: AuthContext = Depends(require_auth),
+    client: AsyncClient = Depends(user_client),
+) -> OkResponse:
+    await NotificationService(client).mark_all_read(auth.user.id)
+    return OkResponse()
 
 
 @router.post("/read", response_model=OkResponse)

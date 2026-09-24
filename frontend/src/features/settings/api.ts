@@ -1,6 +1,6 @@
 import { api } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
-import type { ActionResult, JenisUnit, UserRow } from "@/types";
+import type { ActionResult, JenisUnit, KaryawanOption, UserRow } from "@/types";
 
 // ── Jenis unit ──────────────────────────────────────────────────────────────
 
@@ -22,17 +22,37 @@ export function deleteJenisUnit(id: string): Promise<ActionResult<unknown>> {
 
 export const listUsers = () => api.get<UserRow[]>("/users");
 
-export function updateUserRole(input: {
-  user_id: string;
-  role: "superadmin" | "operator";
+/** Semua karyawan beserta akun yang sudah dimilikinya (pilihan nama pengguna). */
+export const listKaryawanTersedia = () => api.get<KaryawanOption[]>("/users/karyawan-tersedia");
+
+export function createUser(input: {
+  karyawan_id: string;
+  email: string;
+  password: string;
+  roles: ("superadmin" | "operator")[];
   allowed_jenis_unit_ids: string[];
+}): Promise<ActionResult<UserRow>> {
+  return mutate(api.post<UserRow>("/users", input));
+}
+
+export function resetUserPassword(input: {
+  user_id: string;
+  password: string;
 }): Promise<ActionResult<unknown>> {
   return mutate(
-    api.patch(`/users/${input.user_id}/role`, {
-      role: input.role,
-      allowed_jenis_unit_ids: input.allowed_jenis_unit_ids
-    })
+    api.post(`/users/${input.user_id}/reset-password`, { password: input.password })
   );
+}
+
+export function updateUser(input: {
+  user_id: string;
+  karyawan_id: string;
+  email: string;
+  roles: ("superadmin" | "operator")[];
+  allowed_jenis_unit_ids: string[];
+}): Promise<ActionResult<unknown>> {
+  const { user_id, ...body } = input;
+  return mutate(api.patch(`/users/${user_id}`, body));
 }
 
 export function setUserActive(input: {

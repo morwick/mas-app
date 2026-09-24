@@ -3,6 +3,7 @@ import { MapPin, RefreshCw, Search, Truck, WifiOff, X } from "lucide-react";
 import { TrackingTabs } from "./tracking-tabs";
 import { MapFullscreenButton } from "./map-fullscreen-button";
 import type { Job, Unit, UnitStatus } from "@/types";
+import { bukanArmada } from "@/lib/unit-status";
 import { fleetLocations } from "@/features/tracking/api";
 
 const FleetMap = lazy(() => import("./fleet-map").then((m) => ({ default: m.FleetMap })));
@@ -47,13 +48,17 @@ const STATUS_COLOR: Record<UnitStatus, { bg: string; fg: string; dot: string }> 
     dot: "#1C9600"
   },
   bertugas: { bg: "#fff4e0", fg: "#8a5a00", dot: "#E48F00" },
-  perbaikan: { bg: "#f0f1f3", fg: "#374151", dot: "#6B7280" }
+  perbaikan: { bg: "#f0f1f3", fg: "#374151", dot: "#6B7280" },
+  terjual: { bg: "#eceef1", fg: "#4b5563", dot: "#9CA3AF" },
+  diafkirkan: { bg: "#e5e7eb", fg: "#374151", dot: "#9CA3AF" }
 };
 
 const STATUS_LABEL: Record<UnitStatus, string> = {
   standby: "Standby",
   bertugas: "Bertugas",
-  perbaikan: "Perbaikan"
+  perbaikan: "Perbaikan",
+  terjual: "Terjual",
+  diafkirkan: "Diafkirkan"
 };
 
 type StatusFilter = "" | UnitStatus;
@@ -77,7 +82,8 @@ export function FleetMapView({ units, activeJobs }: Props) {
   const [query, setQuery] = useState("");
 
   const activeUnits = useMemo(
-    () => units.filter((u) => u.is_active),
+    // Unit terjual / diafkirkan bukan lagi armada — tidak dipantau di peta.
+    () => units.filter((u) => u.is_active && !bukanArmada(u.status)),
     [units]
   );
 

@@ -145,4 +145,20 @@ describe("Combobox", () => {
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     expect(screen.getByText("Tidak ada hasil")).toBeTruthy();
   });
+
+  it("menyembunyikan opsi sampai kata kunci mencapai minQueryLength", () => {
+    render(
+      <Combobox value="" onChange={() => {}} options={OPTIONS} minQueryLength={4} />
+    );
+    openList();
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.getByText(/Ketik minimal 4 huruf/)).toBeTruthy();
+
+    const search = screen.getByPlaceholderText("Ketik untuk mencari…");
+    fireEvent.change(search, { target: { value: "bum" } });
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+    fireEvent.change(search, { target: { value: "bumi" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+  });
 });

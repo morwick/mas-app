@@ -8,7 +8,10 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { NewCustomerInline } from "@/features/jobs/components/new-customer-inline";
-import { ConflictWarning } from "@/features/jobs/components/conflict-warning";
+import {
+  ConflictCheckUnavailable,
+  ConflictWarning
+} from "@/features/jobs/components/conflict-warning";
 import { JobStepper } from "@/features/jobs/components/job-stepper";
 import {
   LocationPicker,
@@ -23,6 +26,8 @@ import {
 } from "@/lib/job-conflicts";
 import { minEtdValue, validateSchedule } from "@/lib/job-schedule";
 import type { Customer, Driver, Job, Unit } from "@/types";
+import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
+import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
 
 /**
  * Data awal saat form dibuka dari penawaran yang sudah deal.
@@ -50,6 +55,9 @@ interface Props {
   drivers: Driver[];
   standbyUnits: Unit[];
   activeJobs: Job[];
+  /** True bila daftar job aktif gagal dimuat — peringatan bentrok tidak jalan. */
+  conflictCheckError?: boolean;
+  onRetryConflictCheck?: () => void;
   prefill?: JobPrefill;
 }
 
@@ -86,6 +94,8 @@ export function NewJobView({
   drivers,
   standbyUnits,
   activeJobs,
+  conflictCheckError,
+  onRetryConflictCheck,
   prefill
 }: Props) {
   const navigate = useNavigate();
@@ -106,6 +116,7 @@ export function NewJobView({
     tujuan_lat: null as number | null,
     tujuan_lng: null as number | null,
     unit_id: "",
+    unit_trailer_id: "",
     driver_id: "",
     etd: "",
     eta: "",
@@ -202,7 +213,8 @@ export function NewJobView({
   function onUnitChange(unitId: string) {
     const unit = standbyUnits.find((u) => u.id === unitId);
     setForm((f) => {
-      const next = { ...f, unit_id: unitId };
+      // Unit berganti → pilihan unit trailer ikut berganti.
+      const next = { ...f, unit_id: unitId, unit_trailer_id: "" };
       if (unit?.default_driver_id) next.driver_id = unit.default_driver_id;
       return next;
     });
@@ -213,6 +225,8 @@ export function NewJobView({
   const minEtd = useMemo(() => minEtdValue(), []);
 
   const selectedUnit = standbyUnits.find((u) => u.id === form.unit_id);
+  const trailer = useTrailerUntukUnit(form.unit_id);
+  const trailerWajib = Boolean(trailer.data?.wajib);
   // Muncul begitu dropdown unit diganti ke unit tanpa GPS — konsekuensinya
   // ditanggung customer, jadi admin perlu tahu sebelum menyimpan.
   const unitWithoutGps =
@@ -292,6 +306,8 @@ export function NewJobView({
     const res = await createJob(
       {
         ...form,
+        // Hanya dikirim bila unit ini memang memakai unit trailer.
+        unit_trailer_id: trailerWajib ? form.unit_trailer_id || null : null,
         uang_jalan_pagu: Math.round(Number(form.uang_jalan_pagu)),
         quotation_id: prefill?.quotation_id ?? null
       },
@@ -320,6 +336,8 @@ export function NewJobView({
     if (!form.asal.trim()) errs.asal = "Lokasi asal wajib diisi";
     if (!form.tujuan.trim()) errs.tujuan = "Lokasi tujuan wajib diisi";
     if (!form.unit_id) errs.unit_id = "Unit wajib dipilih";
+    else if (trailer.isPending) errs.unit_trailer_id = "Tunggu, pilihan unit trailer sedang dimuat";
+    else if (trailerWajib && !form.unit_trailer_id) errs.unit_trailer_id = "Unit trailer wajib dipilih";
     if (!form.driver_id) errs.driver_id = "Driver wajib dipilih";
     if (!form.etd) errs.etd = "ETD wajib diisi";
     Object.assign(errs, validateSchedule(form.etd, form.eta));
@@ -524,6 +542,16 @@ export function NewJobView({
                 </p>
               )}
             </Field>
+            <UnitTrailerField
+              pilihan={trailer.data}
+              loading={Boolean(form.unit_id) && trailer.isPending}
+              value={form.unit_trailer_id}
+              onChange={(v) => {
+                setForm((f) => ({ ...f, unit_trailer_id: v }));
+                setError(({ unit_trailer_id: _t, ...rest }) => rest);
+              }}
+              error={error.unit_trailer_id}
+            />
             <Field
               label="Driver"
               required
@@ -559,7 +587,7 @@ export function NewJobView({
             </Field>
             <Field
               label="Estimasi sampai (ETA)"
-              hint="Bila kosong, sistem mengisi dari durasi rute (ditandai perkiraan sistem)"
+              hint="Boleh dikosongkan — sistem menghitungnya dari durasi rute, asalkan lokasi asal & tujuan sudah dipin di peta."
             >
               <Input
                 type="datetime-local"
@@ -582,10 +610,16 @@ export function NewJobView({
               />
             </Field>
           </div>
-          {conflicts.hasAny && (
+          {conflictCheckError ? (
             <div style={{ marginTop: 12 }}>
-              <ConflictWarning conflicts={conflicts} />
+              <ConflictCheckUnavailable onRetry={onRetryConflictCheck} />
             </div>
+          ) : (
+            conflicts.hasAny && (
+              <div style={{ marginTop: 12 }}>
+                <ConflictWarning conflicts={conflicts} />
+              </div>
+            )
           )}
         </FormSection>
 

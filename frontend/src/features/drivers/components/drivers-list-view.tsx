@@ -8,6 +8,7 @@ import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import type { Driver } from "@/types";
+import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   drivers: Driver[];
@@ -55,6 +56,10 @@ export function DriversListView({ drivers }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Driver"
+        description="Daftar driver beserta no HP, status tugas, dan akses aplikasi driver."
+      />
       {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-search">

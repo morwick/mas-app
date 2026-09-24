@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CalendarDays,
   ChevronRight,
+  FileText,
   Flag,
   MapPin,
   PackageCheck,
@@ -21,6 +22,8 @@ import { formatDate, formatTime } from "@/lib/utils";
 import { ACTIVE_JOB_STATUSES } from "@/lib/job-status";
 import type { Customer, Job, JobStatus } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { UangJalanPendingBadge } from "./uang-jalan-pending-badge";
+import { PageHeader } from "@/components/ui/page-header";
 
 type TabKey = "aktif" | "validasi" | "selesai" | "cancelled";
 const activeStatuses: JobStatus[] = ACTIVE_JOB_STATUSES;
@@ -30,6 +33,49 @@ interface Props {
   customers: Customer[];
   unitMap: Record<string, { kode_unit: string; jenis: string }>;
   driverMap: Record<string, string>;
+}
+
+/**
+ * Tautan ke penawaran asal job (hanya job yang lahir dari penawaran).
+ * Berupa tombol, bukan <a>, karena di tampilan mobile letaknya di dalam kartu
+ * yang sendirinya sudah tautan ke detail job.
+ */
+function QuotationLink({ job }: { job: Job }) {
+  const navigate = useNavigate();
+  if (!job.quotation_id || !job.quotation_number) return null;
+  const to = `/quotations/${job.quotation_id}`;
+  return (
+    <button
+      type="button"
+      className="mono"
+      title="Lihat detail penawaran"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigate(to);
+      }}
+      style={{
+        marginTop: 4,
+        fontSize: 10.5,
+        fontWeight: 600,
+        padding: "2px 6px",
+        borderRadius: 6,
+        border: "none",
+        cursor: "pointer",
+        background: "var(--brand-primary-light)",
+        color: "var(--brand-primary-dark)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        maxWidth: "100%"
+      }}
+    >
+      <FileText style={{ width: 11, height: 11, flexShrink: 0 }} />
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {job.quotation_number}
+      </span>
+    </button>
+  );
 }
 
 function takeLastSegment(text: string): string {
@@ -84,7 +130,8 @@ export function JobsListView({
         if (
           !j.job_number.toLowerCase().includes(t) &&
           !j.customer_nama.toLowerCase().includes(t) &&
-          !j.alat_diangkut.toLowerCase().includes(t)
+          !j.alat_diangkut.toLowerCase().includes(t) &&
+          !(j.quotation_number ?? "").toLowerCase().includes(t)
         )
           return false;
       }
@@ -96,6 +143,10 @@ export function JobsListView({
 
   return (
     <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Job"
+        description="Daftar pekerjaan pengiriman beserta tahapan dan status validasinya."
+      />
       {/* Top bar */}
       <div
         style={{
@@ -124,7 +175,7 @@ export function JobsListView({
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Cari job, customer, alat…"
+              placeholder="Cari job, customer, alat, no. penawaran…"
               leftIcon={<Search style={{ width: 15, height: 15 }} />}
             />
           </div>
@@ -228,6 +279,7 @@ export function JobsListView({
                           {formatDate(j.created_at)}
                         </div>
                       </Link>
+                      <QuotationLink job={j} />
                     </td>
                     <td>
                       <div
@@ -327,6 +379,14 @@ export function JobsListView({
                     </td>
                     <td>
                       <StatusBadge status={j.status} />
+                      {j.uang_jalan_pending && (
+                        <div style={{ marginTop: 4 }}>
+                          <UangJalanPendingBadge
+                            nominal={j.uang_jalan_pending_nominal}
+                            since={j.uang_jalan_pending_at}
+                          />
+                        </div>
+                      )}
                     </td>
                     <td>
                       <Link
@@ -372,6 +432,7 @@ export function JobsListView({
                       >
                         {j.job_number}
                       </div>
+                      <QuotationLink job={j} />
                       <div
                         style={{
                           fontSize: 14,
@@ -387,6 +448,12 @@ export function JobsListView({
                     </div>
                     <StatusBadge status={j.status} />
                   </div>
+                  {j.uang_jalan_pending && (
+                    <UangJalanPendingBadge
+                      nominal={j.uang_jalan_pending_nominal}
+                      since={j.uang_jalan_pending_at}
+                    />
+                  )}
                   <div
                     style={{
                       fontSize: 12.5,

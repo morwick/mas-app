@@ -5,7 +5,7 @@ mencatat log dan kembali — notifikasi in-app (tabel `notifications`) tetap
 dibuat oleh trigger database, jadi driver masih melihatnya saat membuka app.
 
 Token perangkat dibaca dengan service role (tabel `driver_devices` hanya bisa
-dibaca admin/driver pemilik), lalu token yang ditolak FCM dihapus.
+dibaca admin/driver pemilik), lalu token yang ditolak FCM ditandai terhapus (soft delete).
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.core.pg import rows
+from app.core.soft_delete import DIHAPUS, STATUS
 from app.core.supabase import get_client_factory
 
 log = logging.getLogger(__name__)
@@ -74,6 +75,6 @@ async def push_to_driver(driver_id: str, *, title: str, body: str, data: dict[st
                 return
             stale = await asyncio.to_thread(_send_sync, tokens, title, body, data or {})
             if stale:
-                await admin.table("driver_devices").delete().in_("fcm_token", stale).execute()
+                await admin.table("driver_devices").update({STATUS: DIHAPUS}).in_("fcm_token", stale).execute()
     except Exception as exc:  # noqa: BLE001
         log.warning("push ke driver %s gagal: %s", driver_id, exc)

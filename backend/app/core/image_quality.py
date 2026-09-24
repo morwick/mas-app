@@ -20,10 +20,10 @@ from PIL import Image, ImageFilter, ImageOps
 
 ANALYSIS_WIDTH = 800
 
-# Surat timbang adalah dokumen teks: harus lebih tajam daripada foto badan truk.
+# Surat jalan adalah dokumen teks: harus lebih tajam daripada foto badan truk.
 DEFAULT_THRESHOLDS: dict[str, float] = {
     "default": 60.0,
-    "surat_timbang": 120.0,
+    "surat_jalan": 120.0,
 }
 MIN_BRIGHTNESS = 35.0
 MAX_BRIGHTNESS = 225.0

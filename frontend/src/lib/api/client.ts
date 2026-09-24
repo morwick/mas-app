@@ -118,6 +118,24 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message, body);
 }
 
+// Sama dengan backend (app/core/errors.py): POST ke endpoint aksi ini
+// mengubah data yang sudah ada, bukan menambah.
+const AKSI_UBAH = new Set([
+  "status", "validate", "return", "cancel", "accept", "deactivate", "pin",
+  "resolve", "reset-password", "tolak", "read", "read-all", "password",
+  "calibrate", "sync-mileage", "active", "pagu"
+]);
+
+/** "Gagal menambah/mengubah/menghapus data" untuk permintaan tulis. */
+function awalanGagal(method: string, path: string): string | null {
+  if (method === "GET") return null;
+  if (/\/(auth|cron)\/|\/driver\/(login|logout)|check-conflicts/.test(path)) return null;
+  if (method === "DELETE") return "Gagal menghapus data";
+  if (method === "PUT" || method === "PATCH") return "Gagal mengubah data";
+  const akhir = path.split("?")[0].replace(/\/$/, "").split("/").pop() ?? "";
+  return AKSI_UBAH.has(akhir) ? "Gagal mengubah data" : "Gagal menambah data";
+}
+
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const mode = opts.auth ?? "admin";
   const doFetch = async (): Promise<Response> => {
@@ -136,7 +154,17 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     });
   };
 
-  let res = await doFetch();
+  let res: Response;
+  try {
+    res = await doFetch();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    // Server tidak terjangkau: permintaan tidak pernah sampai, jadi tidak ada
+    // data yang tersimpan.
+    const awalan = awalanGagal(opts.method ?? "GET", path);
+    const alasan = "Tidak bisa terhubung ke server. Periksa koneksi internet lalu coba lagi.";
+    throw new ApiError(0, awalan ? `${awalan}. ${alasan}` : alasan, {});
+  }
 
   // Token admin ditolak → coba refresh sekali lalu ulangi.
   if (res.status === 401 && mode === "admin" && adminSession.get()) {

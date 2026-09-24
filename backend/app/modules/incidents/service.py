@@ -7,6 +7,7 @@ from supabase import AsyncClient
 from app.core.config import get_settings
 from app.core.errors import NotFoundError, ValidationError
 from app.core.pg import clean_text, first, num_or_none, rows, single
+from app.core.soft_delete import AKTIF, DIHAPUS, STATUS
 from app.core.storage import (
     remove_object_quietly,
     unique_object_name,
@@ -15,6 +16,7 @@ from app.core.storage import (
 )
 from app.core.supabase import storage_public_url
 from app.core.timeutil import iso_utc, parse_iso
+from app.core.transaksi import Transaksi
 from app.modules.incidents.schemas import (
     Incident,
     IncidentCreate,
@@ -25,7 +27,7 @@ from app.modules.incidents.schemas import (
 
 INCIDENT_SELECT = """
   id, unit_id, job_id, tipe, tanggal, lokasi, deskripsi,
-  biaya_repair, vendor_repair, status, resolved_at, created_at,
+  biaya_repair, vendor_repair, status_penanganan, resolved_at, created_at,
   unit:units(kode_unit),
   job:jobs(job_number),
   creator:profiles(nama),
@@ -50,7 +52,7 @@ def to_incident(row: dict[str, Any]) -> Incident:
         deskripsi=row["deskripsi"],
         biaya_repair=num_or_none(row.get("biaya_repair")),
         vendor_repair=row.get("vendor_repair"),
-        status=row["status"],
+        status=row["status_penanganan"],
         resolved_at=row.get("resolved_at"),
         created_by_nama=(first(row.get("creator")) or {}).get("nama"),
         created_at=row["created_at"],
@@ -75,6 +77,7 @@ class IncidentService:
         res = await (
             self._db.table("incident_logs")
             .select(INCIDENT_SELECT)
+            .eq("photos.status", AKTIF)
             .eq("unit_id", unit_id)
             .order("tanggal", desc=True)
             .execute()
@@ -83,7 +86,12 @@ class IncidentService:
 
     async def get(self, incident_id: str) -> Incident:
         row = single(
-            await self._db.table("incident_logs").select(INCIDENT_SELECT).eq("id", incident_id).maybe_single().execute()
+            await self._db.table("incident_logs")
+            .select(INCIDENT_SELECT)
+            .eq("photos.status", AKTIF)
+            .eq("id", incident_id)
+            .maybe_single()
+            .execute()
         )
         if row is None:
             raise NotFoundError("Insiden tidak ditemukan")
@@ -132,17 +140,19 @@ class IncidentService:
             await self._db.table("incident_logs").update(data).eq("id", incident_id).execute()
 
     async def set_status(self, incident_id: str, status: IncidentStatus) -> None:
-        await self._db.table("incident_logs").update({"status": status}).eq("id", incident_id).execute()
+        await self._db.table("incident_logs").update({"status_penanganan": status}).eq("id", incident_id).execute()
 
     async def resolve(self, incident_id: str, *, set_unit_to_standby: bool) -> None:
-        res = await self._db.table("incident_logs").update({"status": "resolved"}).eq("id", incident_id).execute()
-        updated = rows(res)
-        unit_id = updated[0].get("unit_id") if updated else None
-        if set_unit_to_standby and unit_id:
-            await self._db.table("units").update({"status": "standby"}).eq("id", unit_id).execute()
+        # Satu transaksi: insiden selesai dan unit kembali standby bersamaan.
+        tx = Transaksi(self._db)
+        insiden = tx.update("incident_logs", {"status_penanganan": "resolved"}, {"id": incident_id})
+        if set_unit_to_standby:
+            tx.update("units", {"status_operasional": "standby"}, {"id": insiden["unit_id"]}, wajib=False)
+        await tx.jalankan()
 
     async def delete(self, incident_id: str) -> None:
-        await self._db.table("incident_logs").delete().eq("id", incident_id).execute()
+        # Soft delete — foto insiden ikut ditandai terhapus oleh DB (dulu ON DELETE CASCADE).
+        await self._db.table("incident_logs").update({STATUS: DIHAPUS}).eq("id", incident_id).execute()
 
     async def upload_photo(
         self,
@@ -169,6 +179,7 @@ class IncidentService:
                 .execute()
             )
         except Exception:
+            # Insert gagal: hapus file yang baru di-upload supaya tidak jadi yatim.
             await remove_object_quietly(self._db, _bucket(), path)
             raise
         row = rows(res)[0]
@@ -186,5 +197,5 @@ class IncidentService:
         )
         if row is None:
             raise NotFoundError("Foto tidak ditemukan")
-        await self._db.table("incident_photos").delete().eq("id", photo_id).execute()
-        await remove_object_quietly(self._db, _bucket(), row["file_path"])
+        # Soft delete — file di storage sengaja dibiarkan supaya foto bisa dikembalikan.
+        await self._db.table("incident_photos").update({STATUS: DIHAPUS}).eq("id", photo_id).execute()

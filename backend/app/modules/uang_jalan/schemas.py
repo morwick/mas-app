@@ -77,14 +77,18 @@ class UangJalanInput(BaseModel):
     job_id: str = Field(min_length=1)
     jenis: UangJalanJenis
     tanggal: str = Field(min_length=1)
-    jumlah: float
+    # Rupiah penuh — kolomnya BIGINT. Sengaja int, bukan float: pecahan yang
+    # lolos ke sini akan dibulatkan diam-diam oleh Postgres, jadi lebih baik
+    # ditolak di pintu masuk. Nilai <= 0 ditangani `_validate` agar pesannya
+    # tetap berbahasa Indonesia.
+    jumlah: int
     sumber_dana_id: str | None = None
     keperluan: str | None = None
     catatan: str | None = None
 
 
 class SetPaguRequest(BaseModel):
-    pagu: float = Field(ge=0)
+    pagu: int = Field(ge=0)
 
 
 class JobUangJalan(BaseModel):

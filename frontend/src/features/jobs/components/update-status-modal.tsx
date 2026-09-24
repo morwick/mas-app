@@ -10,6 +10,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   current: JobStatus;
+  /** Uang jalan sudah dicairkan — pembatalan tidak lagi ditawarkan. */
+  uangJalanCair?: boolean;
   onConfirm: (next: JobStatus, notes?: string) => void | Promise<void>;
 }
 
@@ -17,6 +19,7 @@ export function UpdateStatusModal({
   open,
   onClose,
   current,
+  uangJalanCair,
   onConfirm
 }: Props) {
   const currentKey: JobStatus = current === "menunggu_pickup" ? "ditugaskan" : current;
@@ -38,7 +41,9 @@ export function UpdateStatusModal({
       recommended: true
     });
   }
-  if (current !== "cancelled" && current !== "selesai") {
+  // Uang sudah di tangan driver — job itu jadi catatan keuangan yang harus
+  // ditutup lewat alur normal, bukan dibatalkan.
+  if (current !== "cancelled" && current !== "selesai" && !uangJalanCair) {
     options.push({ key: "cancelled", label: "Batalkan job", danger: true });
   }
 

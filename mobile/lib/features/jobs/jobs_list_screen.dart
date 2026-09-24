@@ -5,27 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../core/widgets_paging.dart';
 import '../auth/auth_controller.dart';
 import '../upload/upload_queue.dart';
 import 'job_status.dart';
 import 'models.dart';
 import 'providers.dart';
 import 'widgets/status_badge.dart';
-
-enum _Filter {
-  konfirmasi('Perlu dikonfirmasi'),
-  aktif('Aktif'),
-  selesai('Selesai');
-
-  const _Filter(this.label);
-  final String label;
-
-  bool matches(Job j) => switch (this) {
-        _Filter.konfirmasi => j.status == JobStatus.ditugaskan,
-        _Filter.aktif => j.status.isActive && j.status != JobStatus.ditugaskan,
-        _Filter.selesai => j.status.isClosed,
-      };
-}
 
 /// Daftar job driver dengan filter (FR-MOBILE-03).
 class JobsListScreen extends ConsumerStatefulWidget {
@@ -36,13 +22,13 @@ class JobsListScreen extends ConsumerStatefulWidget {
 }
 
 class _JobsListScreenState extends ConsumerState<JobsListScreen> {
-  _Filter _filter = _Filter.aktif;
+  JobTab _filter = JobTab.aktif;
   bool _autoPicked = false;
 
   Future<void> _refresh() async {
-    ref.invalidate(jobsProvider);
-    ref.invalidate(notificationsProvider);
-    await ref.read(jobsProvider.future);
+    ref.invalidate(jobsPageProvider(_filter));
+    refreshNotifikasiFromWidget(ref);
+    await ref.read(jobsPageProvider(_filter).future);
   }
 
   Future<void> _logout() async {
@@ -63,21 +49,27 @@ class _JobsListScreenState extends ConsumerState<JobsListScreen> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(authProvider);
-    final async = ref.watch(jobsProvider);
+    final async = ref.watch(jobsPageProvider(_filter));
     final unread = ref.watch(unreadCountProvider);
     final failedUploads = ref.watch(uploadQueueProvider).where((t) => t.state == UploadState.failed).length;
 
     // Saat pertama dimuat, arahkan ke tab yang paling perlu perhatian.
-    ref.listen(jobsProvider, (_, next) {
-      final jobs = next.valueOrNull;
-      if (jobs == null || _autoPicked) return;
+    // Tab dipilihkan dari `total` masing-masing, bukan dari seluruh job yang
+    // diunduh: job yang perlu dikonfirmasi paling mendesak, kalau tidak ada dan
+    // tak ada pula yang aktif, yang berguna tinggal riwayat.
+    final perluKonfirmasi = ref.watch(jobsPageProvider(JobTab.konfirmasi)).valueOrNull;
+    final aktif = ref.watch(jobsPageProvider(JobTab.aktif)).valueOrNull;
+    if (!_autoPicked && perluKonfirmasi != null && aktif != null) {
       _autoPicked = true;
-      if (jobs.any(_Filter.konfirmasi.matches)) {
-        setState(() => _filter = _Filter.konfirmasi);
-      } else if (!jobs.any(_Filter.aktif.matches) && jobs.isNotEmpty) {
-        setState(() => _filter = _Filter.selesai);
+      final pilihan = perluKonfirmasi.total > 0
+          ? JobTab.konfirmasi
+          : (aktif.total == 0 ? JobTab.selesai : JobTab.aktif);
+      if (pilihan != _filter) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _filter = pilihan);
+        });
       }
-    });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -118,9 +110,9 @@ class _JobsListScreenState extends ConsumerState<JobsListScreen> {
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: SegmentedButton<_Filter>(
+            child: SegmentedButton<JobTab>(
               segments: [
-                for (final f in _Filter.values)
+                for (final f in JobTab.values)
                   ButtonSegment(
                     value: f,
                     label: Text(f.label, style: const TextStyle(fontSize: 12)),
@@ -135,29 +127,26 @@ class _JobsListScreenState extends ConsumerState<JobsListScreen> {
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => ErrorView(message: e.toString(), onRetry: _refresh),
-              data: (jobs) {
-                final list = jobs.where(_filter.matches).toList();
-                return RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: list.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 80),
-                            EmptyView(
-                              icon: Icons.local_shipping_outlined,
-                              title: 'Tidak ada job',
-                              subtitle: 'Tarik ke bawah untuk memuat ulang.',
-                            ),
-                          ],
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                          itemCount: list.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 10),
-                          itemBuilder: (_, i) => _JobTile(job: list[i]),
-                        ),
-                );
-              },
+              data: (daftar) => RefreshIndicator(
+                onRefresh: _refresh,
+                child: daftar.kosong
+                    ? ListView(
+                        children: const [
+                          SizedBox(height: 80),
+                          EmptyView(
+                            icon: Icons.local_shipping_outlined,
+                            title: 'Tidak ada job',
+                            subtitle: 'Tarik ke bawah untuk memuat ulang.',
+                          ),
+                        ],
+                      )
+                    : DaftarBergulirBertahap<Job>(
+                        daftar: daftar,
+                        onMuatLagi: () =>
+                            ref.read(jobsPageProvider(_filter).notifier).muatLagi(),
+                        itemBuilder: (_, job) => _JobTile(job: job),
+                      ),
+              ),
             ),
           ),
         ],

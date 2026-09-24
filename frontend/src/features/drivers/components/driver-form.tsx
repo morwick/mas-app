@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea, Field } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Combobox } from "@/components/ui/combobox";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { useKaryawanDriver } from "@/features/drivers/queries";
 import { DriverPinCard } from "./driver-pin-card";
 import { PowerOff } from "lucide-react";
 import {
@@ -26,8 +29,9 @@ export function DriverForm({ mode, initial }: Props) {
   const [loading, setLoading] = useState(false);
   const [deactOpen, setDeactOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const karyawan = useKaryawanDriver();
   const [form, setForm] = useState({
-    nama: initial?.nama ?? "",
+    karyawan_id: initial?.karyawan_id ?? "",
     no_hp: initial?.no_hp ?? "",
     no_sim: initial?.no_sim ?? "",
     sim_berlaku_sampai: initial?.sim_berlaku_sampai ?? "",
@@ -36,13 +40,34 @@ export function DriverForm({ mode, initial }: Props) {
   });
   const [error, setError] = useState<Record<string, string>>({});
 
+  // Semua karyawan aktif bisa dipilih; yang sudah jadi driver lain diberi
+  // keterangan dan ditolak saat simpan ("data sudah terdaftar").
+  const karyawanOptions = (karyawan.data ?? []).map((k) => ({
+    value: k.id,
+    label: k.nama,
+    hint: k.driver_id && k.driver_id !== initial?.id ? "Sudah terdaftar sebagai driver" : undefined
+  }));
+  // Karyawan milik driver ini sendiri tetap tampil walau sudah nonaktif.
+  if (initial?.karyawan_id && !karyawanOptions.some((o) => o.value === initial.karyawan_id)) {
+    karyawanOptions.unshift({ value: initial.karyawan_id, label: initial.nama, hint: "Karyawan nonaktif" });
+  }
+  const pilihanDriver = karyawan.data?.find((k) => k.id === form.karyawan_id);
+  const sudahDriver =
+    pilihanDriver?.driver_id && pilihanDriver.driver_id !== initial?.id
+      ? `${mode === "new" ? "Driver gagal ditambahkan" : "Perubahan driver gagal disimpan"} karena data sudah terdaftar: ${pilihanDriver.nama} sudah menjadi driver.`
+      : null;
+
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
   }
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs: Record<string, string> = {};
-    if (!form.nama.trim()) errs.nama = "Nama wajib diisi";
+    const dipilih = karyawanOptions.find((o) => o.value === form.karyawan_id);
+    if (!form.karyawan_id) errs.karyawan_id = "Data belum lengkap: pilih nama karyawan";
+    else if (sudahDriver) errs.karyawan_id = sudahDriver;
+    else if (!dipilih && form.karyawan_id !== initial?.karyawan_id)
+      errs.karyawan_id = "Karyawan tidak ditemukan atau berstatus nonaktif";
     if (!form.no_hp.trim()) errs.no_hp = "No HP wajib diisi";
     else if (!/^(08|\+628)\d{7,12}$/.test(form.no_hp))
       errs.no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
@@ -83,12 +108,24 @@ export function DriverForm({ mode, initial }: Props) {
           description="Data identitas driver"
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nama" required className="sm:col-span-2">
-            <Input
-              placeholder="Nama lengkap"
-              value={form.nama}
-              onChange={(e) => set("nama", e.target.value)}
-              error={error.nama}
+          <Field
+            label="Nama"
+            required
+            className="sm:col-span-2"
+            hint="Pilih dari data karyawan (menu Karyawan). Nama driver mengikuti nama karyawan."
+          >
+            <Combobox
+              value={form.karyawan_id}
+              onChange={(v) => {
+                set("karyawan_id", v);
+                setError((e) => ({ ...e, karyawan_id: "" }));
+              }}
+              options={karyawanOptions}
+              placeholder={karyawan.isLoading ? "Memuat karyawan…" : "Pilih karyawan"}
+              searchPlaceholder="Ketik nama karyawan…"
+              emptyText="Karyawan tidak ditemukan"
+              disabled={karyawan.isLoading}
+              error={error.karyawan_id || sudahDriver || undefined}
             />
           </Field>
           <Field label="No HP" required hint="Format: 08xxxxxxxxxx">
@@ -158,6 +195,9 @@ export function DriverForm({ mode, initial }: Props) {
           </Button>
         </div>
       </div>
+      <LoadingOverlay
+        message={loading ? "Menyimpan data driver…" : pending ? "Menonaktifkan driver…" : null}
+      />
       <ConfirmDialog
         open={deactOpen}
         onClose={() => setDeactOpen(false)}

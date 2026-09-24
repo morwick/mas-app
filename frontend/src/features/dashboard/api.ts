@@ -20,6 +20,8 @@ export interface DashboardData {
   active_jobs: DashboardActiveJob[];
   jobs_menunggu_validasi: number;
   uang_jalan_diajukan: number;
+  /** Job sebelum muat yang belum punya pencairan berbukti transfer. */
+  uang_jalan_belum_transfer: number;
 }
 
 export const layoutCounts = () => api.get<LayoutCounts>("/layout/counts");

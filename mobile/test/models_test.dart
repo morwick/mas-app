@@ -71,8 +71,14 @@ void main() {
 
     test('judul slot sesuai PRD', () {
       expect(PhotoSlot.kiri.label, 'Foto sisi kiri kendaraan');
-      expect(PhotoSlot.suratTimbang.label, 'Foto surat timbang');
-      expect(PhotoSlot.suratTimbang.isDocument, isTrue);
+      expect(PhotoSlot.suratJalan.label, 'Foto surat jalan');
+      expect(PhotoSlot.suratJalan.isDocument, isTrue);
+    });
+
+    test('slot surat jalan: kode baru & nama lama sama-sama dikenali', () {
+      expect(PhotoSlot.suratJalan.value, 'surat_jalan');
+      expect(PhotoSlot.tryParse('surat_jalan'), PhotoSlot.suratJalan);
+      expect(PhotoSlot.tryParse('surat_timbang'), PhotoSlot.suratJalan);
     });
 
     test('missingSlots menghitung slot yang belum terisi per tahap', () {
@@ -83,7 +89,7 @@ void main() {
         _photo('loading', 'kiri'),
         _photo('unloading', 'depan'),
       ]));
-      expect(job.missingSlots(PhotoStage.loading), [PhotoSlot.suratTimbang]);
+      expect(job.missingSlots(PhotoStage.loading), [PhotoSlot.suratJalan]);
       expect(job.missingSlots(PhotoStage.unloading).length, 4);
       expect(job.photosByStage(PhotoStage.loading).length, 4);
     });

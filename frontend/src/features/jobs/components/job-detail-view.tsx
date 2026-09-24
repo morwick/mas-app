@@ -32,6 +32,8 @@ import { UpdateStatusModal } from "@/features/jobs/components/update-status-moda
 import { UploadPhotoModal } from "@/features/jobs/components/upload-photo-modal";
 import { PhotoSlots } from "@/features/jobs/components/photo-slots";
 import { ValidationPanel } from "@/features/jobs/components/validation-panel";
+import { GantiTrukModal, bolehGantiTruk } from "@/features/jobs/components/ganti-truk-modal";
+import { useRiwayatGantiTruk } from "@/features/jobs/queries";
 import {
   cancelJob,
   updateJobStatus
@@ -51,7 +53,7 @@ import type {
   Unit
 } from "@/types";
 import { UangJalanCard } from "@/features/uang-jalan/components/uang-jalan-card";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatRupiah } from "@/lib/utils";
 
 interface Props {
   job: Job;
@@ -95,6 +97,8 @@ export function JobDetailView({
   const [statusOpen, setStatusOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState<{ stage: PhotoStage; slot: PhotoSlot | null } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [gantiTrukOpen, setGantiTrukOpen] = useState(false);
+  const riwayatGantiTruk = useRiwayatGantiTruk(job.id);
   const [lightbox, setLightbox] = useState<{
     images: string[];
     index: number;
@@ -112,6 +116,9 @@ export function JobDetailView({
   const shareUrl = `${origin}/track/${job.share_token}`;
 
   const closed = job.status === "selesai" || job.status === "cancelled";
+  // Job boleh dibatalkan selama uang jalan belum cair. Sesudah itu uangnya
+  // sudah di tangan driver dan penutupannya lewat alur normal.
+  const uangJalanCair = (job.uang_jalan_cair ?? 0) > 0;
 
   async function onUpdateStatus(next: JobStatus, notes?: string) {
     setPending(true);
@@ -268,8 +275,25 @@ export function JobDetailView({
                 className="btn btn-secondary btn-sm"
                 style={{ color: "#C13838", borderColor: "#F5C0C0" }}
                 onClick={() => setCancelOpen(true)}
+                disabled={uangJalanCair}
+                title={
+                  uangJalanCair
+                    ? `Uang jalan sudah dicairkan ${formatRupiah(job.uang_jalan_cair ?? 0)} — job tidak bisa dibatalkan lagi.`
+                    : undefined
+                }
               >
                 Cancel job
+              </button>
+            )}
+            {bolehGantiTruk(job) && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setGantiTrukOpen(true)}
+                title="Truk rusak di perjalanan? Ganti dengan truk lain (driver opsional ikut diganti)."
+              >
+                <Truck style={{ width: 14, height: 14 }} />
+                Ganti truk
               </button>
             )}
             {!closed && (
@@ -594,6 +618,14 @@ export function JobDetailView({
                   <ArrowRight style={{ width: 14, height: 14 }} />
                 </Link>
               </div>
+              {job.unit_trailer_kode && (
+                <div
+                  className="caption"
+                  style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--border-default)" }}
+                >
+                  Unit trailer: <strong style={{ color: "var(--text-primary)" }}>{job.unit_trailer_kode}</strong>
+                </div>
+              )}
             </div>
           )}
 
@@ -709,6 +741,36 @@ export function JobDetailView({
             pengajuan={uangJalanPengajuan}
           />
 
+          {(riwayatGantiTruk.data ?? []).length > 0 && (
+            <div className="card">
+              <div style={{ padding: "14px 16px", borderBottom: "0.5px solid var(--border-default)" }}>
+                <div className="h3">Riwayat ganti truk</div>
+                <div className="caption">Pergantian truk & driver selama perjalanan</div>
+              </div>
+              <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                {(riwayatGantiTruk.data ?? []).map((r) => (
+                  <div key={r.id} style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 2 }}>
+                    <div style={{ fontWeight: 600 }}>
+                      {r.unit_lama_kode ?? "—"} → {r.unit_baru_kode ?? "—"}
+                      {r.unit_trailer_lama_kode !== r.unit_trailer_baru_kode &&
+                        ` (trailer ${r.unit_trailer_lama_kode ?? "—"} → ${r.unit_trailer_baru_kode ?? "—"})`}
+                    </div>
+                    {r.driver_lama_nama !== r.driver_baru_nama && (
+                      <div>
+                        Driver: {r.driver_lama_nama ?? "—"} → {r.driver_baru_nama ?? "—"}
+                      </div>
+                    )}
+                    <div style={{ color: "var(--text-secondary)" }}>Alasan: {r.alasan}</div>
+                    <div className="caption">
+                      {formatDateTime(r.diganti_pada)}
+                      {r.diganti_oleh_nama ? ` · oleh ${r.diganti_oleh_nama}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Audit log */}
           <div className="card">
             <div
@@ -814,6 +876,7 @@ export function JobDetailView({
         open={statusOpen}
         onClose={() => setStatusOpen(false)}
         current={job.status}
+        uangJalanCair={uangJalanCair}
         onConfirm={onUpdateStatus}
       />
       <UploadPhotoModal
@@ -824,6 +887,14 @@ export function JobDetailView({
         jobId={job.id}
         onDone={() => queryClient.invalidateQueries()}
       />
+      {gantiTrukOpen && (
+        <GantiTrukModal
+          job={job}
+          unitKode={unit?.kode_unit}
+          driverNama={driver?.nama}
+          onClose={() => setGantiTrukOpen(false)}
+        />
+      )}
       <ConfirmDialog
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}

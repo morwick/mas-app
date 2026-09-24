@@ -7,9 +7,11 @@ from postgrest.types import CountMethod
 from supabase import AsyncClient
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
-from app.core.pg import clean_text, first, num, rows, single
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
+from app.core.pg import clean_text, first, num, rows, single
+from app.core.transaksi import Transaksi
 from app.modules.units.schemas import (
+    BUKAN_ARMADA,
     ChangeStatusRequest,
     DriverAssignment,
     Unit,
@@ -39,7 +41,7 @@ def to_unit(row: dict[str, Any]) -> Unit:
         jenis_unit_nama=(jenis or {}).get("nama") or "—",
         no_polisi=row["no_polisi"],
         tahun=row.get("tahun"),
-        status=row["status"],
+        status=row["status_operasional"],
         catatan=row.get("catatan"),
         is_active=bool(row.get("is_active", True)),
         created_at=row["created_at"],
@@ -67,25 +69,49 @@ class UnitService:
 
     _SEARCH_COLUMNS = ["kode_unit", "no_polisi"]
 
-    def _list_query(self, *, include_inactive: bool, q: str | None, jenis_unit_id: str | None,
-                    status: str | None, select: str, count=None, head: bool = False):
-        query = (self._db.table("units").select(select, count=count, head=head)
-                 if count is not None else self._db.table("units").select(select))
+    def _list_query(
+        self,
+        *,
+        include_inactive: bool,
+        q: str | None,
+        jenis_unit_id: str | None,
+        status: str | None,
+        select: str,
+        count=None,
+        head: bool = False,
+    ):
+        query = (
+            self._db.table("units").select(select, count=count, head=head)
+            if count is not None
+            else self._db.table("units").select(select)
+        )
         if not include_inactive:
             query = query.eq("is_active", True)
         if jenis_unit_id:
             query = query.eq("jenis_unit_id", jenis_unit_id)
         if status:
-            query = query.eq("status", status)
+            query = query.eq("status_operasional", status)
         if q and q.strip():
             query = query.or_(ilike_any(self._SEARCH_COLUMNS, q))
         return query
 
-    async def list_page(self, *, params: PageParams, include_inactive: bool = False,
-                        q: str | None = None, jenis_unit_id: str | None = None,
-                        status: str | None = None) -> Page[Unit]:
-        query = self._list_query(include_inactive=include_inactive, q=q, jenis_unit_id=jenis_unit_id,
-                                 status=status, select=UNIT_SELECT, count=CountMethod.exact)
+    async def list_page(
+        self,
+        *,
+        params: PageParams,
+        include_inactive: bool = False,
+        q: str | None = None,
+        jenis_unit_id: str | None = None,
+        status: str | None = None,
+    ) -> Page[Unit]:
+        query = self._list_query(
+            include_inactive=include_inactive,
+            q=q,
+            jenis_unit_id=jenis_unit_id,
+            status=status,
+            select=UNIT_SELECT,
+            count=CountMethod.exact,
+        )
         res = await apply_window(query.order("kode_unit"), params).execute()
         return build_page([to_unit(r) for r in rows(res)], res.count, params)
 
@@ -104,16 +130,20 @@ class UnitService:
 
     async def count_active(self) -> int:
         res = await (
-            self._db.table("units").select("id", count=CountMethod.exact, head=True).eq("is_active", True).execute()
+            self._db.table("units")
+            .select("id", count=CountMethod.exact, head=True)
+            .eq("is_active", True)
+            .not_.in_("status_operasional", list(BUKAN_ARMADA))  # terjual/diafkirkan bukan lagi armada
+            .execute()
         )
         return res.count or 0
 
     async def status_counts(self) -> UnitStatusCounts:
-        res = await self._db.table("units").select("status").eq("is_active", True).execute()
+        res = await self._db.table("units").select("status_operasional").eq("is_active", True).execute()
         counts = UnitStatusCounts()
         for r in rows(res):
-            status = r.get("status")
-            if status in ("standby", "bertugas", "perbaikan"):
+            status = r.get("status_operasional")
+            if status in ("standby", "bertugas", "perbaikan", "terjual", "diafkirkan"):
                 setattr(counts, status, getattr(counts, status) + 1)
         return counts
 
@@ -178,7 +208,7 @@ class UnitService:
             "jenis_unit_id": payload.jenis_unit_id,
             "no_polisi": payload.no_polisi.strip(),
             "tahun": payload.tahun,
-            "status": payload.status,
+            "status_operasional": payload.status,
             "default_driver_id": payload.default_driver_id or None,
         }
         for key in _TEXT_FIELDS:
@@ -229,21 +259,12 @@ class UnitService:
             raise
 
     async def change_status(self, unit_id: str, payload: ChangeStatusRequest) -> None:
-        # Log riwayat dibuat trigger DB; alasan ditambahkan terpisah ke baris terbaru.
-        await self._db.table("units").update({"status": payload.status}).eq("id", unit_id).execute()
-        reason = clean_text(payload.reason)
-        if reason:
-            latest = single(
-                await self._db.table("unit_status_history")
-                .select("id")
-                .eq("unit_id", unit_id)
-                .order("changed_at", desc=True)
-                .limit(1)
-                .maybe_single()
-                .execute()
-            )
-            if latest:
-                await self._db.table("unit_status_history").update({"reason": reason}).eq("id", latest["id"]).execute()
+        # Satu transaksi: log riwayat dibuat trigger DB, alasannya dititipkan
+        # lewat `app.status_note` sehingga tersimpan bersama baris riwayatnya.
+        tx = Transaksi(self._db)
+        tx.setting("app.status_note", clean_text(payload.reason))
+        tx.update("units", {"status_operasional": payload.status}, {"id": unit_id})
+        await tx.jalankan()
 
     async def deactivate(self, unit_id: str) -> None:
         await self._db.table("units").update({"is_active": False}).eq("id", unit_id).execute()

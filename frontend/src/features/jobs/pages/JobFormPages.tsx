@@ -30,7 +30,16 @@ export function NewJobPage() {
   );
 
   const waitingPrefill = !!quotationId && (quotation.isPending || (dealQuotation && customer.isPending));
-  if (customers.isPending || drivers.isPending || units.isPending || waitingPrefill)
+  // activeJobs ikut ditunggu: form yang terbuka sebelum daftar job aktif tiba
+  // akan memeriksa bentrok terhadap daftar kosong, jadi peringatannya tidak
+  // muncul sampai admin menekan simpan.
+  if (
+    customers.isPending ||
+    drivers.isPending ||
+    units.isPending ||
+    activeJobs.isPending ||
+    waitingPrefill
+  )
     return <PageLoading />;
   const error = customers.error ?? drivers.error ?? units.error;
   if (error) return <PageError error={error} />;
@@ -41,6 +50,10 @@ export function NewJobPage() {
       drivers={drivers.data ?? []}
       standbyUnits={(units.data ?? []).filter((u) => u.status === "standby")}
       activeJobs={activeJobs.data ?? []}
+      // Gagalnya daftar job aktif tidak menutup form — job tetap bisa dibuat,
+      // tapi admin diberi tahu bahwa peringatan bentrok sedang tidak jalan.
+      conflictCheckError={activeJobs.isError}
+      onRetryConflictCheck={() => void activeJobs.refetch()}
       prefill={prefill}
     />
   );
@@ -54,7 +67,13 @@ export function EditJobPage() {
   const units = useUnits(true);
   const activeJobs = useJobs({ status: "active" });
 
-  if (job.isPending || customers.isPending || drivers.isPending || units.isPending)
+  if (
+    job.isPending ||
+    customers.isPending ||
+    drivers.isPending ||
+    units.isPending ||
+    activeJobs.isPending
+  )
     return <PageLoading />;
   if (job.isError) return <PageError error={job.error} onRetry={job.refetch} />;
   const error = customers.error ?? drivers.error ?? units.error;
@@ -67,6 +86,8 @@ export function EditJobPage() {
       drivers={drivers.data ?? []}
       units={units.data ?? []}
       activeJobs={activeJobs.data ?? []}
+      conflictCheckError={activeJobs.isError}
+      onRetryConflictCheck={() => void activeJobs.refetch()}
     />
   );
 }

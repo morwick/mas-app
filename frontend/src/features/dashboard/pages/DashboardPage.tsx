@@ -14,6 +14,7 @@ export function DashboardPage() {
       activeJobs={activeJobs}
       jobsMenungguValidasi={q.data.jobs_menunggu_validasi}
       uangJalanDiajukan={q.data.uang_jalan_diajukan}
+      uangJalanBelumTransfer={q.data.uang_jalan_belum_transfer}
     />
   );
 }

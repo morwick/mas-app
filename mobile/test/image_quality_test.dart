@@ -53,7 +53,7 @@ void main() {
       expect(analyzeQuality(_checkerboard(800, 600)).isLowResolution, isTrue);
     });
 
-    test('surat timbang memakai ambang lebih ketat', () {
+    test('surat jalan memakai ambang lebih ketat', () {
       final a = analyzeQuality(_checkerboard(1920, 1440));
       final b = analyzeQuality(_checkerboard(1920, 1440), document: true);
       expect(b.threshold, greaterThan(a.threshold));

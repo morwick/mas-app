@@ -24,6 +24,8 @@ export interface JobInput {
   tujuan_lat?: number | null;
   tujuan_lng?: number | null;
   unit_id: string;
+  /** Wajib bila jenis unit dari unit-nya punya jenis unit trailer; null bila tidak. */
+  unit_trailer_id?: string | null;
   driver_id: string;
   etd: string;
   eta?: string | null;
@@ -135,6 +137,31 @@ export function updateJobStatus(
   notes?: string
 ): Promise<ActionResult<unknown>> {
   return mutate(api.post(`/jobs/${id}/status`, { status, notes: notes ?? null }));
+}
+
+/** Satu baris riwayat pergantian truk. */
+export interface GantiTrukEntry {
+  id: string;
+  diganti_pada: string;
+  status_job_saat_ganti: string;
+  alasan: string;
+  unit_lama_kode: string | null;
+  unit_baru_kode: string | null;
+  driver_lama_nama: string | null;
+  driver_baru_nama: string | null;
+  unit_trailer_lama_kode: string | null;
+  unit_trailer_baru_kode: string | null;
+  diganti_oleh_nama: string | null;
+}
+
+export const getRiwayatGantiTruk = (id: string) => api.get<GantiTrukEntry[]>(`/jobs/${id}/ganti-truk`);
+
+/** Ganti truk di tengah perjalanan; driver opsional ikut diganti. */
+export function gantiTruk(
+  id: string,
+  input: { unit_id: string; alasan: string; driver_id?: string | null; unit_trailer_id?: string | null }
+): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/jobs/${id}/ganti-truk`, input));
 }
 
 export function cancelJob(id: string, reason?: string): Promise<ActionResult<unknown>> {

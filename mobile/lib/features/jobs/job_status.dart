@@ -127,7 +127,7 @@ enum PhotoStage {
             PhotoSlot.belakang,
             PhotoSlot.kanan,
             PhotoSlot.kiri,
-            PhotoSlot.suratTimbang,
+            PhotoSlot.suratJalan,
           ],
         PhotoStage.serahTerima => const [PhotoSlot.serahTerima],
       };
@@ -138,7 +138,7 @@ enum PhotoSlot {
   belakang('belakang', 'Foto sisi belakang kendaraan'),
   kanan('kanan', 'Foto sisi kanan kendaraan'),
   kiri('kiri', 'Foto sisi kiri kendaraan'),
-  suratTimbang('surat_timbang', 'Foto surat timbang'),
+  suratJalan('surat_jalan', 'Foto surat jalan'),
   serahTerima('serah_terima', 'Foto serah terima dokumen');
 
   const PhotoSlot(this.value, this.label);
@@ -146,14 +146,16 @@ enum PhotoSlot {
   final String label;
 
   static PhotoSlot? tryParse(String? raw) {
+    // Nama lama slot surat jalan (sebelum migration 20260924000024).
+    if (raw == 'surat_timbang') return PhotoSlot.suratJalan;
     for (final s in PhotoSlot.values) {
       if (s.value == raw) return s;
     }
     return null;
   }
 
-  /// Surat timbang harus lebih tajam karena berisi teks (FR-PHOTO-05).
-  bool get isDocument => this == PhotoSlot.suratTimbang;
+  /// Surat jalan harus lebih tajam karena berisi teks (FR-PHOTO-05).
+  bool get isDocument => this == PhotoSlot.suratJalan;
 }
 
 /// Teks kunci yang ditampilkan ke driver (FR-UJ-07).

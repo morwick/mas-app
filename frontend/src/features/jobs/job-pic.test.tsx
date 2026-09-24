@@ -3,6 +3,7 @@
  * saat customer dipilih/diganti, tapi tetap bisa ditimpa manual.
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -106,8 +107,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** Form job memuat pilihan unit trailer lewat React Query. */
+function withQuery(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+}
+
 function renderNew() {
   return render(
+    withQuery(
     <ToastProvider>
       <MemoryRouter>
         <NewJobView
@@ -118,11 +126,13 @@ function renderNew() {
         />
       </MemoryRouter>
     </ToastProvider>
+    )
   );
 }
 
 function renderEdit() {
   return render(
+    withQuery(
     <ToastProvider>
       <MemoryRouter>
         <EditJobView
@@ -134,6 +144,7 @@ function renderEdit() {
         />
       </MemoryRouter>
     </ToastProvider>
+    )
   );
 }
 

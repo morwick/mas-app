@@ -39,6 +39,11 @@ interface ComboboxProps {
   /** Tampilkan tombol silang untuk mengosongkan pilihan. */
   clearable?: boolean;
   emptyText?: string;
+  /**
+   * Opsi baru tampil setelah kata kunci minimal sepanjang ini. Berguna untuk
+   * daftar nama orang: tidak semua nama langsung terpampang saat dibuka.
+   */
+  minQueryLength?: number;
   className?: string;
   style?: React.CSSProperties;
   id?: string;
@@ -69,6 +74,7 @@ export function Combobox({
   disabled,
   clearable,
   emptyText = "Tidak ada hasil",
+  minQueryLength = 0,
   className,
   style,
   id
@@ -96,10 +102,13 @@ export function Combobox({
     [options, value]
   );
 
+  const queryTooShort = query.trim().length < minQueryLength;
+
   const filtered = useMemo(() => {
+    if (queryTooShort) return [];
     const terms = normalize(query).split(/\s+/).filter(Boolean);
     return options.filter((o) => matches(o, terms));
-  }, [options, query]);
+  }, [options, query, queryTooShort]);
 
   const reposition = useCallback(() => {
     const el = triggerRef.current;
@@ -290,7 +299,11 @@ export function Combobox({
             style={{ maxHeight: MAX_LIST_HEIGHT }}
           >
             {filtered.length === 0 ? (
-              <p className="combobox-empty">{emptyText}</p>
+              <p className="combobox-empty">
+                {queryTooShort
+                  ? `Ketik minimal ${minQueryLength} huruf untuk menampilkan pilihan`
+                  : emptyText}
+              </p>
             ) : (
               filtered.map((option, index) => (
                 <div

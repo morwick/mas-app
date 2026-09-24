@@ -33,14 +33,20 @@ class ApiClient {
     ));
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
-        final token = _tokenProvider?.call();
-        if (token != null && token.isNotEmpty) {
-          options.headers['X-Driver-Token'] = token;
+        // Pemanggil boleh menyetel token sendiri (lihat [driverToken]) — dipakai
+        // saat sesi belum terpasang di state, jadi jangan ditimpa di sini.
+        if (options.headers[_driverTokenHeader] == null) {
+          final token = _tokenProvider?.call();
+          if (token != null && token.isNotEmpty) {
+            options.headers[_driverTokenHeader] = token;
+          }
         }
         handler.next(options);
       },
     ));
   }
+
+  static const _driverTokenHeader = 'X-Driver-Token';
 
   late final Dio _dio;
   final String? Function()? _tokenProvider;
@@ -88,8 +94,23 @@ class ApiClient {
   Future<T> get<T>(String path, {Map<String, dynamic>? query}) =>
       _run<T>(() => _dio.get(path, queryParameters: query));
 
-  Future<T> post<T>(String path, {Object? body, Map<String, dynamic>? query}) =>
-      _run<T>(() => _dio.post(path, data: body, queryParameters: query));
+  /// [driverToken] memaksa header sesi untuk satu permintaan. Dibutuhkan saat
+  /// login: perangkat harus didaftarkan sebelum sesi ditulis ke state, jadi
+  /// penyedia token biasa masih mengembalikan null.
+  Future<T> post<T>(
+    String path, {
+    Object? body,
+    Map<String, dynamic>? query,
+    String? driverToken,
+  }) =>
+      _run<T>(() => _dio.post(
+            path,
+            data: body,
+            queryParameters: query,
+            options: driverToken == null
+                ? null
+                : Options(headers: {_driverTokenHeader: driverToken}),
+          ));
 
   Future<T> upload<T>(
     String path,

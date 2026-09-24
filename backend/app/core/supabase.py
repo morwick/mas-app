@@ -21,13 +21,16 @@ from supabase import AsyncClient, AsyncClientOptions
 from supabase_auth import AsyncMemoryStorage
 
 from app.core.config import Settings, get_settings
+from app.core.request_context import CLIENT_IP_HEADER, ip_klien
+from app.core.soft_delete import DataClient
 
 SHARE_TOKEN_HEADER = "x-share-token"
 DRIVER_TOKEN_HEADER = "x-driver-token"
 
 
-def _options(headers: dict[str, str]) -> AsyncClientOptions:
+def _options(schema: str, headers: dict[str, str]) -> AsyncClientOptions:
     return AsyncClientOptions(
+        schema=schema,
         headers=headers,
         storage=AsyncMemoryStorage(),
         auto_refresh_token=False,
@@ -49,7 +52,12 @@ class SupabaseClientFactory:
 
     @asynccontextmanager
     async def _open(self, key: str, headers: dict[str, str]) -> AsyncIterator[AsyncClient]:
-        client = AsyncClient(self._settings.supabase_url, key, _options(headers))
+        # IP pengguna ikut ke Postgres untuk log sistem (dibaca dari request.headers).
+        ip = ip_klien.get()
+        if ip:
+            headers = {**headers, CLIENT_IP_HEADER: ip}
+        # DataClient: select otomatis `status = 1`, delete jadi soft delete.
+        client = DataClient(self._settings.supabase_url, key, _options(self._settings.supabase_db_schema, headers))
         try:
             yield client
         finally:

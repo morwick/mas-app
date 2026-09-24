@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Pagination, usePagination } from "@/components/ui/pagination";
+import {
+  ALL_PAGE_SIZE,
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+  Pagination,
+  pageSizeLabel,
+  usePagination
+} from "@/components/ui/pagination";
 
 const rows = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -131,5 +138,53 @@ describe("Pagination", () => {
     // Halaman pertama & terakhir selalu terjangkau.
     expect(screen.getByRole("button", { name: "1" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "50" })).toBeTruthy();
+  });
+});
+
+describe("pemilih jumlah baris", () => {
+  it('"Semua" menampilkan seluruh baris dalam satu halaman', () => {
+    // -1 dipakai apa adanya oleh slice() akan memotong baris terakhir.
+    const { result } = renderHook(() => usePagination(rows(25), { pageSize: 10 }));
+    act(() => result.current.setPageSize(ALL_PAGE_SIZE));
+    expect(result.current.items).toEqual(rows(25));
+    expect(result.current.pageCount).toBe(1);
+    expect([result.current.from, result.current.to]).toEqual([1, 25]);
+  });
+
+  it("mengganti jumlah baris kembali ke halaman 1", () => {
+    const { result } = renderHook(() => usePagination(rows(100), { pageSize: 10 }));
+    act(() => result.current.setPage(7));
+    act(() => result.current.setPageSize(50));
+    expect(result.current.page).toBe(1);
+    expect(result.current.items).toEqual(rows(50));
+  });
+
+  it("default 10 baris saat halaman pertama dibuka", () => {
+    const { result } = renderHook(() => usePagination(rows(25)));
+    expect(result.current.pageSize).toBe(DEFAULT_PAGE_SIZE);
+    expect(result.current.items).toHaveLength(10);
+  });
+
+  it("pilihannya 10, 20, 50, 100, 200, Semua", () => {
+    expect(PAGE_SIZE_OPTIONS.map(pageSizeLabel)).toEqual([
+      "10",
+      "20",
+      "50",
+      "100",
+      "200",
+      "Semua"
+    ]);
+  });
+
+  it("Pagination menampilkan pemilih tanpa perlu prop tambahan", () => {
+    function Harness() {
+      const pg = usePagination(rows(30));
+      return <Pagination state={pg} label="unit" />;
+    }
+    render(<Harness />);
+    const select = screen.getByLabelText("Tampilkan") as HTMLSelectElement;
+    expect(select.value).toBe(String(DEFAULT_PAGE_SIZE));
+    fireEvent.change(select, { target: { value: String(ALL_PAGE_SIZE) } });
+    expect(screen.getByText(/1–30 dari 30 unit/)).toBeTruthy();
   });
 });

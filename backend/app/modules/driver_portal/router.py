@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from supabase import AsyncClient
 
 from app.core.driver_auth import DriverSession, driver_client, require_driver
+from app.core.paging import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, Page, PageParams
 from app.core.supabase import SupabaseClientFactory, get_client_factory
 from app.modules.auth.schemas import OkResponse
 from app.modules.driver_portal.schemas import (
@@ -21,7 +23,7 @@ from app.modules.driver_portal.schemas import (
     MarkReadRequest,
 )
 from app.modules.driver_portal.service import DriverPortalService
-from app.modules.jobs.schemas import Job, JobPhoto, PhotoSlot, PhotoStage
+from app.modules.jobs.schemas import Job, JobPhoto, PhotoSlotMasukan, PhotoStage, normalisasi_slot
 from app.modules.uang_jalan.schemas import DriverRequestInput, JobUangJalan, UangJalanRequest
 
 router = APIRouter(prefix="/driver", tags=["driver-portal"])
@@ -36,6 +38,19 @@ async def anon_driver_client(
 
 def get_service(client: AsyncClient = Depends(driver_client)) -> DriverPortalService:
     return DriverPortalService(client)
+
+
+def driver_page_params(
+    page: Annotated[int, Query(ge=1, description="Nomor halaman, mulai dari 1")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE, description="Baris per halaman")] = DEFAULT_PAGE_SIZE,
+) -> PageParams:
+    """Seperti `page_params`, tetapi tanpa opsi "semua" (`page_size=-1`).
+
+    Aplikasi driver selalu menggulir bertahap. Membuka jalan untuk menarik
+    seluruh baris sekaligus hanya membebani HP dan jaringan di lapangan, dan
+    tidak ada layar driver yang membutuhkannya.
+    """
+    return PageParams(page=page, page_size=page_size)
 
 
 # ── Sesi ────────────────────────────────────────────────────────────────────
@@ -80,6 +95,16 @@ async def my_jobs(status: DriverJobFilter = Query("all"), svc: DriverPortalServi
     return await svc.my_jobs(status=status)
 
 
+@router.get("/jobs/page", response_model=Page[Job])
+async def my_jobs_page(
+    status: DriverJobFilter = Query("all"),
+    params: PageParams = Depends(driver_page_params),
+    svc: DriverPortalService = Depends(get_service),
+) -> Page[Job]:
+    """Gulir bertahap di aplikasi driver — penyaringan tab dikerjakan server."""
+    return await svc.my_jobs_page(status=status, params=params)
+
+
 @router.get("/jobs/{job_id}", response_model=Job)
 async def my_job(job_id: str, svc: DriverPortalService = Depends(get_service)) -> Job:
     return await svc.my_job(job_id)
@@ -102,7 +127,7 @@ async def update_status(
 async def upload_slot_photo(
     job_id: str,
     stage: PhotoStage = Form(...),
-    slot: PhotoSlot = Form(...),
+    slot: PhotoSlotMasukan = Form(...),
     photo: UploadFile = File(...),
     taken_at: str | None = Form(None, description="ISO 8601 saat foto diambil"),
     lat: float | None = Form(None),
@@ -114,7 +139,7 @@ async def upload_slot_photo(
     return await svc.upload_slot_photo(
         job_id=job_id,
         stage=stage,
-        slot=slot,
+        slot=normalisasi_slot(slot),
         data=data,
         content_type=photo.content_type,
         taken_at=taken_at,
@@ -145,6 +170,14 @@ async def request_uang_jalan(
 @router.get("/notifications", response_model=list[DriverNotification])
 async def notifications(svc: DriverPortalService = Depends(get_service)) -> list[DriverNotification]:
     return await svc.notifications()
+
+
+@router.get("/notifications/page", response_model=Page[DriverNotification])
+async def notifications_page(
+    params: PageParams = Depends(driver_page_params),
+    svc: DriverPortalService = Depends(get_service),
+) -> Page[DriverNotification]:
+    return await svc.notifications_page(params=params)
 
 
 @router.post("/notifications/read", response_model=OkResponse)

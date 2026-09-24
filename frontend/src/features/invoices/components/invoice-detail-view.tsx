@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
+import { Combobox } from "@/components/ui/combobox";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
 import {
   addInvoicePayment,
@@ -467,19 +468,14 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
                 />
               </Field>
               <Field label="Masuk ke">
-                <Select
+                <Combobox
                   value={bayar.sumber_dana_id}
-                  onChange={(e) =>
-                    setBayar((b) => ({ ...b, sumber_dana_id: e.target.value }))
-                  }
-                >
-                  <option value="">— tidak dicatat —</option>
-                  {sumberDana.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nama}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => setBayar((b) => ({ ...b, sumber_dana_id: v }))}
+                  options={sumberDana.map((s) => ({ value: s.id, label: s.nama }))}
+                  placeholder="— tidak dicatat —"
+                  searchPlaceholder="Cari kas / rekening…"
+                  clearable
+                />
               </Field>
               <Field label="Metode">
                 <Select

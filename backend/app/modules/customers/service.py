@@ -3,12 +3,12 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from postgrest.types import CountMethod
 from supabase import AsyncClient
 
 from app.core.errors import NotFoundError, ValidationError
-from app.core.pg import clean_text, rows, single
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
-from postgrest.types import CountMethod
+from app.core.pg import clean_text, rows, single
 from app.modules.customers.schemas import Customer, CustomerCreate, CustomerUpdate
 
 # Field opsional bertipe teks — dinormalkan seragam ("" → None).
@@ -65,20 +65,22 @@ class CustomerService:
 
     _SEARCH_COLUMNS = ["nama_perusahaan", "kota", "pic_nama", "pic_no_hp"]
 
-    def _list_query(self, *, include_inactive: bool, q: str | None, select: str,
-                    count=None, head: bool = False):
-        query = (self._db.table("customers").select(select, count=count, head=head)
-                 if count is not None else self._db.table("customers").select(select))
+    def _list_query(self, *, include_inactive: bool, q: str | None, select: str, count=None, head: bool = False):
+        query = (
+            self._db.table("customers").select(select, count=count, head=head)
+            if count is not None
+            else self._db.table("customers").select(select)
+        )
         if not include_inactive:
             query = query.eq("is_active", True)
         if q and q.strip():
             query = query.or_(ilike_any(self._SEARCH_COLUMNS, q))
         return query
 
-    async def list_page(self, *, params: PageParams, include_inactive: bool = False,
-                        q: str | None = None) -> Page[Customer]:
-        query = self._list_query(include_inactive=include_inactive, q=q, select="*",
-                                 count=CountMethod.exact)
+    async def list_page(
+        self, *, params: PageParams, include_inactive: bool = False, q: str | None = None
+    ) -> Page[Customer]:
+        query = self._list_query(include_inactive=include_inactive, q=q, select="*", count=CountMethod.exact)
         res = await apply_window(query.order("nama_perusahaan"), params).execute()
         return build_page([_to_customer(r) for r in rows(res)], res.count, params)
 

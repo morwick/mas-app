@@ -37,9 +37,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(authProvider.notifier).login(noHp: _hp.text, pin: _pin.text);
-      // Daftarkan perangkat untuk push setelah sesi ada.
-      await ref.read(pushServiceProvider).syncToken();
+      // Pendaftaran perangkat berjalan sebelum sesi disimpan: kalau gagal,
+      // login ikut gagal dan driver tahu alasannya — bukan masuk diam-diam
+      // tanpa bisa menerima job baru.
+      await ref.read(authProvider.notifier).login(
+            noHp: _hp.text,
+            pin: _pin.text,
+            beforeCommit: (session) =>
+                ref.read(pushServiceProvider).registerForLogin(session),
+          );
+    } on PushRegistrationException catch (e) {
+      setState(() => _error = e.message);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {

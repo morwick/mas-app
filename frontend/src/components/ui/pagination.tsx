@@ -7,12 +7,22 @@
  * limit/offset di backend.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-export const DEFAULT_PAGE_SIZE = 20;
+export const DEFAULT_PAGE_SIZE = 10;
+
+/** -1 berarti "semua"; harus sama dengan ALL_PAGE_SIZE di backend. */
+export const ALL_PAGE_SIZE = -1;
+
+export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 200, ALL_PAGE_SIZE] as const;
+
+export function pageSizeLabel(size: number): string {
+  return size === ALL_PAGE_SIZE ? "Semua" : String(size);
+}
 
 interface UsePaginationOptions {
+  /** Jumlah baris awal; setelahnya dikendalikan pemilih di [Pagination]. */
   pageSize?: number;
   /**
    * Nilai gabungan dari semua filter/pencarian. Begitu berubah, halaman
@@ -33,13 +43,16 @@ export interface PaginationState<T> {
   from: number;
   to: number;
   setPage: (p: number) => void;
+  /** Mengganti jumlah baris sekaligus kembali ke halaman 1. */
+  setPageSize: (size: number) => void;
 }
 
 export function usePagination<T>(
   rows: T[],
-  { pageSize = DEFAULT_PAGE_SIZE, resetKey = "" }: UsePaginationOptions = {}
+  { pageSize: initialPageSize = DEFAULT_PAGE_SIZE, resetKey = "" }: UsePaginationOptions = {}
 ): PaginationState<T> {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState(initialPageSize);
   const [lastKey, setLastKey] = useState(resetKey);
 
   // Disetel ulang saat render, bukan lewat useEffect. Dengan useEffect,
@@ -51,7 +64,10 @@ export function usePagination<T>(
   }
 
   const total = rows.length;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  // "Semua" dipotong sebagai satu halaman selebar datanya. Memakai -1 langsung
+  // membuat slice() menghitung mundur dari ujung dan menelan baris terakhir.
+  const size = pageSize === ALL_PAGE_SIZE ? Math.max(total, 1) : pageSize;
+  const pageCount = Math.max(1, Math.ceil(total / size));
   // Data bisa menyusut di luar perubahan filter (mis. setelah hapus), jadi
   // posisi halaman tetap dijaga agar tidak melewati batas.
   const current = Math.min(Math.max(1, page), pageCount);
@@ -61,9 +77,15 @@ export function usePagination<T>(
   }, [page, current]);
 
   const items = useMemo(
-    () => rows.slice((current - 1) * pageSize, current * pageSize),
-    [rows, current, pageSize]
+    () => rows.slice((current - 1) * size, current * size),
+    [rows, current, size]
   );
+
+  // Jumlah baris berubah → posisi halaman lama tidak lagi menunjuk data yang sama.
+  const setPageSize = useCallback((next: number) => {
+    setPageSizeState(next);
+    setPage(1);
+  }, []);
 
   return {
     page: current,
@@ -71,9 +93,10 @@ export function usePagination<T>(
     total,
     pageSize,
     items,
-    from: total === 0 ? 0 : (current - 1) * pageSize + 1,
-    to: Math.min(current * pageSize, total),
-    setPage
+    from: total === 0 ? 0 : (current - 1) * size + 1,
+    to: Math.min(current * size, total),
+    setPage,
+    setPageSize
   };
 }
 
@@ -94,6 +117,12 @@ function pageNumbers(page: number, pageCount: number): (number | "…")[] {
 
 interface PaginationProps {
   state: PaginationState<unknown>;
+  /**
+   * Hanya untuk daftar yang dipaginasi di server dan mengurus ukurannya
+   * sendiri. Daftar biasa mengambilnya dari [state].
+   */
+  pageSize?: number;
+  onPageSizeChange?: (size: number) => void;
   /** Kata benda untuk teks ringkasan, mis. "unit" → "1–20 dari 134 unit". */
   label?: string;
   /**
@@ -103,14 +132,41 @@ interface PaginationProps {
   attached?: boolean;
 }
 
-export function Pagination({ state, label = "baris", attached }: PaginationProps) {
+export function Pagination({
+  state,
+  label = "baris",
+  attached,
+  pageSize,
+  onPageSizeChange
+}: PaginationProps) {
   const { page, pageCount, total, from, to, setPage } = state;
-  // Satu halaman penuh tidak butuh kontrol apa pun.
+  const size = pageSize ?? state.pageSize;
+  const changeSize = onPageSizeChange ?? state.setPageSize;
+  // Daftar kosong tidak butuh kontrol apa pun.
   if (total === 0) return null;
 
   return (
     <div className={attached ? "pagination pagination-attached" : "pagination"}>
       <span className="pagination-info">
+        {changeSize && size != null && (
+          <>
+            <label htmlFor="page-size" className="pagination-size-label">
+              Tampilkan
+            </label>
+            <select
+              id="page-size"
+              className="pagination-size"
+              value={size}
+              onChange={(e) => changeSize(Number(e.target.value))}
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {pageSizeLabel(n)}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         {from}–{to} dari {total} {label}
       </span>
       {pageCount > 1 && (
