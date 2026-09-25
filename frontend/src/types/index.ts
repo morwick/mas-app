@@ -1,7 +1,13 @@
 // Tipe domain yang dipakai di seluruh aplikasi. Bentuknya mengikuti skema
 // respons API backend (Pydantic) — kolom dan namanya sama persis.
 
-export type UnitStatus = "standby" | "bertugas" | "perbaikan" | "terjual" | "diafkirkan";
+export type UnitStatus =
+  | "standby"
+  | "bertugas"
+  | "breakdown"
+  | "perbaikan"
+  | "terjual"
+  | "diafkirkan";
 
 export type JobStatus =
   | "menunggu_pickup" // nilai lama, tidak dipakai lagi setelah migrasi v2

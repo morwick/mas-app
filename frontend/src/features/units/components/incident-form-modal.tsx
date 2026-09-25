@@ -1,14 +1,19 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Field } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
-import { createIncident, uploadIncidentPhoto } from "@/features/units/api";
+import {
+  createIncident,
+  updateIncident,
+  uploadIncidentPhoto
+} from "@/features/units/api";
 import { incidentTypeLabel } from "@/types";
-import type { IncidentType, Job } from "@/types";
+import type { Incident, IncidentType, Job } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -16,7 +21,11 @@ interface Props {
   onClose: () => void;
   unitId: string;
   activeJobs: Job[];
+  /** Diisi = mode edit insiden ini; kosong = tambah insiden baru. */
+  incident?: Incident | null;
 }
+
+const MAX_FOTO = 5;
 
 interface PhotoItem {
   id: string;
@@ -26,8 +35,9 @@ interface PhotoItem {
   error?: string;
 }
 
-function nowLocalDateTime(): string {
-  const d = new Date();
+/** Waktu (default: sekarang) dalam format input datetime-local, zona lokal. */
+function toLocalDateTime(iso?: string): string {
+  const d = iso ? new Date(iso) : new Date();
   const offset = d.getTimezoneOffset();
   const local = new Date(d.getTime() - offset * 60000);
   return local.toISOString().slice(0, 16);
@@ -35,21 +45,37 @@ function nowLocalDateTime(): string {
 
 const tipeOptions: IncidentType[] = ["kecelakaan", "kerusakan", "breakdown", "lainnya"];
 
-export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) {
+function initialForm(incident?: Incident | null) {
+  return {
+    tipe: (incident?.tipe ?? "kerusakan") as IncidentType,
+    tanggal: toLocalDateTime(incident?.tanggal),
+    lokasi: incident?.lokasi ?? "",
+    deskripsi: incident?.deskripsi ?? "",
+    biaya_repair:
+      incident?.biaya_repair != null ? String(Math.round(incident.biaya_repair)) : "",
+    vendor_repair: incident?.vendor_repair ?? "",
+    job_id: incident?.job_id ?? ""
+  };
+}
+
+export function IncidentFormModal({ open, onClose, unitId, activeJobs, incident }: Props) {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
+  const isEdit = !!incident;
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    tipe: "kerusakan" as IncidentType,
-    tanggal: nowLocalDateTime(),
-    lokasi: "",
-    deskripsi: "",
-    biaya_repair: "",
-    vendor_repair: "",
-    job_id: ""
-  });
+  const [form, setForm] = useState(() => initialForm(incident));
   const [items, setItems] = useState<PhotoItem[]>([]);
   const [error, setError] = useState<Record<string, string>>({});
+  const existingPhotos = incident?.photos.length ?? 0;
+  const maxBaru = Math.max(0, MAX_FOTO - existingPhotos);
+
+  // Tiap kali dibuka, isi ulang dari insiden yang diedit (atau kosong untuk tambah).
+  useEffect(() => {
+    if (!open) return;
+    setForm(initialForm(incident));
+    setItems([]);
+    setError({});
+  }, [open, incident]);
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -57,32 +83,18 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
 
   function addFiles(files: FileList | null) {
     if (!files) return;
-    const arr = Array.from(files).slice(0, 5 - items.length);
+    const arr = Array.from(files).slice(0, maxBaru - items.length);
     const next: PhotoItem[] = arr.map((f) => ({
       id: `${Date.now()}-${Math.random()}`,
       file: f,
       preview: URL.createObjectURL(f),
       progress: 0
     }));
-    setItems((prev) => [...prev, ...next].slice(0, 5));
+    setItems((prev) => [...prev, ...next].slice(0, maxBaru));
   }
 
   function removeItem(id: string) {
     setItems((prev) => prev.filter((p) => p.id !== id));
-  }
-
-  function reset() {
-    setForm({
-      tipe: "kerusakan",
-      tanggal: nowLocalDateTime(),
-      lokasi: "",
-      deskripsi: "",
-      biaya_repair: "",
-      vendor_repair: "",
-      job_id: ""
-    });
-    setItems([]);
-    setError({});
   }
 
   async function submit() {
@@ -94,8 +106,7 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
     if (Object.keys(errs).length > 0) return;
 
     setSubmitting(true);
-    const res = await createIncident({
-      unit_id: unitId,
+    const fields = {
       tipe: form.tipe,
       tanggal: form.tanggal,
       lokasi: form.lokasi,
@@ -103,14 +114,25 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
       biaya_repair: form.biaya_repair ? Number(form.biaya_repair) : null,
       vendor_repair: form.vendor_repair,
       job_id: form.job_id || null
-    });
-    if (!res.ok) {
-      setSubmitting(false);
-      toast.error(res.error);
-      return;
+    };
+    let incidentId: string;
+    if (incident) {
+      const res = await updateIncident(incident.id, fields);
+      if (!res.ok) {
+        setSubmitting(false);
+        toast.error(res.error);
+        return;
+      }
+      incidentId = incident.id;
+    } else {
+      const res = await createIncident({ unit_id: unitId, ...fields });
+      if (!res.ok) {
+        setSubmitting(false);
+        toast.error(res.error);
+        return;
+      }
+      incidentId = res.data.id;
     }
-
-    const incidentId = res.data.id;
 
     // Upload foto satu per satu kalau ada — dikompres di browser, diteruskan
     // backend ke Supabase Storage.
@@ -144,17 +166,34 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
     }
 
     setSubmitting(false);
-    toast.success("Insiden berhasil dicatat");
-    reset();
+    toast.success(isEdit ? "Insiden berhasil diperbarui" : "Insiden berhasil dicatat");
     onClose();
+  }
+
+  // Job insiden yang diedit mungkin sudah selesai — tetap tampilkan sebagai pilihan.
+  const jobOptions = activeJobs.map((j) => ({
+    value: j.id,
+    label: j.job_number,
+    hint: j.customer_nama
+  }));
+  if (incident?.job_id && !jobOptions.some((o) => o.value === incident.job_id)) {
+    jobOptions.unshift({
+      value: incident.job_id,
+      label: incident.job_number ?? "Job terkait",
+      hint: ""
+    });
   }
 
   return (
     <Modal
       open={open}
       onClose={submitting ? () => {} : onClose}
-      title="Catat insiden"
-      description="Tipe kerusakan/breakdown otomatis set unit ke Perbaikan."
+      title={isEdit ? "Edit insiden" : "Catat insiden"}
+      description={
+        incident?.status === "in_progress"
+          ? "Insiden sedang dalam penanganan — unit tetap berstatus Perbaikan."
+          : "Selama insiden belum ditangani, unit otomatis berstatus Breakdown."
+      }
       maxWidth="max-w-[640px]"
       footer={
         <>
@@ -162,7 +201,7 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
             Batal
           </Button>
           <Button onClick={submit} loading={submitting}>
-            Simpan insiden
+            {isEdit ? "Simpan perubahan" : "Simpan insiden"}
           </Button>
         </>
       }
@@ -207,7 +246,7 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
             />
           </Field>
         </div>
-        {activeJobs.length > 0 && (
+        {jobOptions.length > 0 && (
           <Field
             label="Job terkait (opsional)"
             hint="Pilih job aktif kalau insiden terjadi saat job berlangsung"
@@ -215,11 +254,7 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
             <Combobox
               value={form.job_id}
               onChange={(v) => set("job_id", v)}
-              options={activeJobs.map((j) => ({
-                value: j.id,
-                label: j.job_number,
-                hint: j.customer_nama
-              }))}
+              options={jobOptions}
               placeholder="— Tidak terkait job —"
               searchPlaceholder="Cari nomor job atau customer…"
               clearable
@@ -236,13 +271,11 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
           />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Biaya repair (Rp)" hint="Bila sudah diketahui">
-            <Input
-              type="number"
-              min={0}
+          <Field label="Biaya repair" hint="Bila sudah diketahui">
+            <CurrencyInput
               placeholder="0"
               value={form.biaya_repair}
-              onChange={(e) => set("biaya_repair", e.target.value)}
+              onChange={(v) => set("biaya_repair", v)}
             />
           </Field>
           <Field label="Vendor repair">
@@ -254,12 +287,15 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs }: Props) 
           </Field>
         </div>
 
-        <Field label={`Foto bukti (${items.length}/5)`}>
+        <Field
+          label={`Foto bukti (${existingPhotos + items.length}/${MAX_FOTO})`}
+          hint={existingPhotos > 0 ? `${existingPhotos} foto sudah tersimpan` : undefined}
+        >
           <div className="flex flex-col gap-2">
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              disabled={items.length >= 5}
+              disabled={items.length >= maxBaru}
               className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg p-4 hover:border-brand hover:bg-brand-light/20 transition-colors text-text-muted disabled:opacity-50"
             >
               <Upload className="w-5 h-5" />

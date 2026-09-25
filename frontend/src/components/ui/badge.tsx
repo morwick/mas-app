@@ -5,6 +5,7 @@ import type { JobStatus, ServiceStatus } from "@/types";
 type StatusKey =
   | "standby"
   | "bertugas"
+  | "breakdown"
   | "perbaikan"
   | "terjual"
   | "diafkirkan"
@@ -17,6 +18,7 @@ type StatusKey =
 const statusClass: Record<StatusKey, string> = {
   standby: "badge-standby",
   bertugas: "badge-bertugas",
+  breakdown: "badge-breakdown",
   perbaikan: "badge-perbaikan",
   terjual: "badge-terjual",
   diafkirkan: "badge-diafkirkan",
@@ -30,6 +32,7 @@ const statusClass: Record<StatusKey, string> = {
 const labels: Partial<Record<StatusKey, string>> = {
   standby: "Standby",
   bertugas: "Bertugas",
+  breakdown: "Breakdown",
   perbaikan: "Perbaikan",
   terjual: "Terjual",
   diafkirkan: "Diafkirkan",

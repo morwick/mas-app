@@ -16,7 +16,6 @@ from app.core.storage import (
 )
 from app.core.supabase import storage_public_url
 from app.core.timeutil import iso_utc, parse_iso
-from app.core.transaksi import Transaksi
 from app.modules.incidents.schemas import (
     Incident,
     IncidentCreate,
@@ -139,19 +138,20 @@ class IncidentService:
         if data:
             await self._db.table("incident_logs").update(data).eq("id", incident_id).execute()
 
+    # Status unit (Breakdown → Perbaikan → Standby) diubah trigger DB
+    # trg_incident_sync_status_unit dalam statement yang sama, dan urutan
+    # open → in_progress → resolved dijaga trg_incident_cek_perubahan
+    # (migration 20260925000006) — jadi tiap aksi di bawah tetap satu transaksi.
+
     async def set_status(self, incident_id: str, status: IncidentStatus) -> None:
         await self._db.table("incident_logs").update({"status_penanganan": status}).eq("id", incident_id).execute()
 
-    async def resolve(self, incident_id: str, *, set_unit_to_standby: bool) -> None:
-        # Satu transaksi: insiden selesai dan unit kembali standby bersamaan.
-        tx = Transaksi(self._db)
-        insiden = tx.update("incident_logs", {"status_penanganan": "resolved"}, {"id": incident_id})
-        if set_unit_to_standby:
-            tx.update("units", {"status_operasional": "standby"}, {"id": insiden["unit_id"]}, wajib=False)
-        await tx.jalankan()
+    async def resolve(self, incident_id: str) -> None:
+        await self.set_status(incident_id, "resolved")
 
     async def delete(self, incident_id: str) -> None:
         # Soft delete — foto insiden ikut ditandai terhapus oleh DB (dulu ON DELETE CASCADE).
+        # Insiden yang sudah dalam penanganan ditolak DB.
         await self._db.table("incident_logs").update({STATUS: DIHAPUS}).eq("id", incident_id).execute()
 
     async def upload_photo(

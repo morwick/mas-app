@@ -58,7 +58,3 @@ class IncidentUpdate(BaseModel):
 
 class SetIncidentStatusRequest(BaseModel):
     status: IncidentStatus
-
-
-class ResolveIncidentRequest(BaseModel):
-    set_unit_to_standby: bool = False

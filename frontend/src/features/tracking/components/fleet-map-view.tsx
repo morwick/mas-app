@@ -48,6 +48,7 @@ const STATUS_COLOR: Record<UnitStatus, { bg: string; fg: string; dot: string }> 
     dot: "#1C9600"
   },
   bertugas: { bg: "#fff4e0", fg: "#8a5a00", dot: "#E48F00" },
+  breakdown: { bg: "#fcebeb", fg: "#791f1f", dot: "#C13838" },
   perbaikan: { bg: "#f0f1f3", fg: "#374151", dot: "#6B7280" },
   terjual: { bg: "#eceef1", fg: "#4b5563", dot: "#9CA3AF" },
   diafkirkan: { bg: "#e5e7eb", fg: "#374151", dot: "#9CA3AF" }
@@ -56,6 +57,7 @@ const STATUS_COLOR: Record<UnitStatus, { bg: string; fg: string; dot: string }> 
 const STATUS_LABEL: Record<UnitStatus, string> = {
   standby: "Standby",
   bertugas: "Bertugas",
+  breakdown: "Breakdown",
   perbaikan: "Perbaikan",
   terjual: "Terjual",
   diafkirkan: "Diafkirkan"
@@ -117,15 +119,17 @@ export function FleetMapView({ units, activeJobs }: Props) {
   const counts = useMemo(() => {
     let standby = 0;
     let bertugas = 0;
+    let breakdown = 0;
     let perbaikan = 0;
     let gpsActive = 0;
     for (const u of activeUnits) {
       if (u.status === "standby") standby++;
       else if (u.status === "bertugas") bertugas++;
+      else if (u.status === "breakdown") breakdown++;
       else if (u.status === "perbaikan") perbaikan++;
       if (u.imei_gps && locations[u.id]) gpsActive++;
     }
-    return { standby, bertugas, perbaikan, gpsActive, total: activeUnits.length };
+    return { standby, bertugas, breakdown, perbaikan, gpsActive, total: activeUnits.length };
   }, [activeUnits, locations]);
 
   const filteredUnits = useMemo(() => {
@@ -239,6 +243,13 @@ export function FleetMapView({ units, activeJobs }: Props) {
           color={STATUS_COLOR.bertugas.dot}
           active={filter === "bertugas"}
           onClick={() => setFilter(filter === "bertugas" ? "" : "bertugas")}
+        />
+        <StatCard
+          label="Breakdown"
+          value={counts.breakdown}
+          color={STATUS_COLOR.breakdown.dot}
+          active={filter === "breakdown"}
+          onClick={() => setFilter(filter === "breakdown" ? "" : "breakdown")}
         />
         <StatCard
           label="Perbaikan"

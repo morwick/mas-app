@@ -96,13 +96,9 @@ export function setIncidentStatus(
   return mutate(api.post(`/incidents/${id}/status`, { status }));
 }
 
-export function resolveIncident(
-  id: string,
-  opts: { setUnitToStandby?: boolean }
-): Promise<ActionResult<unknown>> {
-  return mutate(
-    api.post(`/incidents/${id}/resolve`, { set_unit_to_standby: !!opts.setUnitToStandby })
-  );
+/** Selesaikan perbaikan — status unit ikut kembali (Standby) lewat trigger DB. */
+export function resolveIncident(id: string): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/incidents/${id}/resolve`));
 }
 
 export function deleteIncident(id: string): Promise<ActionResult<unknown>> {

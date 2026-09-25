@@ -14,7 +14,8 @@ import { Fab } from "@/components/layout/fab";
 import type { JobBelumKonfirmasi } from "@/features/dashboard/api";
 import type { Unit } from "@/types";
 
-type Filter = "semua" | "standby" | "bertugas" | "perbaikan";
+/** "tidak_siap" = Breakdown + Perbaikan (kartu stat keempat). */
+type Filter = "semua" | "standby" | "bertugas" | "breakdown" | "perbaikan" | "tidak_siap";
 
 interface ActiveJobSummary {
   unitId: string;
@@ -29,7 +30,7 @@ interface ActiveJobSummary {
 
 interface Props {
   units: Unit[];
-  counts: { standby: number; bertugas: number; perbaikan: number };
+  counts: { standby: number; bertugas: number; breakdown: number; perbaikan: number };
   activeJobs: ActiveJobSummary[];
   /** Antrean tindakan admin (alur v2): validasi job & pengajuan uang jalan. */
   jobsMenungguValidasi?: number;
@@ -50,10 +51,14 @@ export function DashboardView({
   jobsBelumInvoice = 0
 }: Props) {
   const [filter, setFilter] = useState<Filter>("semua");
-  const total = counts.standby + counts.bertugas + counts.perbaikan;
+  const tidakSiap = counts.breakdown + counts.perbaikan;
+  const total = counts.standby + counts.bertugas + tidakSiap;
 
   const filtered = useMemo(() => {
     if (filter === "semua") return units;
+    if (filter === "tidak_siap") {
+      return units.filter((u) => u.status === "breakdown" || u.status === "perbaikan");
+    }
     return units.filter((u) => u.status === filter);
   }, [units, filter]);
 
@@ -96,14 +101,14 @@ export function DashboardView({
           }
         />
         <StatCard
-          label="Perbaikan"
-          value={counts.perbaikan}
-          sublabel="Perlu attention"
+          label="Breakdown / Perbaikan"
+          value={tidakSiap}
+          sublabel={`${counts.breakdown} breakdown · ${counts.perbaikan} perbaikan`}
           icon={AlertTriangle}
           tone="perbaikan"
-          active={filter === "perbaikan"}
+          active={filter === "tidak_siap"}
           onClick={() =>
-            setFilter(filter === "perbaikan" ? "semua" : "perbaikan")
+            setFilter(filter === "tidak_siap" ? "semua" : "tidak_siap")
           }
         />
       </div>
@@ -190,6 +195,7 @@ export function DashboardView({
                   { k: "semua", l: "Semua", c: total },
                   { k: "standby", l: "Standby", c: counts.standby },
                   { k: "bertugas", l: "Bertugas", c: counts.bertugas },
+                  { k: "breakdown", l: "Breakdown", c: counts.breakdown },
                   { k: "perbaikan", l: "Perbaikan", c: counts.perbaikan }
                 ] as { k: Filter; l: string; c: number }[]
               ).map((f) => (

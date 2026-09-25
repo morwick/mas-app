@@ -122,6 +122,7 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
             <option value="">Semua status</option>
             <option value="standby">Standby</option>
             <option value="bertugas">Bertugas</option>
+            <option value="breakdown">Breakdown</option>
             <option value="perbaikan">Perbaikan</option>
             <option value="terjual">Terjual</option>
             <option value="diafkirkan">Diafkirkan</option>

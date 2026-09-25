@@ -410,6 +410,11 @@ select {
   background: var(--status-perbaikan-bg);
   color: var(--status-perbaikan-text);
 }
+/* Unit punya insiden yang belum ditangani. */
+.badge-breakdown {
+  background: var(--status-cancelled-bg);
+  color: var(--status-cancelled-text);
+}
 /* Unit sudah dijual / diafkirkan — bukan lagi armada. */
 .badge-terjual {
   background: #eceef1;

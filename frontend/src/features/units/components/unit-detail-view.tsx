@@ -22,8 +22,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UnitStatusModal } from "@/features/units/components/status-modal";
 import { IncidentFormModal } from "@/features/units/components/incident-form-modal";
 import { IncidentDetailModal } from "@/features/units/components/incident-detail-modal";
+import {
+  IncidentActionButtons,
+  useIncidentActions
+} from "@/features/units/components/incident-actions";
 import { ServiceHistoryTab } from "@/features/services/components/service-history-tab";
 import { deriveServiceStatus } from "@/lib/service";
+import { bukanArmada } from "@/lib/unit-status";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
@@ -54,6 +59,15 @@ interface Props {
 }
 
 type TabKey = "aktif" | "riwayat" | "history" | "insiden" | "service";
+
+const UNIT_STATUS_LABEL: Record<UnitStatus, string> = {
+  standby: "Standby",
+  bertugas: "Bertugas",
+  breakdown: "Breakdown",
+  perbaikan: "Perbaikan",
+  terjual: "Terjual",
+  diafkirkan: "Diafkirkan"
+};
 
 export function UnitDetailView({
   unit,
@@ -96,7 +110,18 @@ export function UnitDetailView({
   const [deactOpen, setDeactOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [incidentFormOpen, setIncidentFormOpen] = useState(false);
-  const [openIncident, setOpenIncident] = useState<Incident | null>(null);
+  const [editIncident, setEditIncident] = useState<Incident | null>(null);
+  // Simpan id saja supaya modal detail ikut data terbaru setelah aksi.
+  const [openIncidentId, setOpenIncidentId] = useState<string | null>(null);
+  const openIncident = incidents.find((i) => i.id === openIncidentId) ?? null;
+  const incidentActions = useIncidentActions(unit.kode_unit, (action) => {
+    if (action === "hapus") setOpenIncidentId(null);
+  });
+
+  function startEditIncident(inc: Incident) {
+    setEditIncident(inc);
+    setIncidentFormOpen(true);
+  }
 
   const activeJob = useMemo(
     () => jobs.find((j) => !["selesai", "cancelled"].includes(j.status)),
@@ -444,6 +469,8 @@ export function UnitDetailView({
                                   ? "var(--brand-primary)"
                                   : h.status_new === "perbaikan"
                                     ? "#D89A24"
+                                    : h.status_new === "breakdown"
+                                      ? "#C13838"
                                     : "var(--text-tertiary)",
                               marginTop: 6
                             }}
@@ -521,7 +548,17 @@ export function UnitDetailView({
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
-                      onClick={() => setIncidentFormOpen(true)}
+                      onClick={() => {
+                        // Unit terjual / diafkirkan bukan lagi armada — DB juga menolaknya.
+                        if (bukanArmada(unit.status)) {
+                          toast.error(
+                            `Unit ${unit.kode_unit} sudah ${UNIT_STATUS_LABEL[unit.status]} — tidak bisa ditambahkan insiden.`
+                          );
+                          return;
+                        }
+                        setEditIncident(null);
+                        setIncidentFormOpen(true);
+                      }}
                     >
                       <Plus style={{ width: 14, height: 14 }} />
                       Catat insiden
@@ -544,10 +581,17 @@ export function UnitDetailView({
                     }}
                   >
                     {incidents.map((inc) => (
-                      <button
+                      <div
                         key={inc.id}
-                        type="button"
-                        onClick={() => setOpenIncident(inc)}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setOpenIncidentId(inc.id)}
+                        onKeyDown={(e) => {
+                          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            setOpenIncidentId(inc.id);
+                          }
+                        }}
                         style={{
                           textAlign: "left",
                           background: "white",
@@ -682,7 +726,25 @@ export function UnitDetailView({
                             </div>
                           )}
                         </div>
-                      </button>
+                        {canManageOperational && inc.status !== "resolved" && (
+                          <div
+                            style={{
+                              marginTop: 12,
+                              paddingTop: 12,
+                              borderTop: "0.5px solid var(--border-default)"
+                            }}
+                            // Tombol aksi tidak ikut membuka modal detail.
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
+                            <IncidentActionButtons
+                              incident={inc}
+                              onAction={(a) => incidentActions.request(a, inc)}
+                              onEdit={() => startEditIncident(inc)}
+                            />
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -729,13 +791,24 @@ export function UnitDetailView({
             style={{ display: "flex", flexDirection: "column", gap: 8 }}
           >
             {canManageOperational && (
-              <Link
-                to="/jobs/new"
+              <button
+                type="button"
                 className="btn btn-secondary"
-                style={{ justifyContent: "flex-start", textDecoration: "none" }}
+                style={{ justifyContent: "flex-start" }}
+                onClick={() => {
+                  // Hanya unit Standby yang bisa dipakai job — status lain ditolak di sini
+                  // supaya user tidak baru tahu setelah mengisi form job.
+                  if (unit.status !== "standby") {
+                    toast.error(
+                      `Unit ${unit.kode_unit} tidak bisa di-assign ke job karena berstatus ${UNIT_STATUS_LABEL[unit.status]}. Hanya unit Standby yang bisa di-assign.`
+                    );
+                    return;
+                  }
+                  navigate("/jobs/new");
+                }}
               >
                 <PackageCheck style={{ width: 16, height: 16 }} /> Assign ke job baru
-              </Link>
+              </button>
             )}
             <button
               type="button"
@@ -794,12 +867,27 @@ export function UnitDetailView({
         activeJobs={jobs.filter(
           (j) => !["selesai", "cancelled"].includes(j.status)
         )}
+        incident={editIncident}
       />
       <IncidentDetailModal
         open={openIncident !== null}
-        onClose={() => setOpenIncident(null)}
+        onClose={() => setOpenIncidentId(null)}
         incident={openIncident}
+        onAction={
+          canManageOperational && openIncident
+            ? (a) => incidentActions.request(a, openIncident)
+            : undefined
+        }
+        onEdit={
+          canManageOperational && openIncident
+            ? () => {
+                setOpenIncidentId(null);
+                startEditIncident(openIncident);
+              }
+            : undefined
+        }
       />
+      {incidentActions.node}
     </div>
   );
 }

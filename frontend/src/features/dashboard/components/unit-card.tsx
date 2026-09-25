@@ -100,7 +100,9 @@ export function UnitCard({ unit, job }: UnitCardProps) {
         >
           {unit.status === "perbaikan"
             ? unit.catatan || "Sedang diperbaiki"
-            : "Tidak ada job aktif"}
+            : unit.status === "breakdown"
+              ? "Insiden belum ditangani"
+              : "Tidak ada job aktif"}
         </div>
       )}
     </Link>
