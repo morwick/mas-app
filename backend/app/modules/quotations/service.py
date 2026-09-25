@@ -39,7 +39,7 @@ ITEM_SELECT = """
 """
 
 # Penawaran yang sudah `deal` dikunci: job (dan invoice) menggantungkan harga ke sana.
-EDITABLE_STATUSES: tuple[QuotationStatus, ...] = ("draft", "terkirim", "ditolak", "kedaluwarsa")
+EDITABLE_STATUSES: tuple[QuotationStatus, ...] = ("draft",)
 
 
 def derive_status(stored: str, berlaku_sampai: str | None) -> QuotationStatus:
@@ -105,6 +105,10 @@ def _validate(payload: QuotationInput) -> None:
         raise ValidationError("Tanggal surat wajib diisi")
     if not payload.kota_terbit.strip():
         raise ValidationError("Kota penerbitan wajib diisi")
+    if not payload.berlaku_sampai:
+        raise ValidationError("Surat berlaku sampai wajib diisi")
+    elif payload.berlaku_sampai <= payload.tanggal:
+        raise ValidationError("Surat berlaku sampai harus setelah tanggal surat")
     if not payload.perihal.strip():
         raise ValidationError("Perihal wajib diisi")
     if not payload.items:
@@ -297,7 +301,8 @@ class QuotationService:
             raise NotFoundError("Penawaran tidak ditemukan")
         if existing["status_penawaran"] not in EDITABLE_STATUSES:
             raise ValidationError(
-                "Penawaran yang sudah deal tidak bisa diubah. Batalkan status deal-nya dulu bila memang perlu direvisi."
+                "Penawaran yang sudah terkirim tidak bisa diubah. "
+                "Hanya penawaran berstatus draft yang bisa diedit — buka kembali dulu bila statusnya sudah ditolak."
             )
 
         # Rincian diganti utuh (baris bisa ditambah/dihapus/diurutkan bebas di
@@ -332,4 +337,13 @@ class QuotationService:
         await self._db.table("quotations").update(data).eq("id", quotation_id).execute()
 
     async def delete(self, quotation_id: str) -> None:
+        existing = single(
+            await self._db.table("quotations")
+            .select("status_penawaran")
+            .eq("id", quotation_id)
+            .maybe_single()
+            .execute()
+        )
+        if existing is not None and existing["status_penawaran"] not in EDITABLE_STATUSES:
+            raise ValidationError("Penawaran yang sudah terkirim tidak bisa dihapus. Hanya penawaran berstatus draft yang bisa dihapus.")
         await self._db.table("quotations").update({STATUS: DIHAPUS}).eq("id", quotation_id).execute()

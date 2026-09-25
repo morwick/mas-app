@@ -8,7 +8,8 @@ import {
   isNavGroup,
   navTree,
   visibleNavTree,
-  type NavItem
+  type NavItem,
+  type UserRoleLike
 } from "./nav-items";
 
 interface SidebarProps {
@@ -16,7 +17,7 @@ interface SidebarProps {
     nama: string;
     email: string;
     initials: string;
-    role?: "superadmin" | "operator";
+    role?: UserRoleLike;
   } | null;
   counts?: {
     units?: number;

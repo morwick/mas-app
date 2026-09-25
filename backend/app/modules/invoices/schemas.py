@@ -26,6 +26,11 @@ class InvoiceItem(BaseModel):
     satuan: str
     harga_satuan: float
     subtotal: float
+    # Ringkasan saja (untuk konteks di rincian tagihan) — None/kosong untuk
+    # baris tanpa job atau job yang belum punya transaksi/foto surat jalan.
+    uang_jalan_pagu: float | None = None
+    uang_jalan_cair: float | None = None
+    surat_jalan_urls: list[str] = []
 
 
 class InvoicePayment(BaseModel):
@@ -86,6 +91,10 @@ class InvoiceBase(BaseModel):
 
 
 class Invoice(InvoiceBase):
+    # Hanya di detail — tidak perlu di list, dan URL-nya bertanda tangan
+    # sementara (bucket privat) jadi tidak masuk akal disimpan di baris list.
+    faktur_pajak_uploaded_at: str | None = None
+    faktur_pajak_url: str | None = None
     items: list[InvoiceItem] = Field(default_factory=list)
     payments: list[InvoicePayment] = Field(default_factory=list)
 
@@ -152,6 +161,19 @@ class JobBelumDitagihRow(BaseModel):
     alat_diangkut: str
     etd: str
     completed_at: str | None
+    # Ringkas saja — dipakai untuk konteks di layar pilih job, bukan rincian.
+    uang_jalan_pagu: float
+    uang_jalan_cair: float
+    surat_jalan_urls: list[str] = []
+
+
+class FinanceDashboardSummary(BaseModel):
+    tagihan_belum_lunas_jumlah: int
+    tagihan_belum_lunas_nominal: float
+    tagihan_jatuh_tempo_jumlah: int
+    tagihan_jatuh_tempo_nominal: float
+    invoice_belum_faktur_pajak_jumlah: int
+    pembayaran_bulan_ini_nominal: float
 
 
 class PiutangSummaryRow(BaseModel):

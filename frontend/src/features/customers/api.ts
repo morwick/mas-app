@@ -25,6 +25,9 @@ export const getCustomer = (id: string) => api.get<Customer>(`/customers/${id}`)
 
 export const customerJobCounts = () => api.get<Record<string, number>>("/customers/job-counts");
 
+export const customerQuotationCounts = () =>
+  api.get<Record<string, number>>("/customers/quotation-counts");
+
 export function createCustomer(input: CustomerInput): Promise<ActionResult<Customer>> {
   return mutate(api.post<Customer>("/customers", input));
 }

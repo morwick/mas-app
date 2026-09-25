@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     job_photos_bucket: str = "job-photos"
     incident_photos_bucket: str = "incident-photos"
     bukti_transfer_bucket: str = "bukti-transfer"
+    faktur_pajak_bucket: str = "faktur-pajak"
+    bukti_penjualan_bucket: str = "bukti-penjualan"
 
     environment: str = Field(default="development")
 

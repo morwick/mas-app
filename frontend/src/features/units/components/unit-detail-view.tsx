@@ -25,6 +25,7 @@ import { IncidentDetailModal } from "@/features/units/components/incident-detail
 import { ServiceHistoryTab } from "@/features/services/components/service-history-tab";
 import { deriveServiceStatus } from "@/lib/service";
 import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/lib/auth/AuthContext";
 import {
   changeUnitStatus,
   deactivateUnit
@@ -64,6 +65,7 @@ export function UnitDetailView({
   const [searchParams] = useSearchParams();
   const toast = useToast();
   const navigate = useNavigate();
+  const { canManageOperational } = useAuth();
 
   const openIncidentCount = useMemo(
     () => incidents.filter((i) => i.status !== "resolved").length,
@@ -199,14 +201,16 @@ export function UnitDetailView({
                 <RotateCcw style={{ width: 14, height: 14 }} />
                 Ubah status
               </button>
-              <Link
-                to={`/units/${unit.id}/edit`}
-                className="btn btn-secondary btn-sm"
-                style={{ textDecoration: "none" }}
-              >
-                <Pencil style={{ width: 14, height: 14 }} />
-                Edit
-              </Link>
+              {canManageOperational && (
+                <Link
+                  to={`/units/${unit.id}/edit`}
+                  className="btn btn-secondary btn-sm"
+                  style={{ textDecoration: "none" }}
+                >
+                  <Pencil style={{ width: 14, height: 14 }} />
+                  Edit
+                </Link>
+              )}
             </div>
           </div>
 
@@ -513,14 +517,16 @@ export function UnitDetailView({
                       ? `${openIncidentCount} insiden belum selesai`
                       : "Tidak ada insiden terbuka"}
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => setIncidentFormOpen(true)}
-                  >
-                    <Plus style={{ width: 14, height: 14 }} />
-                    Catat insiden
-                  </button>
+                  {canManageOperational && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setIncidentFormOpen(true)}
+                    >
+                      <Plus style={{ width: 14, height: 14 }} />
+                      Catat insiden
+                    </button>
+                  )}
                 </div>
 
                 {incidents.length === 0 ? (
@@ -722,13 +728,15 @@ export function UnitDetailView({
           <div
             style={{ display: "flex", flexDirection: "column", gap: 8 }}
           >
-            <Link
-              to="/jobs/new"
-              className="btn btn-secondary"
-              style={{ justifyContent: "flex-start", textDecoration: "none" }}
-            >
-              <PackageCheck style={{ width: 16, height: 16 }} /> Assign ke job baru
-            </Link>
+            {canManageOperational && (
+              <Link
+                to="/jobs/new"
+                className="btn btn-secondary"
+                style={{ justifyContent: "flex-start", textDecoration: "none" }}
+              >
+                <PackageCheck style={{ width: 16, height: 16 }} /> Assign ke job baru
+              </Link>
+            )}
             <button
               type="button"
               className="btn btn-secondary"
@@ -736,7 +744,7 @@ export function UnitDetailView({
             >
               <Download style={{ width: 16, height: 16 }} /> Export riwayat
             </button>
-            {unit.is_active && (
+            {canManageOperational && unit.is_active && (
               <button
                 type="button"
                 className="btn btn-secondary"

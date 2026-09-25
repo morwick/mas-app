@@ -1,11 +1,19 @@
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useCustomers } from "@/features/customers/queries";
 import { InvoiceForm } from "../components/invoice-form";
 import { useInvoice, useJobsBelumDitagih, useNextInvoiceNumber } from "../queries";
 
+/** Dikirim navigasi dari tab "Job siap ditagih" di menu Tagihan. */
+interface NewInvoiceNavState {
+  customerId?: string;
+  jobIds?: string[];
+}
+
 export function NewInvoicePage() {
+  const location = useLocation();
+  const navState = (location.state as NewInvoiceNavState | null) ?? null;
   const user = useCurrentUser();
   const customers = useCustomers();
   const nextNumber = useNextInvoiceNumber();
@@ -19,6 +27,8 @@ export function NewInvoicePage() {
       nextNumber={nextNumber.data ?? ""}
       defaultTtdNama={user.nama}
       jobsPerCustomer={jobsPerCustomer.data ?? {}}
+      initialCustomerId={navState?.customerId}
+      initialJobIds={navState?.jobIds}
     />
   );
 }

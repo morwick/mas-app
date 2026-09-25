@@ -16,6 +16,9 @@ MAX_PHOTO_BYTES = 5 * 1024 * 1024
 ALLOWED_IMAGE_MIME = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 _EXT_BY_MIME = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp"}
 
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+_EXT_BY_DOCUMENT_MIME = {**_EXT_BY_MIME, "application/pdf": "pdf"}
+
 
 def validate_photo(content_type: str | None, size: int) -> str:
     """Kembalikan ekstensi file bila lolos; error bila terlalu besar / tipe salah."""
@@ -26,6 +29,17 @@ def validate_photo(content_type: str | None, size: int) -> str:
     if content_type not in ALLOWED_IMAGE_MIME:
         raise ValidationError("Format foto harus JPG, PNG, atau WEBP")
     return _EXT_BY_MIME[content_type]
+
+
+def validate_document(content_type: str | None, size: int) -> str:
+    """Sama seperti `validate_photo()`, tapi juga menerima PDF (mis. faktur pajak)."""
+    if size <= 0:
+        raise ValidationError("File kosong")
+    if size > MAX_DOCUMENT_BYTES:
+        raise ValidationError("Ukuran file melebihi 10 MB")
+    if content_type not in _EXT_BY_DOCUMENT_MIME:
+        raise ValidationError("Format file harus PDF, JPG, PNG, atau WEBP")
+    return _EXT_BY_DOCUMENT_MIME[content_type]
 
 
 def unique_object_name(ext: str) -> str:

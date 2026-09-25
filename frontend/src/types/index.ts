@@ -528,6 +528,10 @@ export interface InvoiceItem {
   harga_satuan: number;
   /** Dihitung database (qty x harga_satuan), tidak pernah dikirim client. */
   subtotal: number;
+  /** Ringkasan saja — kosong/null untuk baris tanpa job atau job tanpa data ini. */
+  uang_jalan_pagu?: number | null;
+  uang_jalan_cair?: number | null;
+  surat_jalan_urls?: string[];
 }
 
 export interface InvoicePayment {
@@ -596,6 +600,10 @@ export interface Invoice {
   created_at: string;
   updated_at: string;
 
+  /** Hanya terisi di detail (bukan list) — URL bertanda tangan, berlaku sementara. */
+  faktur_pajak_uploaded_at?: string | null;
+  faktur_pajak_url?: string | null;
+
   items: InvoiceItem[];
   payments: InvoicePayment[];
 }
@@ -638,7 +646,7 @@ export interface JobProfitabilityRow {
 // Pengguna & sesi
 // ---------------------------------------------------------------------------
 
-export type UserRole = "superadmin" | "operator";
+export type UserRole = "superadmin" | "operator" | "finance" | "admin";
 
 export interface CurrentUser {
   id: string;
@@ -725,6 +733,10 @@ export interface JobBelumDitagihRow {
   alat_diangkut: string;
   etd: string;
   completed_at: string | null;
+  /** Ringkasan saja — untuk konteks saat memilih job, bukan rincian transaksi. */
+  uang_jalan_pagu: number;
+  uang_jalan_cair: number;
+  surat_jalan_urls: string[];
 }
 
 export interface UangJalanJobRow {

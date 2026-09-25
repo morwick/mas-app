@@ -6,6 +6,7 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useDriverAuth } from "@/lib/auth/DriverAuthContext";
+import type { UserRole } from "@/types";
 
 export function RequireAuth() {
   const { session, perluPilihRole } = useAuth();
@@ -21,6 +22,14 @@ export function RequireAuth() {
 export function RequireSuperadmin() {
   const { isSuperadmin } = useAuth();
   if (!isSuperadmin) return <Navigate to="/dashboard" replace />;
+  return <Outlet />;
+}
+
+/** Menu yang hanya boleh dilihat sebagian role (mis. Piutang: superadmin & finance). */
+export function RequireRole({ roles }: { roles: UserRole[] }) {
+  const { session } = useAuth();
+  const role = session?.user.role;
+  if (!role || !roles.includes(role)) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
 

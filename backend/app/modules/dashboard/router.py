@@ -6,13 +6,15 @@ import asyncio
 
 from fastapi import APIRouter, Depends
 from postgrest.types import CountMethod
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import AsyncClient
 
-from app.core.auth import user_client
-from app.core.pg import rows
+from app.core.auth import superadmin_or_finance_client, user_client
+from app.core.pg import first, rows
 from app.core.soft_delete import AKTIF
 from app.modules.drivers.service import DriverService
+from app.modules.invoices.schemas import FinanceDashboardSummary
+from app.modules.invoices.service import InvoiceService
 from app.modules.jobs.service import JobService
 from app.modules.units.schemas import BUKAN_ARMADA, Unit, UnitStatusCounts
 from app.modules.units.service import UnitService
@@ -41,45 +43,57 @@ class DashboardActiveJobByUnit(BaseModel):
     job: DashboardActiveJob
 
 
+class JobBelumKonfirmasi(BaseModel):
+    id: str
+    job_number: str
+    customer_nama: str
+    driver_nama: str
+
+
 class DashboardResponse(BaseModel):
     units: list[Unit]
     counts: UnitStatusCounts
     active_jobs: list[DashboardActiveJobByUnit]
     jobs_menunggu_validasi: int = 0
     uang_jalan_diajukan: int = 0
-    # Job sudah ditugaskan/diterima driver tapi belum ada pencairan berbukti
-    # transfer — tahap muat driver terkunci (BR-02) sampai admin mentransfer.
-    uang_jalan_belum_transfer: int = 0
+    # Job sudah ditugaskan tapi drivernya belum menekan Terima — admin perlu
+    # follow up drivernya supaya job tidak macet dari awal. List (bukan cuma
+    # jumlah) supaya dashboard bisa menunjuk job & driver mana yang dimaksud.
+    job_belum_konfirmasi: list[JobBelumKonfirmasi] = Field(default_factory=list)
+    # Job sudah selesai & tervalidasi tapi belum masuk tagihan mana pun
+    # (sama seperti tab "Job siap ditagih" di menu Tagihan).
+    jobs_belum_invoice: int = 0
 
 
-# Job yang belum mulai muat: driver hanya bisa lanjut ke loading setelah ada
-# pencairan uang jalan dengan bukti transfer.
-_BELUM_MUAT = ["ditugaskan", "diterima"]
-
-
-async def _count_belum_transfer(client: AsyncClient) -> int:
-    """Job sebelum muat yang belum punya pencairan berbukti transfer.
-
-    Job yang sudah punya pengajuan driver berstatus `diajukan` tidak dihitung
-    di sini — job itu sudah muncul di hitungan pengajuan, jangan dobel.
-    """
+async def _jobs_belum_konfirmasi(client: AsyncClient) -> list[JobBelumKonfirmasi]:
+    """Job berstatus 'ditugaskan' — driver belum menekan Terima Job."""
     res = await (
         client.table("jobs")
-        .select("id, uang_jalan(jenis, bukti_transfer_path), uang_jalan_requests(status_pengajuan)")
-        .in_("status_job", _BELUM_MUAT)
-        .eq("uang_jalan.status", AKTIF)
-        .eq("uang_jalan_requests.status", AKTIF)
+        .select("id, job_number, customer:customers(nama_perusahaan), driver:drivers(nama)")
+        .eq("status_job", "ditugaskan")
         .execute()
     )
-    jumlah = 0
-    for job in rows(res):
-        ada_bukti = any(
-            u.get("jenis") == "pencairan" and u.get("bukti_transfer_path") for u in job.get("uang_jalan") or []
+    return [
+        JobBelumKonfirmasi(
+            id=job["id"],
+            job_number=job["job_number"],
+            customer_nama=(first(job.get("customer")) or {}).get("nama_perusahaan") or "—",
+            driver_nama=(first(job.get("driver")) or {}).get("nama") or "—",
         )
-        ada_pengajuan = any(r.get("status_pengajuan") == "diajukan" for r in job.get("uang_jalan_requests") or [])
-        if not ada_bukti and not ada_pengajuan:
-            jumlah += 1
-    return jumlah
+        for job in rows(res)
+    ]
+
+
+async def _count_jobs_belum_invoice(client: AsyncClient) -> int:
+    per_customer = await InvoiceService(client).jobs_belum_ditagih()
+    return sum(len(v) for v in per_customer.values())
+
+
+async def _safe_list(coro: object) -> list:
+    try:
+        return await coro  # type: ignore[return-value,misc]
+    except Exception:  # noqa: BLE001 — dashboard tidak boleh gagal karena satu hitungan
+        return []
 
 
 async def _count_pending_requests(client: AsyncClient) -> int:
@@ -122,14 +136,15 @@ async def layout_counts(client: AsyncClient = Depends(user_client)) -> LayoutCou
 @router.get("/dashboard", response_model=DashboardResponse)
 async def dashboard(client: AsyncClient = Depends(user_client)) -> DashboardResponse:
     unit_svc = UnitService(client)
-    units, counts, active_jobs, drivers, validasi, pengajuan, belum_transfer = await asyncio.gather(
+    units, counts, active_jobs, drivers, validasi, pengajuan, belum_konfirmasi, belum_invoice = await asyncio.gather(
         unit_svc.list_all(),
         unit_svc.status_counts(),
         JobService(client).active_by_unit(),
         DriverService(client).list_all(),
         _safe_count(JobService(client).count_by_status("menunggu_validasi")),
         _safe_count(_count_pending_requests(client)),
-        _safe_count(_count_belum_transfer(client)),
+        _safe_list(_jobs_belum_konfirmasi(client)),
+        _safe_count(_count_jobs_belum_invoice(client)),
     )
     driver_names = {d.id: d.nama for d in drivers}
     return DashboardResponse(
@@ -151,5 +166,13 @@ async def dashboard(client: AsyncClient = Depends(user_client)) -> DashboardResp
         ],
         jobs_menunggu_validasi=validasi,
         uang_jalan_diajukan=pengajuan,
-        uang_jalan_belum_transfer=belum_transfer,
+        job_belum_konfirmasi=belum_konfirmasi,
+        jobs_belum_invoice=belum_invoice,
     )
+
+
+@router.get("/dashboard/finance", response_model=FinanceDashboardSummary)
+async def dashboard_finance(
+    client: AsyncClient = Depends(superadmin_or_finance_client),
+) -> FinanceDashboardSummary:
+    return await InvoiceService(client).finance_dashboard_summary()

@@ -43,7 +43,7 @@ describe("susunan menu", () => {
     expect(jenis.href.startsWith("/settings")).toBe(false);
   });
 
-  it("Monitoring berisi tujuh submenu sesuai urutan", () => {
+  it("Monitoring berisi delapan submenu sesuai urutan", () => {
     expect(group("monitoring").items.map((i) => i.label)).toEqual([
       "Penawaran",
       "Job",
@@ -51,8 +51,14 @@ describe("susunan menu", () => {
       "Uang Jalan",
       "Service",
       "Tagihan",
-      "Piutang"
+      "Piutang",
+      "Penjualan Unit"
     ]);
+  });
+
+  it("Penjualan Unit hanya untuk superadmin", () => {
+    const item = group("monitoring").items.find((i) => i.href === "/penjualan-unit");
+    expect(item?.roles).toEqual(["superadmin"]);
   });
 
   it("Profil di luar pohon — dibuka dari menu profil di top bar", () => {
@@ -66,16 +72,18 @@ describe("susunan menu", () => {
     for (const item of navItems) expect(item.href.startsWith("/settings")).toBe(false);
   });
 
-  it("Pengguna pindah ke Master dan tetap superadmin-only", () => {
+  it("Pengguna & Karyawan tetap superadmin-only (admin tidak dapat)", () => {
     const pengguna = group("master").items.find((i) => i.label === "Pengguna");
     expect(pengguna?.href).toBe("/pengguna");
-    expect(pengguna?.superadminOnly).toBe(true);
-  });
-
-  it("Karyawan di Master, superadmin-only", () => {
+    expect(pengguna?.roles).toEqual(["superadmin"]);
     const karyawan = group("master").items.find((i) => i.label === "Karyawan");
     expect(karyawan?.href).toBe("/karyawan");
-    expect(karyawan?.superadminOnly).toBe(true);
+    expect(karyawan?.roles).toEqual(["superadmin"]);
+  });
+
+  it("Jenis Unit terbuka untuk superadmin & admin", () => {
+    const jenis = group("master").items.find((i) => i.label === "Jenis Unit");
+    expect(jenis?.roles).toEqual(["superadmin", "admin"]);
   });
 
   it("tidak ada href ganda", () => {
@@ -101,38 +109,80 @@ describe("visibleNavTree", () => {
     ]);
   });
 
-  it("Log Sistem hanya untuk superadmin", () => {
+  it("Log Sistem & Tagihan/Piutang untuk superadmin & finance saja", () => {
     const log = navTree.find((e) => !isNavGroup(e) && e.href === "/log-sistem");
-    expect(log && !isNavGroup(log) && log.superadminOnly).toBe(true);
-    expect(visibleNavTree(navTree, "superadmin").map((e) => e.label)).toContain("Log Sistem");
+    expect(log && !isNavGroup(log) ? log.roles : []).toEqual(["superadmin", "finance"]);
+    expect(visibleNavTree(navTree, "finance").map((e) => e.label)).toContain("Log Sistem");
+    expect(visibleNavTree(navTree, "operator").map((e) => e.label)).not.toContain("Log Sistem");
+    expect(visibleNavTree(navTree, "admin").map((e) => e.label)).not.toContain("Log Sistem");
   });
 
-  it("operator kehilangan Laporan dan submenu superadmin-only", () => {
+  it("Laporan terbuka untuk semua role (isi kartunya disaring di halaman)", () => {
+    for (const role of ["superadmin", "admin", "operator", "finance"] as const) {
+      expect(visibleNavTree(navTree, role).map((e) => e.label)).toContain("Laporan");
+    }
+  });
+
+  it("operator: Dashboard, Unit/Unit Trailer/Driver, Pantau/Uang Jalan/Service, Laporan, Notifikasi saja", () => {
     const tree = visibleNavTree(navTree, "operator");
-    // Notifikasi terbuka untuk semua role; Laporan & Log Sistem superadmin-only.
     expect(tree.map((e) => e.label)).toEqual([
       "Dashboard",
       "Master",
       "Monitoring",
+      "Laporan",
       "Notifikasi"
     ]);
     const master = tree.find((e) => isNavGroup(e) && e.key === "master");
-    // Jenis Unit superadmin-only. Unit Trailer terlihat (hanya baca) seperti Unit.
     expect(master && isNavGroup(master) ? master.items.map((i) => i.label) : []).toEqual([
+      "Unit",
+      "Unit Trailer",
+      "Driver"
+    ]);
+    const monitoring = tree.find((e) => isNavGroup(e) && e.key === "monitoring");
+    expect(monitoring && isNavGroup(monitoring) ? monitoring.items.map((i) => i.label) : []).toEqual([
+      "Pantau",
+      "Uang Jalan",
+      "Service"
+    ]);
+  });
+
+  it("admin: master data + operasional penuh (Job, Penawaran, Jenis Unit, Customer), tanpa Tagihan/Piutang/Log Sistem", () => {
+    const tree = visibleNavTree(navTree, "admin");
+    expect(tree.map((e) => e.label)).toEqual(["Dashboard", "Master", "Monitoring", "Laporan", "Notifikasi"]);
+    const master = tree.find((e) => isNavGroup(e) && e.key === "master");
+    expect(master && isNavGroup(master) ? master.items.map((i) => i.label) : []).toEqual([
+      "Jenis Unit",
       "Unit",
       "Unit Trailer",
       "Driver",
       "Customer"
     ]);
-    // Pengguna & Jenis Unit keduanya superadmin-only.
-    expect(master && isNavGroup(master) ? master.items.map((i) => i.href) : []).not.toContain("/pengguna");
     const monitoring = tree.find((e) => isNavGroup(e) && e.key === "monitoring");
     expect(monitoring && isNavGroup(monitoring) ? monitoring.items.map((i) => i.label) : []).toEqual([
       "Penawaran",
       "Job",
       "Pantau",
       "Uang Jalan",
-      "Tagihan"
+      "Service"
+    ]);
+  });
+
+  it("finance: Dashboard, Customer, Tagihan/Piutang, Laporan, Log Sistem, Notifikasi saja", () => {
+    const tree = visibleNavTree(navTree, "finance");
+    expect(tree.map((e) => e.label)).toEqual([
+      "Dashboard",
+      "Master",
+      "Monitoring",
+      "Laporan",
+      "Log Sistem",
+      "Notifikasi"
+    ]);
+    const master = tree.find((e) => isNavGroup(e) && e.key === "master");
+    expect(master && isNavGroup(master) ? master.items.map((i) => i.label) : []).toEqual(["Customer"]);
+    const monitoring = tree.find((e) => isNavGroup(e) && e.key === "monitoring");
+    expect(monitoring && isNavGroup(monitoring) ? monitoring.items.map((i) => i.label) : []).toEqual([
+      "Tagihan",
+      "Piutang"
     ]);
   });
 

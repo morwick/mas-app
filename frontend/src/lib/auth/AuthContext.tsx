@@ -21,6 +21,8 @@ interface AuthApi {
   session: AdminSession | null;
   user: CurrentUser | null;
   isSuperadmin: boolean;
+  /** superadmin atau admin — role yang boleh tambah/ubah/hapus data operasional. */
+  canManageOperational: boolean;
   login: (email: string, password: string) => Promise<CurrentUser>;
   logout: () => Promise<void>;
   /** Muat ulang profil (setelah ganti nama, dsb). */
@@ -136,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user: session?.user ?? null,
       isSuperadmin: session?.user.role === "superadmin",
+      canManageOperational: session?.user.role === "superadmin" || session?.user.role === "admin",
       login,
       logout,
       refreshUser,

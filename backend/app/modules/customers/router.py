@@ -39,6 +39,11 @@ async def job_counts(svc: CustomerService = Depends(get_service)) -> dict[str, i
     return await svc.job_counts()
 
 
+@router.get("/quotation-counts", response_model=dict[str, int])
+async def quotation_counts(svc: CustomerService = Depends(get_service)) -> dict[str, int]:
+    return await svc.quotation_counts()
+
+
 @router.get("/{customer_id}", response_model=Customer)
 async def get_customer(customer_id: str, svc: CustomerService = Depends(get_service)) -> Customer:
     return await svc.get(customer_id)

@@ -259,6 +259,10 @@ class UnitService:
             raise
 
     async def change_status(self, unit_id: str, payload: ChangeStatusRequest) -> None:
+        # "Terjual" wajib lewat menu Penjualan supaya data pembeli & harganya
+        # ikut tercatat — bukan sekadar ganti status tanpa jejak transaksi.
+        if payload.status == "terjual":
+            raise ValidationError("Tandai unit terjual lewat menu Penjualan Unit, bukan di sini.")
         # Satu transaksi: log riwayat dibuat trigger DB, alasannya dititipkan
         # lewat `app.status_note` sehingga tersimpan bersama baris riwayatnya.
         tx = Transaksi(self._db)

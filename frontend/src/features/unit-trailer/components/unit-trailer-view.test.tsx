@@ -12,7 +12,7 @@ import { UnitTrailerView } from "@/features/unit-trailer/components/unit-trailer
 
 let superadmin = true;
 vi.mock("@/lib/auth/AuthContext", () => ({
-  useAuth: () => ({ isSuperadmin: superadmin })
+  useAuth: () => ({ canManageOperational: superadmin })
 }));
 
 const TRAILER = {
@@ -166,10 +166,10 @@ describe("UnitTrailerView", () => {
     expect(panggilan.some((p) => p.method === "POST" && p.url.pathname.endsWith("/unit-trailer"))).toBe(false);
   });
 
-  it("pilihan status hanya Standby dan Perbaikan", async () => {
+  it("filter status bisa menyaring Terjual", async () => {
     renderView();
     await screen.findAllByText("TR-01");
     const opsi = Array.from(screen.getByLabelText("Filter status").querySelectorAll("option")).map((o) => o.textContent);
-    expect(opsi).toEqual(["Semua status", "Standby", "Perbaikan"]);
+    expect(opsi).toEqual(["Semua status", "Standby", "Perbaikan", "Terjual"]);
   });
 });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -10,7 +10,8 @@ import {
   Printer,
   Send,
   Trash2,
-  Undo2
+  Undo2,
+  Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
@@ -18,10 +19,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
+import { InfoUangJalanSurat } from "./info-uang-jalan-surat";
 import {
   addInvoicePayment,
   deleteInvoicePayment,
-  setInvoiceStatus
+  setInvoiceStatus,
+  uploadFakturPajak
 } from "@/features/invoices/api";
 import type { Invoice, SumberDana } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
@@ -60,6 +63,8 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
     catatan: ""
   });
   const [bayarOpen, setBayarOpen] = useState(false);
+  const [uploadingFaktur, setUploadingFaktur] = useState(false);
+  const fakturInputRef = useRef<HTMLInputElement>(null);
 
   const bisaDiedit = inv.status === "draft" || inv.status === "terkirim";
 
@@ -119,6 +124,20 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
       return;
     }
     toast.success("Pembayaran dihapus");
+  }
+
+  async function onFileFakturPajak(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingFaktur(true);
+    const res = await uploadFakturPajak(inv.id, file);
+    setUploadingFaktur(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Faktur pajak diunggah");
   }
 
   return (
@@ -328,7 +347,7 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
               <tr>
                 <th style={{ width: 40 }}>No</th>
                 <th>Uraian</th>
-                <th style={{ width: 140 }}>Job</th>
+                <th style={{ width: 190 }}>Job</th>
                 <th style={{ width: 90 }}>Jumlah</th>
                 <th style={{ width: 140, textAlign: "right" }}>Harga</th>
                 <th style={{ width: 140, textAlign: "right" }}>Total</th>
@@ -350,17 +369,24 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
                   </td>
                   <td>
                     {it.job_id && it.job_number ? (
-                      <Link
-                        to={`/jobs/${it.job_id}`}
-                        className="mono"
-                        style={{
-                          fontSize: 11.5,
-                          color: "var(--brand-primary-dark)",
-                          textDecoration: "none"
-                        }}
-                      >
-                        {it.job_number}
-                      </Link>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <Link
+                          to={`/jobs/${it.job_id}`}
+                          className="mono"
+                          style={{
+                            fontSize: 11.5,
+                            color: "var(--brand-primary-dark)",
+                            textDecoration: "none"
+                          }}
+                        >
+                          {it.job_number}
+                        </Link>
+                        <InfoUangJalanSurat
+                          uangJalanPagu={it.uang_jalan_pagu}
+                          uangJalanCair={it.uang_jalan_cair}
+                          suratJalanUrls={it.surat_jalan_urls}
+                        />
+                      </div>
                     ) : (
                       <span className="muted" style={{ fontSize: 12 }}>
                         —
@@ -595,6 +621,47 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
           </div>
         )}
       </div>
+
+      {/* Faktur pajak — baru relevan setelah tagihan benar-benar dikirim. */}
+      {inv.status !== "draft" && (
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <p className="eyebrow">Faktur Pajak</p>
+              <p className="caption" style={{ color: "var(--text-tertiary)" }}>
+                {inv.faktur_pajak_uploaded_at
+                  ? `Diunggah ${formatDate(inv.faktur_pajak_uploaded_at.slice(0, 10))}`
+                  : "Belum diunggah"}
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {inv.faktur_pajak_url && (
+                <a href={inv.faktur_pajak_url} target="_blank" rel="noreferrer">
+                  <Button variant="secondary" size="sm" leftIcon={<FileText style={{ width: 14, height: 14 }} />}>
+                    Lihat faktur pajak
+                  </Button>
+                </a>
+              )}
+              <Button
+                size="sm"
+                variant={inv.faktur_pajak_url ? "secondary" : "primary"}
+                leftIcon={<Upload style={{ width: 14, height: 14 }} />}
+                loading={uploadingFaktur}
+                onClick={() => fakturInputRef.current?.click()}
+              >
+                {inv.faktur_pajak_url ? "Ganti file" : "Upload Faktur Pajak"}
+              </Button>
+              <input
+                ref={fakturInputRef}
+                type="file"
+                accept=".pdf,image/*"
+                hidden
+                onChange={onFileFakturPajak}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {inv.catatan && (
         <div className="card card-pad">

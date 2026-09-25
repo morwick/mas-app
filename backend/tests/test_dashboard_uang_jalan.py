@@ -1,10 +1,10 @@
-"""Dashboard: hitungan job yang uang jalannya belum ditransfer admin."""
+"""Dashboard: job yang belum dikonfirmasi driver, dan pengajuan uang jalan menunggu."""
 
 import asyncio
 from types import SimpleNamespace
 from typing import Any
 
-from app.modules.dashboard.router import _count_belum_transfer
+from app.modules.dashboard.router import _jobs_belum_konfirmasi
 
 
 class _FakeQuery:
@@ -35,37 +35,33 @@ class _FakeClient:
         return self.query
 
 
-def _hitung(jobs: list[dict[str, Any]]) -> tuple[int, _FakeClient]:
+def _job(id_: str, **kwargs: Any) -> dict[str, Any]:
+    return {
+        "id": id_,
+        "job_number": f"JOB-{id_}",
+        "customer": {"nama_perusahaan": "PT Contoh"},
+        "driver": {"nama": "Budi"},
+        **kwargs,
+    }
+
+
+def _cari(jobs: list[dict[str, Any]]) -> tuple[list[Any], _FakeClient]:
     client = _FakeClient(jobs)
-    return asyncio.run(_count_belum_transfer(client)), client  # type: ignore[arg-type]
+    return asyncio.run(_jobs_belum_konfirmasi(client)), client  # type: ignore[arg-type]
 
 
-def test_job_tanpa_pencairan_berbukti_dihitung() -> None:
-    n, _ = _hitung(
-        [
-            {"id": "a", "uang_jalan": [], "uang_jalan_requests": []},
-            # penambahan pagu bukan pencairan — driver tetap terkunci
-            {"id": "b", "uang_jalan": [{"jenis": "penambahan_pagu", "bukti_transfer_path": None}]},
-        ]
-    )
-    assert n == 2
+def test_job_ditugaskan_muncul_dengan_nama_customer_dan_driver() -> None:
+    hasil, _ = _cari([_job("a"), _job("b", driver={"nama": "Sari"})])
+    assert len(hasil) == 2
+    assert hasil[0].job_number == "JOB-a"
+    assert hasil[0].customer_nama == "PT Contoh"
+    assert hasil[0].driver_nama == "Budi"
+    assert hasil[1].driver_nama == "Sari"
 
 
-def test_job_sudah_ditransfer_tidak_dihitung() -> None:
-    n, _ = _hitung([{"id": "a", "uang_jalan": [{"jenis": "pencairan", "bukti_transfer_path": "a/bukti.jpg"}]}])
-    assert n == 0
-
-
-def test_job_dengan_pengajuan_menunggu_tidak_dihitung_dobel() -> None:
-    n, _ = _hitung([{"id": "a", "uang_jalan": [], "uang_jalan_requests": [{"status_pengajuan": "diajukan"}]}])
-    assert n == 0
-
-
-def test_hanya_job_sebelum_muat_dan_anak_aktif() -> None:
-    _, client = _hitung([])
-    assert ("status_job", ["ditugaskan", "diterima"]) in client.query.filters
-    assert ("uang_jalan.status", 1) in client.query.filters
-    assert ("uang_jalan_requests.status", 1) in client.query.filters
+def test_hanya_filter_status_ditugaskan() -> None:
+    _, client = _cari([])
+    assert ("status_job", "ditugaskan") in client.query.filters
 
 
 class _RekamQuery:

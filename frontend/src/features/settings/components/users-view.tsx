@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Banknote,
   KeyRound,
   Pencil,
   Plus,
@@ -35,7 +36,7 @@ interface Props {
   currentUserId: string;
 }
 
-type Role = "superadmin" | "operator";
+type Role = "superadmin" | "operator" | "finance" | "admin";
 
 type EditState = {
   user: UserRow;
@@ -88,10 +89,12 @@ function emailTaken(users: UserRow[], email: string, excludeId?: string) {
 
 const LABEL_ROLE: Record<Role, string> = {
   superadmin: "Super Administrator",
-  operator: "Operator"
+  operator: "Operator",
+  finance: "Finance",
+  admin: "Admin"
 };
 
-const ROLE_URUT: Role[] = ["superadmin", "operator"];
+const ROLE_URUT: Role[] = ["superadmin", "admin", "operator", "finance"];
 
 /**
  * Satu akun (email) boleh punya beberapa role, tapi karyawan + role yang sama
@@ -130,7 +133,9 @@ const LEPAS_SUPERADMIN_SENDIRI =
 
 const WARNA_ROLE: Record<Role, { bg: string; fg: string }> = {
   superadmin: { bg: "var(--brand-primary-light)", fg: "var(--brand-primary-dark)" },
-  operator: { bg: "#fff4e0", fg: "#8a5a00" }
+  operator: { bg: "#fff4e0", fg: "#8a5a00" },
+  finance: { bg: "#E6F0FF", fg: "#1E3A8A" },
+  admin: { bg: "#F3E8FF", fg: "#6B21A8" }
 };
 
 function punyaRole(u: UserRow, role: Role): boolean {
@@ -1009,11 +1014,25 @@ function RoleScopeFields({
             desc="Akses penuh, kelola pengguna"
           />
           <RoleButton
+            active={roles.includes("admin")}
+            onClick={() => onToggleRole("admin")}
+            icon={UserCog}
+            title="Admin"
+            desc="Kelola unit, driver, customer, job, laporan"
+          />
+          <RoleButton
             active={roles.includes("operator")}
             onClick={() => onToggleRole("operator")}
             icon={Shield}
             title="Operator"
-            desc="Edit & manage job sesuai scope"
+            desc="Lihat unit/driver/job, catat service"
+          />
+          <RoleButton
+            active={roles.includes("finance")}
+            onClick={() => onToggleRole("finance")}
+            icon={Banknote}
+            title="Finance"
+            desc="Kelola tagihan, faktur pajak, piutang"
           />
         </div>
       </Field>

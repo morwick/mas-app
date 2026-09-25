@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { customerJobCounts, getCustomer, listCustomers } from "./api";
+import { customerJobCounts, customerQuotationCounts, getCustomer, listCustomers } from "./api";
 
 export const customerKeys = {
   all: ["customers"] as const,
   list: (includeInactive: boolean) => ["customers", "list", includeInactive] as const,
   detail: (id: string) => ["customers", "detail", id] as const,
-  jobCounts: ["customers", "job-counts"] as const
+  jobCounts: ["customers", "job-counts"] as const,
+  quotationCounts: ["customers", "quotation-counts"] as const
 };
 
 export const useCustomers = (includeInactive = false) =>
@@ -16,3 +17,6 @@ export const useCustomer = (id: string | undefined) =>
 
 export const useCustomerJobCounts = () =>
   useQuery({ queryKey: customerKeys.jobCounts, queryFn: customerJobCounts });
+
+export const useCustomerQuotationCounts = () =>
+  useQuery({ queryKey: customerKeys.quotationCounts, queryFn: customerQuotationCounts });

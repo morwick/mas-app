@@ -1202,6 +1202,27 @@ body {
   font-weight: 600;
 }
 
+/* Bar aksi untuk seleksi datatable (mis. checkbox job di menu Tagihan).
+   `position: fixed` ke viewport — bukan `sticky` di dalam kolom konten —
+   supaya selalu terlihat berapa pun posisi scroll, dan di mobile diangkat
+   di atas bottom nav (bukan tertutup olehnya). */
+.selection-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+}
+@media (min-width: 1024px) {
+  .selection-bar {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+  }
+}
+
 /* ============================================
    Pencarian global di top bar
    ============================================ */

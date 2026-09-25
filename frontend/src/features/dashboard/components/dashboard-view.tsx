@@ -11,6 +11,7 @@ import {
 import { StatCard } from "@/features/dashboard/components/stat-card";
 import { UnitCard } from "@/features/dashboard/components/unit-card";
 import { Fab } from "@/components/layout/fab";
+import type { JobBelumKonfirmasi } from "@/features/dashboard/api";
 import type { Unit } from "@/types";
 
 type Filter = "semua" | "standby" | "bertugas" | "perbaikan";
@@ -33,8 +34,10 @@ interface Props {
   /** Antrean tindakan admin (alur v2): validasi job & pengajuan uang jalan. */
   jobsMenungguValidasi?: number;
   uangJalanDiajukan?: number;
-  /** Job yang driver-nya tertahan karena uang jalan belum ditransfer. */
-  uangJalanBelumTransfer?: number;
+  /** Job ditugaskan tapi drivernya belum menekan Terima Job — perlu di-follow up. */
+  jobBelumKonfirmasi?: JobBelumKonfirmasi[];
+  /** Job selesai & tervalidasi tapi belum masuk tagihan mana pun. */
+  jobsBelumInvoice?: number;
 }
 
 export function DashboardView({
@@ -43,7 +46,8 @@ export function DashboardView({
   activeJobs,
   jobsMenungguValidasi = 0,
   uangJalanDiajukan = 0,
-  uangJalanBelumTransfer = 0
+  jobBelumKonfirmasi = [],
+  jobsBelumInvoice = 0
 }: Props) {
   const [filter, setFilter] = useState<Filter>("semua");
   const total = counts.standby + counts.bertugas + counts.perbaikan;
@@ -106,7 +110,8 @@ export function DashboardView({
 
       {(jobsMenungguValidasi > 0 ||
         uangJalanDiajukan > 0 ||
-        uangJalanBelumTransfer > 0) && (
+        jobBelumKonfirmasi.length > 0 ||
+        jobsBelumInvoice > 0) && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {uangJalanDiajukan > 0 && (
             <ActionPanel
@@ -115,11 +120,20 @@ export function DashboardView({
               caption="Driver mengajukan uang jalan — cairkan & unggah bukti transfer."
             />
           )}
-          {uangJalanBelumTransfer > 0 && (
+          {/* Satu kartu saja (bukan satu per job). Umumnya cuma ada 1 job
+              dalam kondisi ini, jadi kartunya tertaut langsung ke job itu
+              (lewat Pantau, supaya tetap bisa dibuka operator yang cuma
+              lihat). Kalau kebetulan lebih dari satu, tetap 1 kartu tapi
+              tertaut ke yang pertama. */}
+          {jobBelumKonfirmasi.length > 0 && (
             <ActionPanel
-              to="/uang-jalan"
-              title={`${uangJalanBelumTransfer} job belum ditransfer uang jalan`}
-              caption="Belum ada bukti transfer — driver belum bisa mulai muat."
+              to={`/tracking/${jobBelumKonfirmasi[0].id}`}
+              title={`${jobBelumKonfirmasi.length} job belum dikonfirmasi oleh driver`}
+              caption={
+                jobBelumKonfirmasi.length === 1
+                  ? `Driver ${jobBelumKonfirmasi[0].driver_nama} (${jobBelumKonfirmasi[0].customer_nama}) belum menekan Terima Job — coba follow up.`
+                  : "Beberapa driver belum menekan Terima Job — coba follow up."
+              }
             />
           )}
           {jobsMenungguValidasi > 0 && (
@@ -127,6 +141,13 @@ export function DashboardView({
               to="/jobs"
               title={`${jobsMenungguValidasi} job menunggu validasi`}
               caption="Driver sudah menyelesaikan orderan — periksa foto & approve."
+            />
+          )}
+          {jobsBelumInvoice > 0 && (
+            <ActionPanel
+              to="/invoices"
+              title={`${jobsBelumInvoice} job belum dibuat invoice`}
+              caption="Job sudah selesai & tervalidasi tapi belum masuk tagihan mana pun."
             />
           )}
         </div>

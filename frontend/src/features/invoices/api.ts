@@ -103,3 +103,9 @@ export function deleteInvoicePayment(
 export function deleteInvoice(id: string): Promise<ActionResult<unknown>> {
   return mutate(api.delete(`/invoices/${id}`));
 }
+
+export function uploadFakturPajak(invoiceId: string, file: File): Promise<ActionResult<unknown>> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return mutate(api.upload(`/invoices/${invoiceId}/faktur-pajak`, form));
+}

@@ -48,6 +48,8 @@ import type { DriverJob, JobPhoto, JobStatus, PhotoSlot, PhotoStage } from "@/ty
 
 interface Props {
   job: DriverJob;
+  /** Tujuan tombol kembali. Kosong = sembunyikan tombol (dipakai inline di dashboard). */
+  backTo?: string;
 }
 
 /** Teks tombol maju per status saat ini. */
@@ -92,7 +94,7 @@ function photoBySlot(photos: JobPhoto[], stage: PhotoStage): Partial<Record<Phot
   return out;
 }
 
-export function DriverJobDetailView({ job }: Props) {
+export function DriverJobDetailView({ job, backTo }: Props) {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadingSlot, setUploadingSlot] = useState<string | null>(null);
@@ -195,9 +197,11 @@ export function DriverJobDetailView({ job }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <Link to="/driver/dashboard">
-          <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />} />
-        </Link>
+        {backTo && (
+          <Link to={backTo}>
+            <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />} />
+          </Link>
+        )}
         <div className="min-w-0">
           <h1 className="text-lg font-bold truncate">{job.job_number}</h1>
           <p className="text-sm text-text-muted truncate">{job.customer_nama}</p>

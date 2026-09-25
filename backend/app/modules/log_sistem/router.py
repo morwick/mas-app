@@ -1,4 +1,4 @@
-"""Log sistem (audit trail) — hanya super administrator.
+"""Log sistem (audit trail) — super administrator dan finance.
 
 Log ditulis database (migration 20260924000009); modul ini hanya membaca
 lewat fungsi `daftar_log_sistem` (migration 20260924000010) yang sudah
@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from supabase import AsyncClient
 
-from app.core.auth import superadmin_client
+from app.core.auth import superadmin_or_finance_client
 from app.core.errors import ValidationError
 from app.core.paging import Page, PageParams, page_params
 from app.core.pg import rows
@@ -42,7 +42,7 @@ async def daftar_log(
     karyawan_id: str | None = None,
     aksi: AksiLog | None = None,
     q: Annotated[str | None, Query(max_length=100)] = None,
-    client: AsyncClient = Depends(superadmin_client),
+    client: AsyncClient = Depends(superadmin_or_finance_client),
 ) -> Page[LogSistem]:
     if dari and sampai and dari > sampai:
         raise ValidationError("Tanggal awal tidak boleh setelah tanggal akhir")

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.auth import superadmin_client
+from app.core.auth import superadmin_or_finance_client
 from app.main import app
 
 
@@ -43,9 +43,9 @@ def db() -> Iterator[_FakeDb]:
     async def override() -> Any:
         yield fake
 
-    app.dependency_overrides[superadmin_client] = override
+    app.dependency_overrides[superadmin_or_finance_client] = override
     yield fake
-    app.dependency_overrides.pop(superadmin_client, None)
+    app.dependency_overrides.pop(superadmin_or_finance_client, None)
 
 
 def test_filter_dan_paging_diteruskan(client: TestClient, db: _FakeDb) -> None:

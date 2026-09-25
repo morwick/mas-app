@@ -93,7 +93,7 @@ class QuotationInput(BaseModel):
     pic_nama: str | None = None
     kota_terbit: str
     tanggal: str
-    berlaku_sampai: str | None = None
+    berlaku_sampai: str
     perihal: str
     objek: str | None = None
     lampiran: str | None = None

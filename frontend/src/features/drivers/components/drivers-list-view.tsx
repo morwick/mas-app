@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { Driver } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -25,6 +26,7 @@ function initials(nama: string) {
 }
 
 export function DriversListView({ drivers }: Props) {
+  const { canManageOperational } = useAuth();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "inactive">(
     "active"
@@ -70,13 +72,15 @@ export function DriversListView({ drivers }: Props) {
             leftIcon={<Search style={{ width: 15, height: 15 }} />}
           />
         </div>
-        <div className="toolbar-actions hidden lg:flex">
-          <Link to="/drivers/new">
-            <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
-              Tambah driver
-            </Button>
-          </Link>
-        </div>
+        {canManageOperational && (
+          <div className="toolbar-actions hidden lg:flex">
+            <Link to="/drivers/new">
+              <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+                Tambah driver
+              </Button>
+            </Link>
+          </div>
+        )}
       </div>
 
       <FilterChips
@@ -93,13 +97,17 @@ export function DriversListView({ drivers }: Props) {
         <EmptyState
           icon={UserRound}
           title="Belum ada driver"
-          description="Tambahkan driver pertama untuk mulai assign ke job."
+          description={
+            canManageOperational ? "Tambahkan driver pertama untuk mulai assign ke job." : undefined
+          }
           action={
-            <Link to="/drivers/new">
-              <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
-                Tambah driver
-              </Button>
-            </Link>
+            canManageOperational ? (
+              <Link to="/drivers/new">
+                <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+                  Tambah driver
+                </Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (
@@ -231,7 +239,7 @@ export function DriversListView({ drivers }: Props) {
 
       {filtered.length > 0 && <Pagination state={pg} label="driver" />}
 
-      <Fab href="/drivers/new" label="Tambah driver" />
+      {canManageOperational && <Fab href="/drivers/new" label="Tambah driver" />}
     </div>
   );
 }

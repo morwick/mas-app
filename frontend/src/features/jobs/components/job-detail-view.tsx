@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { queryClient } from "@/lib/api/query";
 import {
   AlertTriangle,
@@ -17,10 +17,10 @@ import {
   MessageCircle,
   Pencil,
   Printer,
-  RotateCw,
   Trash2,
   Truck,
-  X
+  X,
+  XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
@@ -34,10 +34,7 @@ import { PhotoSlots } from "@/features/jobs/components/photo-slots";
 import { ValidationPanel } from "@/features/jobs/components/validation-panel";
 import { GantiTrukModal, bolehGantiTruk } from "@/features/jobs/components/ganti-truk-modal";
 import { useRiwayatGantiTruk } from "@/features/jobs/queries";
-import {
-  cancelJob,
-  updateJobStatus
-} from "@/features/jobs/api";
+import { updateJobStatus } from "@/features/jobs/api";
 import { deleteJobPhoto } from "@/features/jobs/api";
 import type {
   Driver,
@@ -53,7 +50,7 @@ import type {
   Unit
 } from "@/types";
 import { UangJalanCard } from "@/features/uang-jalan/components/uang-jalan-card";
-import { formatDateTime, formatRupiah } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 
 interface Props {
   job: Job;
@@ -87,7 +84,6 @@ export function JobDetailView({
   uangJalanPengajuan = []
 }: Props) {
   const toast = useToast();
-  const navigate = useNavigate();
 
   const photos = job.photos ?? [];
   // Foto lama (sebelum v2) tanpa slot tetap ditampilkan sebagai arsip.
@@ -96,7 +92,6 @@ export function JobDetailView({
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState<{ stage: PhotoStage; slot: PhotoSlot | null } | null>(null);
-  const [cancelOpen, setCancelOpen] = useState(false);
   const [gantiTrukOpen, setGantiTrukOpen] = useState(false);
   const riwayatGantiTruk = useRiwayatGantiTruk(job.id);
   const [lightbox, setLightbox] = useState<{
@@ -128,18 +123,6 @@ export function JobDetailView({
     if (res.ok) {
       toast.success("Status diperbarui");
     } else toast.error(res.error);
-  }
-
-  async function onCancel() {
-    setPending(true);
-    const res = await cancelJob(job.id);
-    setPending(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success("Job dibatalkan");
-    navigate("/jobs");
   }
 
   async function onDeletePhoto() {
@@ -269,22 +252,6 @@ export function JobDetailView({
               <Pencil style={{ width: 14, height: 14 }} />
               Edit
             </Link>
-            {!closed && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                style={{ color: "#C13838", borderColor: "#F5C0C0" }}
-                onClick={() => setCancelOpen(true)}
-                disabled={uangJalanCair}
-                title={
-                  uangJalanCair
-                    ? `Uang jalan sudah dicairkan ${formatRupiah(job.uang_jalan_cair ?? 0)} — job tidak bisa dibatalkan lagi.`
-                    : undefined
-                }
-              >
-                Cancel job
-              </button>
-            )}
             {bolehGantiTruk(job) && (
               <button
                 type="button"
@@ -297,13 +264,17 @@ export function JobDetailView({
               </button>
             )}
             {!closed && (
+              // Label "Cancel Job" karena itu alasan utama admin membuka modal
+              // ini secara manual — maju status normalnya otomatis lewat app
+              // driver. Modalnya sendiri (UpdateStatusModal) yang menyaring
+              // opsi "Batalkan job" begitu uang jalan sudah cair.
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={() => setStatusOpen(true)}
               >
-                <RotateCw style={{ width: 14, height: 14 }} />
-                Update status
+                <XCircle style={{ width: 14, height: 14 }} />
+                Cancel Job
               </button>
             )}
           </div>
@@ -895,16 +866,6 @@ export function JobDetailView({
           onClose={() => setGantiTrukOpen(false)}
         />
       )}
-      <ConfirmDialog
-        open={cancelOpen}
-        onClose={() => setCancelOpen(false)}
-        title="Batalkan job ini?"
-        body="Status job akan menjadi Dibatalkan dan unit akan kembali Standby. Tindakan ini tidak bisa diundo."
-        confirmText="Ya, batalkan"
-        variant="danger"
-        loading={pending}
-        onConfirm={onCancel}
-      />
       <ConfirmDialog
         open={deletePhoto !== null}
         onClose={() => setDeletePhoto(null)}

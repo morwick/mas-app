@@ -7,7 +7,8 @@ import {
   navTree,
   profileItem,
   visibleNavTree,
-  type NavItem
+  type NavItem,
+  type UserRoleLike
 } from "./nav-items";
 import { Logo } from "./logo";
 
@@ -16,7 +17,7 @@ interface MobileDrawerProps {
     nama: string;
     email: string;
     initials: string;
-    role?: "superadmin" | "operator";
+    role?: UserRoleLike;
   } | null;
   counts?: {
     units?: number;

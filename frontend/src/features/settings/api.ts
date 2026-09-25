@@ -29,7 +29,7 @@ export function createUser(input: {
   karyawan_id: string;
   email: string;
   password: string;
-  roles: ("superadmin" | "operator")[];
+  roles: ("superadmin" | "operator" | "finance" | "admin")[];
   allowed_jenis_unit_ids: string[];
 }): Promise<ActionResult<UserRow>> {
   return mutate(api.post<UserRow>("/users", input));
@@ -48,7 +48,7 @@ export function updateUser(input: {
   user_id: string;
   karyawan_id: string;
   email: string;
-  roles: ("superadmin" | "operator")[];
+  roles: ("superadmin" | "operator" | "finance" | "admin")[];
   allowed_jenis_unit_ids: string[];
 }): Promise<ActionResult<unknown>> {
   const { user_id, ...body } = input;

@@ -12,12 +12,12 @@ import {
 import { TrackSolidEmbed } from "@/features/tracking/components/tracksolid-embed";
 import { EtaCard } from "@/features/tracking/components/eta-card";
 import { GpsHealthBadge } from "@/features/tracking/components/gps-health-badge";
-import { QuickStatusBar } from "@/features/tracking/components/quick-status-bar";
 import { AnomalyAlerts } from "@/features/tracking/components/anomaly-alerts";
 import { MapFullscreenButton } from "@/features/tracking/components/map-fullscreen-button";
 import { JobStepper } from "@/features/jobs/components/job-stepper";
 import { formatDateTime } from "@/lib/utils";
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from "@/lib/job-status";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { Job, JobStatus, Unit, Driver } from "@/types";
 
 const STATUS_LABEL: Record<JobStatus, string> = JOB_STATUS_LABEL;
@@ -31,6 +31,7 @@ interface Props {
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = JOB_STATUS_COLOR;
 
 export function AdminTrackingDetailView({ job, unit, driver }: Props) {
+  const { canManageOperational } = useAuth();
   const statusColor = STATUS_COLOR[job.status] ?? {
     bg: "var(--bg-muted)",
     fg: "var(--text-secondary)"
@@ -87,14 +88,16 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
           >
             {STATUS_LABEL[job.status]}
           </span>
-          <Link
-            to={`/jobs/${job.id}`}
-            className="btn btn-secondary"
-            style={{ textDecoration: "none" }}
-          >
-            Detail job
-            <ExternalLink style={{ width: 12, height: 12 }} />
-          </Link>
+          {canManageOperational && (
+            <Link
+              to={`/jobs/${job.id}`}
+              className="btn btn-secondary"
+              style={{ textDecoration: "none" }}
+            >
+              Detail job
+              <ExternalLink style={{ width: 12, height: 12 }} />
+            </Link>
+          )}
         </div>
       </div>
 
@@ -105,9 +108,6 @@ export function AdminTrackingDetailView({ job, unit, driver }: Props) {
       <div className="card card-pad">
         <JobStepper status={job.status} />
       </div>
-
-      {/* Quick status actions */}
-      <QuickStatusBar jobId={job.id} status={job.status} />
 
       {/* Map */}
       <MapFullscreenButton>

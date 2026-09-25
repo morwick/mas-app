@@ -75,7 +75,8 @@ function awal(trailer: UnitTrailer | null): FormState {
     jenisId: trailer?.jenis_unit_trailer_id ?? "",
     tahun: trailer?.tahun != null ? String(trailer.tahun) : "",
     kapasitas: trailer?.kapasitas_ton != null ? String(trailer.kapasitas_ton) : "",
-    status: trailer?.status ?? "standby"
+    // Trailer terjual tidak bisa diedit (tombolnya disembunyikan).
+    status: trailer && trailer.status !== "terjual" ? trailer.status : "standby"
   };
 }
 

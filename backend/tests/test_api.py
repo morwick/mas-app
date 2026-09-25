@@ -55,18 +55,26 @@ def test_build_current_user_roles() -> None:
 
 
 def test_role_resolution_is_fail_safe() -> None:
-    """Hanya 'superadmin' yang memberi hak penuh — sisanya jadi operator.
+    """Hanya 'superadmin' yang memberi hak penuh — role tak dikenal jadi operator.
 
     Termasuk 'owner' yang belum ikut migrasi: kalau ini lolos jadi superadmin,
     backend memberi akses yang justru ditolak RLS di database.
     """
-    for role in ("owner", "admin", "", None):
+    for role in ("owner", "", None):
         user = build_current_user(user_id="9", email="x@b.id", profile={"nama": "X", "role": role})
         assert user.role == "operator", f"role {role!r} tidak boleh jadi superadmin"
         assert not user.is_superadmin
 
     no_profile = build_current_user(user_id="3", email="siapa@b.id", profile=None)
     assert no_profile.nama == "siapa" and no_profile.role == "operator"
+
+
+def test_admin_dan_finance_adalah_role_sah() -> None:
+    """'admin' dan 'finance' role sah — bukan fallback operator, bukan superadmin."""
+    for role in ("admin", "finance"):
+        user = build_current_user(user_id="9", email="x@b.id", profile={"nama": "X", "role": role})
+        assert user.role == role
+        assert not user.is_superadmin
 
 
 def test_build_current_user_multi_role_memakai_role_aktif() -> None:
