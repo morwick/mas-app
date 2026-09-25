@@ -4,9 +4,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+# breakdown: ada insiden yang belum ditangani (migration 20260925000006).
 # terjual / diafkirkan: unit keluar dari armada — tidak bisa dipakai job
 # (migration 20260924000028 & 000029).
-UnitStatus = Literal["standby", "bertugas", "perbaikan", "terjual", "diafkirkan"]
+UnitStatus = Literal["standby", "bertugas", "breakdown", "perbaikan", "terjual", "diafkirkan"]
 BUKAN_ARMADA: tuple[str, ...] = ("terjual", "diafkirkan")
 
 
@@ -98,6 +99,7 @@ class DriverAssignment(BaseModel):
 class UnitStatusCounts(BaseModel):
     standby: int = 0
     bertugas: int = 0
+    breakdown: int = 0
     perbaikan: int = 0
     terjual: int = 0
     diafkirkan: int = 0

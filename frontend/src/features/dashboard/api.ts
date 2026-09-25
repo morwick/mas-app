@@ -23,7 +23,7 @@ export interface JobBelumKonfirmasi {
 
 export interface DashboardData {
   units: Unit[];
-  counts: { standby: number; bertugas: number; perbaikan: number };
+  counts: { standby: number; bertugas: number; breakdown: number; perbaikan: number };
   active_jobs: DashboardActiveJob[];
   jobs_menunggu_validasi: number;
   uang_jalan_diajukan: number;

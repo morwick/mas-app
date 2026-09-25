@@ -5,20 +5,16 @@ import {
   CheckCircle2,
   MapPin,
   Receipt,
-  Trash2,
   Wrench
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Lightbox } from "@/components/ui/lightbox";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useToast } from "@/components/ui/toast";
 import {
-  deleteIncident,
-  resolveIncident,
-  setIncidentStatus
-} from "@/features/units/api";
+  IncidentActionButtons,
+  type IncidentAction
+} from "@/features/units/components/incident-actions";
 import {
   incidentStatusLabel,
   incidentTypeLabel,
@@ -30,6 +26,9 @@ interface Props {
   open: boolean;
   onClose: () => void;
   incident: Incident | null;
+  /** Tanpa ini modal hanya-baca (user tanpa hak kelola operasional). */
+  onAction?: (action: IncidentAction) => void;
+  onEdit?: () => void;
 }
 
 const tipeIconColor: Record<string, string> = {
@@ -48,12 +47,7 @@ const statusBadgeVariant: Record<
   resolved: "brand"
 };
 
-export function IncidentDetailModal({ open, onClose, incident }: Props) {
-  const toast = useToast();
-  const [resolveOpen, setResolveOpen] = useState(false);
-  const [setStandby, setSetStandby] = useState(true);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [pending, setPending] = useState(false);
+export function IncidentDetailModal({ open, onClose, incident, onAction, onEdit }: Props) {
   const [lightbox, setLightbox] = useState<{
     images: string[];
     index: number;
@@ -62,39 +56,6 @@ export function IncidentDetailModal({ open, onClose, incident }: Props) {
   if (!incident) return null;
 
   const photoUrls = incident.photos.map((p) => p.file_url);
-
-  async function startProgress() {
-    setPending(true);
-    const res = await setIncidentStatus(incident!.id, "in_progress");
-    setPending(false);
-    if (res.ok) {
-      toast.success("Insiden ditandai dalam penanganan");
-    } else toast.error(res.error);
-  }
-
-  async function doResolve() {
-    setPending(true);
-    const res = await resolveIncident(incident!.id, {
-      setUnitToStandby: setStandby
-    });
-    setPending(false);
-    setResolveOpen(false);
-    if (res.ok) {
-      toast.success("Insiden ditandai selesai");
-      onClose();
-    } else toast.error(res.error);
-  }
-
-  async function doDelete() {
-    setPending(true);
-    const res = await deleteIncident(incident!.id);
-    setPending(false);
-    setDeleteOpen(false);
-    if (res.ok) {
-      toast.success("Insiden dihapus");
-      onClose();
-    } else toast.error(res.error);
-  }
 
   return (
     <>
@@ -119,35 +80,14 @@ export function IncidentDetailModal({ open, onClose, incident }: Props) {
         maxWidth="max-w-[640px]"
         footer={
           <div className="flex items-center justify-between w-full flex-wrap gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDeleteOpen(true)}
-              disabled={pending}
-            >
-              <Trash2 className="w-3.5 h-3.5 mr-1" />
-              Hapus
+            {onAction && onEdit ? (
+              <IncidentActionButtons incident={incident} onAction={onAction} onEdit={onEdit} />
+            ) : (
+              <span />
+            )}
+            <Button variant="secondary" size="sm" onClick={onClose}>
+              Tutup
             </Button>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={onClose} disabled={pending}>
-                Tutup
-              </Button>
-              {incident.status === "open" && (
-                <Button onClick={startProgress} loading={pending}>
-                  Tandai dalam penanganan
-                </Button>
-              )}
-              {incident.status !== "resolved" && (
-                <Button
-                  variant={incident.status === "in_progress" ? "primary" : "secondary"}
-                  onClick={() => setResolveOpen(true)}
-                  leftIcon={<CheckCircle2 className="w-4 h-4" />}
-                  disabled={pending}
-                >
-                  Selesaikan
-                </Button>
-              )}
-            </div>
           </div>
         }
       >
@@ -226,48 +166,6 @@ export function IncidentDetailModal({ open, onClose, incident }: Props) {
           )}
         </div>
       </Modal>
-
-      <ConfirmDialog
-        open={resolveOpen}
-        onClose={() => setResolveOpen(false)}
-        title="Tandai insiden selesai?"
-        body={
-          <div className="space-y-3">
-            <p>
-              Status insiden akan berubah jadi <strong>Selesai</strong>. Tindakan
-              ini bisa di-revert dengan ubah status manual nanti.
-            </p>
-            <label className="flex items-start gap-2 text-[13px]">
-              <input
-                type="checkbox"
-                checked={setStandby}
-                onChange={(e) => setSetStandby(e.target.checked)}
-                className="w-4 h-4 mt-0.5 accent-brand"
-              />
-              <span>
-                Kembalikan unit{" "}
-                <strong>{incident.unit_kode ?? "ini"}</strong> ke status{" "}
-                <strong>Standby</strong> setelah ini
-              </span>
-            </label>
-          </div>
-        }
-        confirmText="Ya, selesaikan"
-        variant="primary"
-        loading={pending}
-        onConfirm={doResolve}
-      />
-
-      <ConfirmDialog
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        title="Hapus catatan insiden?"
-        body="Tindakan ini permanen. Semua foto bukti juga akan dihapus."
-        confirmText="Ya, hapus"
-        variant="danger"
-        loading={pending}
-        onConfirm={doDelete}
-      />
 
       <Lightbox
         open={lightbox !== null}

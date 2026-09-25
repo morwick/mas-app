@@ -10,7 +10,6 @@ from app.modules.incidents.schemas import (
     IncidentCreate,
     IncidentPhoto,
     IncidentUpdate,
-    ResolveIncidentRequest,
     SetIncidentStatusRequest,
 )
 from app.modules.incidents.service import IncidentService
@@ -55,12 +54,8 @@ async def set_status(
 
 
 @router.post("/{incident_id}/resolve", response_model=OkResponse)
-async def resolve(
-    incident_id: str,
-    payload: ResolveIncidentRequest,
-    svc: IncidentService = Depends(get_service),
-) -> OkResponse:
-    await svc.resolve(incident_id, set_unit_to_standby=payload.set_unit_to_standby)
+async def resolve(incident_id: str, svc: IncidentService = Depends(get_service)) -> OkResponse:
+    await svc.resolve(incident_id)
     return OkResponse()
 
 

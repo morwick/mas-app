@@ -143,7 +143,7 @@ class UnitService:
         counts = UnitStatusCounts()
         for r in rows(res):
             status = r.get("status_operasional")
-            if status in ("standby", "bertugas", "perbaikan", "terjual", "diafkirkan"):
+            if status in ("standby", "bertugas", "breakdown", "perbaikan", "terjual", "diafkirkan"):
                 setattr(counts, status, getattr(counts, status) + 1)
         return counts
 

@@ -44,6 +44,7 @@ interface Props {
 const STATUS_COLOR: Record<UnitStatus, string> = {
   standby: "#1C9600",
   bertugas: "#E48F00",
+  breakdown: "#C13838",
   perbaikan: "#6B7280",
   terjual: "#9CA3AF",
   diafkirkan: "#9CA3AF"
@@ -52,6 +53,7 @@ const STATUS_COLOR: Record<UnitStatus, string> = {
 const STATUS_LABEL: Record<UnitStatus, string> = {
   standby: "Standby",
   bertugas: "Bertugas",
+  breakdown: "Breakdown",
   perbaikan: "Perbaikan",
   terjual: "Terjual",
   diafkirkan: "Diafkirkan"
