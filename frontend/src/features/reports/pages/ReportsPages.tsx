@@ -2,17 +2,26 @@ import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { BarChart3, Users, ArrowRight, TrendingUp } from "lucide-react";
 import { PageError, PageLoading } from "@/components/ui/page-state";
+import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useCustomers } from "@/features/customers/queries";
 import { useDrivers } from "@/features/drivers/queries";
 import { useJobs } from "@/features/jobs/queries";
 import { useUnits } from "@/features/units/queries";
 import { useJobProfitability } from "@/features/invoices/queries";
+import type { UserRole } from "@/types";
 import { CustomerReportView } from "../components/customer-report-view";
 import { LabaView } from "../components/laba-view";
 import { UtilizationView } from "../components/utilization-view";
 import { useUtilizationReport } from "../queries";
 
-const items = [
+const items: {
+  href: string;
+  title: string;
+  description: string;
+  icon: typeof BarChart3;
+  /** Kosong = semua role login. Operator cuma dapat Utilisasi. */
+  roles?: UserRole[];
+}[] = [
   {
     href: "/reports/utilisasi",
     title: "Utilisasi armada",
@@ -24,17 +33,21 @@ const items = [
     href: "/reports/laba",
     title: "Laba per job",
     description: "Pendapatan dari tagihan dikurangi uang jalan dan biaya insiden, per job.",
-    icon: TrendingUp
+    icon: TrendingUp,
+    roles: ["superadmin", "admin", "finance"]
   },
   {
     href: "/reports/customers",
     title: "Riwayat per customer",
     description: "Daftar job per customer dengan detail alat, unit, driver, dan status akhir.",
-    icon: Users
+    icon: Users,
+    roles: ["superadmin", "admin", "finance"]
   }
 ];
 
 export function ReportsIndexPage() {
+  const user = useCurrentUser();
+  const visible = items.filter((it) => !it.roles || it.roles.includes(user.role));
   return (
     <div className="flex flex-col gap-4 max-w-[840px]">
       <div>
@@ -44,7 +57,7 @@ export function ReportsIndexPage() {
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {items.map((it) => (
+        {visible.map((it) => (
           <Link
             key={it.href}
             to={it.href}

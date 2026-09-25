@@ -177,18 +177,6 @@ export function SuratJalanView({
             </table>
           </section>
 
-          {/* Catatan */}
-          {job.catatan && (
-            <section className="mt-6">
-              <p className="text-[10px] uppercase tracking-wider text-text-subtle mb-2">
-                Catatan
-              </p>
-              <p className="text-[12px] whitespace-pre-wrap border border-border rounded px-3 py-2 bg-page/40">
-                {job.catatan}
-              </p>
-            </section>
-          )}
-
           {/* QR tracking link */}
           <section className="mt-6 flex items-start gap-4 p-4 border border-border rounded">
             <div className="shrink-0 p-2 bg-white rounded border border-border">

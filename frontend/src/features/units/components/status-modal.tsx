@@ -20,14 +20,11 @@ interface UnitStatusModalProps {
   onConfirm: (next: UnitStatus, reason?: string) => void | Promise<void>;
 }
 
+// "Terjual" sengaja tidak ada di sini — itu cuma bisa lewat menu Penjualan
+// Unit, supaya data pembeli & harganya ikut tercatat (lihat UnitService.change_status).
 const manualOptions: { key: UnitStatus; label: string; desc: string }[] = [
   { key: "standby", label: "Standby", desc: "Siap menerima job baru" },
   { key: "perbaikan", label: "Perbaikan", desc: "Tidak tersedia untuk job" },
-  {
-    key: "terjual",
-    label: "Terjual",
-    desc: "Unit sudah dijual — tidak bisa dipakai job, tidak dihitung sebagai armada"
-  },
   {
     key: "diafkirkan",
     label: "Diafkirkan",

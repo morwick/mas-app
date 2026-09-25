@@ -62,6 +62,13 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Tanggal + 1 hari — batas minimum "Berlaku sampai" di date picker. */
+function besok(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function QuotationForm({
   customers,
   quotation,
@@ -177,7 +184,7 @@ export function QuotationForm({
       pic_nama: form.pic_nama,
       kota_terbit: form.kota_terbit,
       tanggal: form.tanggal,
-      berlaku_sampai: form.berlaku_sampai || null,
+      berlaku_sampai: form.berlaku_sampai,
       perihal: form.perihal,
       objek: form.objek,
       lampiran: form.lampiran,
@@ -198,8 +205,15 @@ export function QuotationForm({
   }
 
   async function onSubmit() {
-    setLoading(true);
     setError(null);
+    if (form.berlaku_sampai && form.tanggal && form.berlaku_sampai <= form.tanggal) {
+      const msg = "Surat berlaku sampai harus setelah tanggal surat";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setLoading(true);
     const payload = buildPayload();
 
     const res = isEdit
@@ -326,11 +340,12 @@ export function QuotationForm({
               onChange={(e) => set("tanggal", e.target.value)}
             />
           </Field>
-          <Field label="Berlaku sampai" hint="Opsional">
+          <Field label="Berlaku sampai" required hint="Harus setelah tanggal surat">
             <Input
               type="date"
               value={form.berlaku_sampai}
               onChange={(e) => set("berlaku_sampai", e.target.value)}
+              min={form.tanggal ? besok(form.tanggal) : undefined}
             />
           </Field>
           <Field label="Lampiran">

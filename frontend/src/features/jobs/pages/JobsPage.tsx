@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCustomers } from "@/features/customers/queries";
 import { useDrivers } from "@/features/drivers/queries";
@@ -7,6 +8,7 @@ import { JobsListView } from "../components/jobs-list-view";
 import { useJobs } from "../queries";
 
 export function JobsPage() {
+  const [searchParams] = useSearchParams();
   const jobs = useJobs();
   const customers = useCustomers(true);
   const units = useUnits(true);
@@ -32,6 +34,7 @@ export function JobsPage() {
       customers={customers.data ?? []}
       unitMap={unitMap}
       driverMap={driverMap}
+      initialCustomerId={searchParams.get("customer_id") ?? undefined}
     />
   );
 }

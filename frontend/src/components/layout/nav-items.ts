@@ -20,16 +20,19 @@ import {
   ScrollText,
   Container,
   IdCard,
+  BadgeDollarSign,
   type LucideIcon
 } from "lucide-react";
+
+export type UserRoleLike = "superadmin" | "operator" | "finance" | "admin";
 
 export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
   match?: (pathname: string) => boolean;
-  /** Kalau true, menu ini hanya tampil untuk role 'superadmin'. */
-  superadminOnly?: boolean;
+  /** Role yang boleh melihat menu ini. Kosong/undefined = semua role login. */
+  roles?: UserRoleLike[];
 }
 
 /** Induk menu yang hanya menampung submenu — bukan tautan. */
@@ -58,14 +61,17 @@ const unit: NavItem = {
   href: "/units",
   label: "Unit",
   icon: Truck,
-  match: (p) => p.startsWith("/units")
+  match: (p) => p.startsWith("/units"),
+  // Operator hanya lihat (tombol tambah/ubah/hapus disembunyikan di komponen).
+  roles: ["superadmin", "admin", "operator"]
 };
 
 const unitTrailer: NavItem = {
   href: "/unit-trailer",
   label: "Unit Trailer",
   icon: Container,
-  match: (p) => p.startsWith("/unit-trailer")
+  match: (p) => p.startsWith("/unit-trailer"),
+  roles: ["superadmin", "admin", "operator"]
 };
 
 const jenisUnit: NavItem = {
@@ -75,49 +81,56 @@ const jenisUnit: NavItem = {
   label: "Jenis Unit",
   icon: Tags,
   match: (p) => p.startsWith("/jenis-unit"),
-  superadminOnly: true
+  roles: ["superadmin", "admin"]
 };
 
 const driver: NavItem = {
   href: "/drivers",
   label: "Driver",
   icon: UserRound,
-  match: (p) => p.startsWith("/drivers")
+  match: (p) => p.startsWith("/drivers"),
+  roles: ["superadmin", "admin", "operator"]
 };
 
 const customer: NavItem = {
   href: "/customers",
   label: "Customer",
   icon: Building2,
-  match: (p) => p.startsWith("/customers")
+  match: (p) => p.startsWith("/customers"),
+  roles: ["superadmin", "admin", "finance"]
 };
 
 const penawaran: NavItem = {
   href: "/quotations",
   label: "Penawaran",
   icon: FileText,
-  match: (p) => p.startsWith("/quotations")
+  match: (p) => p.startsWith("/quotations"),
+  roles: ["superadmin", "admin"]
 };
 
 const job: NavItem = {
   href: "/jobs",
   label: "Job",
   icon: PackageCheck,
-  match: (p) => p.startsWith("/jobs")
+  match: (p) => p.startsWith("/jobs"),
+  roles: ["superadmin", "admin"]
 };
 
 const pantau: NavItem = {
   href: "/tracking",
   label: "Pantau",
   icon: Map,
-  match: (p) => p.startsWith("/tracking")
+  match: (p) => p.startsWith("/tracking"),
+  // Operator: lihat saja — tombol aksi cepat/cancel/edit disembunyikan di komponen.
+  roles: ["superadmin", "admin", "operator"]
 };
 
 const uangJalan: NavItem = {
   href: "/uang-jalan",
   label: "Uang Jalan",
   icon: Wallet,
-  match: (p) => p.startsWith("/uang-jalan")
+  match: (p) => p.startsWith("/uang-jalan"),
+  roles: ["superadmin", "admin", "operator"]
 };
 
 const service: NavItem = {
@@ -125,14 +138,16 @@ const service: NavItem = {
   label: "Service",
   icon: Wrench,
   match: (p) => p.startsWith("/services"),
-  superadminOnly: true
+  // Operator: lihat + tambah service saja (tidak ada UI edit/hapus record service).
+  roles: ["superadmin", "admin", "operator"]
 };
 
 const tagihan: NavItem = {
   href: "/invoices",
   label: "Tagihan",
   icon: Receipt,
-  match: (p) => p.startsWith("/invoices")
+  match: (p) => p.startsWith("/invoices"),
+  roles: ["superadmin", "finance"]
 };
 
 const piutang: NavItem = {
@@ -142,15 +157,27 @@ const piutang: NavItem = {
   label: "Piutang",
   icon: HandCoins,
   match: (p) => p.startsWith("/piutang"),
-  superadminOnly: true
+  roles: ["superadmin", "finance"]
+};
+
+const penjualan: NavItem = {
+  // Satu-satunya jalan menandai unit / unit trailer "Terjual" — lengkap
+  // dengan data pembeli, harga, dan bukti transaksinya.
+  href: "/penjualan-unit",
+  label: "Penjualan Unit",
+  icon: BadgeDollarSign,
+  match: (p) => p.startsWith("/penjualan-unit"),
+  roles: ["superadmin"]
 };
 
 const laporan: NavItem = {
+  // Semua role login boleh lihat menu ini; operator cuma dapat sub-laporan
+  // Utilisasi Armada (disaring di ReportsIndexPage + guard rute /reports/laba
+  // & /reports/customers).
   href: "/reports",
   label: "Laporan",
   icon: BarChart3,
-  match: (p) => p.startsWith("/reports"),
-  superadminOnly: true
+  match: (p) => p.startsWith("/reports")
 };
 
 const pengguna: NavItem = {
@@ -160,7 +187,7 @@ const pengguna: NavItem = {
   label: "Pengguna",
   icon: UsersRound,
   match: (p) => p.startsWith("/pengguna"),
-  superadminOnly: true
+  roles: ["superadmin"]
 };
 
 const karyawan: NavItem = {
@@ -169,7 +196,7 @@ const karyawan: NavItem = {
   label: "Karyawan",
   icon: IdCard,
   match: (p) => p.startsWith("/karyawan"),
-  superadminOnly: true
+  roles: ["superadmin"]
 };
 
 const logSistem: NavItem = {
@@ -178,7 +205,7 @@ const logSistem: NavItem = {
   label: "Log Sistem",
   icon: ScrollText,
   match: (p) => p.startsWith("/log-sistem"),
-  superadminOnly: true
+  roles: ["superadmin", "finance"]
 };
 
 const notifikasi: NavItem = {
@@ -212,7 +239,7 @@ export const navTree: NavEntry[] = [
     key: "monitoring",
     label: "Monitoring",
     icon: Activity,
-    items: [penawaran, job, pantau, uangJalan, service, tagihan, piutang]
+    items: [penawaran, job, pantau, uangJalan, service, tagihan, piutang, penjualan]
   },
   laporan,
   logSistem,
@@ -238,35 +265,30 @@ export const mobileNavItems: NavItem[] = [
   byHref("/units"),
   byHref("/jobs"),
   byHref("/tracking"),
-  byHref("/reports") // superadmin-only — di-filter saat render
+  byHref("/reports") // dibatasi role saat render — lihat visibleNavItems
 ];
 
-export type UserRoleLike = "superadmin" | "operator";
+function roleAllowed(item: NavItem, role: UserRoleLike | null | undefined): boolean {
+  if (!item.roles) return true;
+  return role != null && item.roles.includes(role);
+}
 
-export function visibleNavItems(
-  items: NavItem[],
-  role: UserRoleLike | null | undefined
-): NavItem[] {
-  if (role === "operator") return items.filter((i) => !i.superadminOnly);
-  return items;
+export function visibleNavItems(items: NavItem[], role: UserRoleLike | null | undefined): NavItem[] {
+  return items.filter((i) => roleAllowed(i, role));
 }
 
 /**
  * Pohon menu sesuai role. Grup yang seluruh submenunya tersembunyi ikut
  * dibuang supaya tidak menyisakan induk kosong.
  */
-export function visibleNavTree(
-  tree: NavEntry[],
-  role: UserRoleLike | null | undefined
-): NavEntry[] {
-  if (role !== "operator") return tree;
+export function visibleNavTree(tree: NavEntry[], role: UserRoleLike | null | undefined): NavEntry[] {
   const out: NavEntry[] = [];
   for (const entry of tree) {
     if (!isNavGroup(entry)) {
-      if (!entry.superadminOnly) out.push(entry);
+      if (roleAllowed(entry, role)) out.push(entry);
       continue;
     }
-    const items = entry.items.filter((i) => !i.superadminOnly);
+    const items = entry.items.filter((i) => roleAllowed(i, role));
     if (items.length > 0) out.push({ ...entry, items });
   }
   return out;

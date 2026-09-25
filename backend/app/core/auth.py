@@ -14,7 +14,7 @@ Frontend menyimpan JWT hasil login dan mengirimnya sebagai
 from __future__ import annotations
 
 import hashlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -26,7 +26,7 @@ from supabase import AsyncClient
 from app.core.errors import ForbiddenError, UnauthorizedError
 from app.core.supabase import SupabaseClientFactory, get_client_factory
 
-UserRole = Literal["superadmin", "operator"]
+UserRole = Literal["superadmin", "operator", "finance", "admin"]
 
 # Identitas per token disimpan 60 detik. Pencabutan sesi tetap efektif segera di
 # sisi data karena RLS memverifikasi JWT pada setiap query; yang tertunda paling
@@ -64,7 +64,7 @@ def _initials(nama: str) -> str:
 
 
 def _role_valid(nilai: object) -> UserRole | None:
-    return nilai if nilai in ("superadmin", "operator") else None  # type: ignore[return-value]
+    return nilai if nilai in ("superadmin", "operator", "finance", "admin") else None  # type: ignore[return-value]
 
 
 def build_current_user(*, user_id: str, email: str | None, profile: dict[str, object] | None) -> CurrentUser:
@@ -168,6 +168,17 @@ async def require_superadmin(auth: AuthContext = Depends(require_auth)) -> AuthC
     return auth
 
 
+def require_role(*allowed: UserRole) -> Callable[[AuthContext], AuthContext]:
+    """Fabrik dependency: tolak kalau role aktif tidak termasuk `allowed`."""
+
+    async def _dep(auth: AuthContext = Depends(require_auth)) -> AuthContext:
+        if auth.user.role not in allowed:
+            raise ForbiddenError("Anda tidak berhak mengakses ini.")
+        return auth
+
+    return _dep
+
+
 async def user_client(
     auth: AuthContext = Depends(require_auth),
     factory: SupabaseClientFactory = Depends(get_client_factory),
@@ -179,6 +190,22 @@ async def user_client(
 
 async def superadmin_client(
     auth: AuthContext = Depends(require_superadmin),
+    factory: SupabaseClientFactory = Depends(get_client_factory),
+) -> AsyncIterator[AsyncClient]:
+    async with factory.for_user(auth.token) as client:
+        yield client
+
+
+async def superadmin_or_finance_client(
+    auth: AuthContext = Depends(require_role("superadmin", "finance")),
+    factory: SupabaseClientFactory = Depends(get_client_factory),
+) -> AsyncIterator[AsyncClient]:
+    async with factory.for_user(auth.token) as client:
+        yield client
+
+
+async def superadmin_or_admin_client(
+    auth: AuthContext = Depends(require_role("superadmin", "admin")),
     factory: SupabaseClientFactory = Depends(get_client_factory),
 ) -> AsyncIterator[AsyncClient]:
     async with factory.for_user(auth.token) as client:

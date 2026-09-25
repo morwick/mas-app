@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
-import { mobileNavItems, visibleNavItems } from "./nav-items";
+import { mobileNavItems, visibleNavItems, type UserRoleLike } from "./nav-items";
 
 interface BottomNavProps {
-  role?: "superadmin" | "operator";
+  role?: UserRoleLike;
 }
 
 export function BottomNav({ role }: BottomNavProps = {}) {

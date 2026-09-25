@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import date, timedelta
 from typing import Any
 
 from supabase import AsyncClient
 
+from app.core.config import get_settings
 from app.core.errors import NotFoundError, ValidationError
 from app.core.pg import clean_text, first, num, rows, single
 from app.core.soft_delete import AKTIF, DIHAPUS, STATUS
+from app.core.storage import remove_object_quietly, unique_object_name, upload_object, validate_document
+from app.core.supabase import storage_public_url
 from app.core.timeutil import iso_utc, roman_month, today_wib, today_wib_str
 from app.core.transaksi import Transaksi
+
+log = logging.getLogger(__name__)
 from app.modules.invoices.schemas import (
+    FinanceDashboardSummary,
     Invoice,
     InvoiceCreated,
     InvoiceInput,
@@ -40,6 +47,7 @@ INVOICE_SELECT = """
   bank_nama, bank_rekening, bank_atas_nama,
   catatan, alasan_batal,
   sent_at, lunas_at, created_at, updated_at,
+  faktur_pajak_path, faktur_pajak_uploaded_at,
   quotation:quotations(quote_number),
   created_by_profile:profiles!invoices_created_by_fkey(nama)
 """
@@ -74,7 +82,15 @@ def derive_tampil(stored: str, jatuh_tempo: str | None) -> tuple[str, int | None
     return "jatuh_tempo", terlambat
 
 
-def _to_item(r: dict[str, Any]) -> InvoiceItem:
+def _uang_jalan_ringkas(pagu: Any, transaksi: list[dict[str, Any]]) -> tuple[float, float]:
+    """Pagu efektif (awal + penambahan) & total pencairan dari transaksi uang_jalan job."""
+    pagu_awal = num(pagu)
+    penambahan = sum(num(t.get("jumlah")) for t in transaksi if t.get("jenis") == "penambahan_pagu")
+    cair = sum(num(t.get("jumlah")) for t in transaksi if t.get("jenis") == "pencairan")
+    return pagu_awal + penambahan, cair
+
+
+def _to_item(r: dict[str, Any], uj: dict[str, Any] | None) -> InvoiceItem:
     return InvoiceItem(
         id=r["id"],
         invoice_id=r["invoice_id"],
@@ -88,6 +104,9 @@ def _to_item(r: dict[str, Any]) -> InvoiceItem:
         satuan=r["satuan"],
         harga_satuan=num(r.get("harga_satuan")),
         subtotal=num(r.get("subtotal")),
+        uang_jalan_pagu=(uj or {}).get("uang_jalan_pagu"),
+        uang_jalan_cair=(uj or {}).get("uang_jalan_cair"),
+        surat_jalan_urls=(uj or {}).get("surat_jalan_urls") or [],
     )
 
 
@@ -217,9 +236,14 @@ def _header_payload(payload: InvoiceInput, termin: int | None) -> dict[str, Any]
     }
 
 
+FAKTUR_PAJAK_SIGNED_URL_TTL_S = 60 * 60
+
+
 class InvoiceService:
     def __init__(self, client: AsyncClient) -> None:
         self._db = client
+        self._photos_bucket = get_settings().job_photos_bucket
+        self._faktur_bucket = get_settings().faktur_pajak_bucket
 
     # ── Baca ────────────────────────────────────────────────────────────────
 
@@ -248,13 +272,25 @@ class InvoiceService:
             for r in rows(await q.execute())
         ]
 
+    async def _signed_faktur_url(self, path: str | None) -> str | None:
+        if not path:
+            return None
+        try:
+            res = await self._db.storage.from_(self._faktur_bucket).create_signed_url(
+                path, FAKTUR_PAJAK_SIGNED_URL_TTL_S
+            )
+            return res.get("signedURL") or res.get("signedUrl")
+        except Exception as exc:  # noqa: BLE001 — faktur yang tidak terbaca jangan gagalkan halaman
+            log.warning("signed url faktur pajak gagal: %s", exc)
+            return None
+
     async def get(self, invoice_id: str) -> Invoice:
         row = single(
             await self._db.table("invoices").select(INVOICE_SELECT).eq("id", invoice_id).maybe_single().execute()
         )
         if row is None:
             raise NotFoundError("Tagihan tidak ditemukan")
-        items_res, payments_res = await asyncio.gather(
+        items_res, payments_res, faktur_url = await asyncio.gather(
             self._db.table("invoice_items").select(ITEM_SELECT).eq("invoice_id", invoice_id).order("urutan").execute(),
             self._db.table("invoice_payments")
             .select(PAYMENT_SELECT)
@@ -262,12 +298,41 @@ class InvoiceService:
             .order("tanggal", desc=True)
             .order("created_at", desc=True)
             .execute(),
+            self._signed_faktur_url(row.get("faktur_pajak_path")),
         )
+        item_rows = rows(items_res)
+        job_ids = [i["job_id"] for i in item_rows if i.get("job_id")]
+        uj_by_job = await self._uang_jalan_surat_jalan(job_ids) if job_ids else {}
         return Invoice(
             **_base_fields(row),
-            items=[_to_item(i) for i in rows(items_res)],
+            faktur_pajak_uploaded_at=row.get("faktur_pajak_uploaded_at"),
+            faktur_pajak_url=faktur_url,
+            items=[_to_item(i, uj_by_job.get(i.get("job_id"))) for i in item_rows],
             payments=[_to_payment(p) for p in rows(payments_res)],
         )
+
+    async def _uang_jalan_surat_jalan(self, job_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Ringkasan uang jalan & link surat jalan per job — untuk ditampilkan di rincian tagihan."""
+        res = await (
+            self._db.table("jobs")
+            .select("id, uang_jalan_pagu, uang_jalan(jenis, jumlah), job_photos(file_path, slot)")
+            .in_("id", job_ids)
+            .eq("uang_jalan.status", AKTIF)
+            .eq("job_photos.status", AKTIF)
+            .eq("job_photos.slot", "surat_jalan")
+            .execute()
+        )
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows(res):
+            pagu, cair = _uang_jalan_ringkas(r.get("uang_jalan_pagu"), r.get("uang_jalan") or [])
+            out[r["id"]] = {
+                "uang_jalan_pagu": pagu,
+                "uang_jalan_cair": cair,
+                "surat_jalan_urls": [
+                    storage_public_url(self._photos_bucket, p["file_path"]) for p in (r.get("job_photos") or [])
+                ],
+            }
+        return out
 
     async def peek_next_number(self) -> str:
         today = today_wib()
@@ -300,10 +365,17 @@ class InvoiceService:
 
         q = (
             self._db.table("jobs")
-            .select("id, customer_id, job_number, asal, tujuan, alat_diangkut, etd, completed_at")
+            .select(
+                "id, customer_id, job_number, asal, tujuan, alat_diangkut, etd, completed_at,"
+                " uang_jalan_pagu, uang_jalan(jenis, jumlah),"
+                " job_photos(file_path, slot)"
+            )
             # Hanya job yang sudah divalidasi admin yang bisa ditagihkan.
             .eq("status_job", "selesai")
             .not_.is_("validated_at", "null")
+            .eq("uang_jalan.status", AKTIF)
+            .eq("job_photos.status", AKTIF)
+            .eq("job_photos.slot", "surat_jalan")
             .order("completed_at", desc=True)
         )
         if customer_id:
@@ -314,7 +386,16 @@ class InvoiceService:
             if r["id"] in sudah:
                 continue
             cid = r.pop("customer_id")
-            out.setdefault(cid, []).append(JobBelumDitagihRow(**r))
+            foto = r.pop("job_photos") or []
+            pagu, cair = _uang_jalan_ringkas(r.pop("uang_jalan_pagu"), r.pop("uang_jalan") or [])
+            out.setdefault(cid, []).append(
+                JobBelumDitagihRow(
+                    **r,
+                    uang_jalan_pagu=pagu,
+                    uang_jalan_cair=cair,
+                    surat_jalan_urls=[storage_public_url(self._photos_bucket, p["file_path"]) for p in foto],
+                )
+            )
         return out
 
     async def piutang_summary(self) -> list[PiutangSummaryRow]:
@@ -334,6 +415,53 @@ class InvoiceService:
             )
             for r in rows(res)
         ]
+
+    async def finance_dashboard_summary(self) -> FinanceDashboardSummary:
+        """Ringkasan buat dashboard finance — dihitung langsung dari kolom
+        invoices/invoice_payments, reuse derive_tampil() supaya definisi
+        "jatuh tempo" sama persis dengan yang tampil di menu Tagihan."""
+        inv_res = await (
+            self._db.table("invoices")
+            .select("status_tagihan, total, dibayar, jatuh_tempo, faktur_pajak_path")
+            .eq("status_tagihan", "terkirim")
+            .execute()
+        )
+        belum_lunas_jumlah = 0
+        belum_lunas_nominal = 0.0
+        jatuh_tempo_jumlah = 0
+        jatuh_tempo_nominal = 0.0
+        belum_faktur_jumlah = 0
+        for r in rows(inv_res):
+            sisa = num(r.get("total")) - num(r.get("dibayar"))
+            belum_lunas_jumlah += 1
+            belum_lunas_nominal += sisa
+            status_tampil, _ = derive_tampil(r["status_tagihan"], r.get("jatuh_tempo"))
+            if status_tampil == "jatuh_tempo":
+                jatuh_tempo_jumlah += 1
+                jatuh_tempo_nominal += sisa
+            if not r.get("faktur_pajak_path"):
+                belum_faktur_jumlah += 1
+
+        today = today_wib()
+        mulai_bulan = today.replace(day=1)
+        akhir_bulan = date(today.year + 1, 1, 1) if today.month == 12 else date(today.year, today.month + 1, 1)
+        pay_res = await (
+            self._db.table("invoice_payments")
+            .select("jumlah")
+            .gte("tanggal", mulai_bulan.isoformat())
+            .lt("tanggal", akhir_bulan.isoformat())
+            .execute()
+        )
+        pembayaran_bulan_ini = sum(num(p.get("jumlah")) for p in rows(pay_res))
+
+        return FinanceDashboardSummary(
+            tagihan_belum_lunas_jumlah=belum_lunas_jumlah,
+            tagihan_belum_lunas_nominal=belum_lunas_nominal,
+            tagihan_jatuh_tempo_jumlah=jatuh_tempo_jumlah,
+            tagihan_jatuh_tempo_nominal=jatuh_tempo_nominal,
+            invoice_belum_faktur_pajak_jumlah=belum_faktur_jumlah,
+            pembayaran_bulan_ini_nominal=pembayaran_bulan_ini,
+        )
 
     async def job_profitability(self, *, start: str | None, end: str | None) -> list[JobProfitabilityRow]:
         res = await self._db.rpc("get_job_profitability", {"p_start": start, "p_end": end}).execute()
@@ -470,6 +598,39 @@ class InvoiceService:
 
     async def delete_payment(self, payment_id: str) -> None:
         await self._db.table("invoice_payments").update({STATUS: DIHAPUS}).eq("id", payment_id).execute()
+
+    async def upload_faktur_pajak(self, invoice_id: str, *, data: bytes, content_type: str | None) -> None:
+        inv = single(
+            await self._db.table("invoices")
+            .select("status_tagihan, faktur_pajak_path")
+            .eq("id", invoice_id)
+            .maybe_single()
+            .execute()
+        )
+        if inv is None:
+            raise NotFoundError("Tagihan tidak ditemukan")
+        if inv["status_tagihan"] in ("draft", "batal"):
+            raise ValidationError("Tagihan harus berstatus terkirim dulu sebelum faktur pajak bisa diunggah.")
+
+        ext = validate_document(content_type, len(data))
+        path = f"{invoice_id}/{unique_object_name(ext)}"
+        await upload_object(self._db, self._faktur_bucket, path, data, content_type or "application/pdf")
+        try:
+            await (
+                self._db.table("invoices")
+                .update({"faktur_pajak_path": path, "faktur_pajak_uploaded_at": iso_utc()})
+                .eq("id", invoice_id)
+                .execute()
+            )
+        except Exception:
+            # Baris gagal diperbarui — jangan tinggalkan file yatim di bucket.
+            await remove_object_quietly(self._db, self._faktur_bucket, path)
+            raise
+
+        # Ganti file: yang lama dibuang setelah baris baru berhasil tersimpan.
+        lama = inv.get("faktur_pajak_path")
+        if lama and lama != path:
+            await remove_object_quietly(self._db, self._faktur_bucket, lama)
 
     async def delete(self, invoice_id: str) -> None:
         await self._db.table("invoices").update({STATUS: DIHAPUS}).eq("id", invoice_id).execute()

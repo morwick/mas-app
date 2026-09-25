@@ -101,6 +101,10 @@ class CustomerService:
         res = await self._db.table("jobs").select("customer_id").execute()
         return dict(Counter(r["customer_id"] for r in rows(res)))
 
+    async def quotation_counts(self) -> dict[str, int]:
+        res = await self._db.table("quotations").select("customer_id").execute()
+        return dict(Counter(r["customer_id"] for r in rows(res)))
+
     async def create(self, payload: CustomerCreate) -> Customer:
         nama = payload.nama_perusahaan.strip()
         if not nama:

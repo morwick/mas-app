@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { driverNotifications, driverUangJalan, myJob, myJobs } from "./api";
+import { driverNotifications, driverUangJalan, myJob, myJobs, type DriverJobFilter } from "./api";
 
-export const useMyJobs = (status: "active" | "all" = "all") =>
+export const useMyJobs = (status: DriverJobFilter = "all") =>
   useQuery({
     queryKey: ["driver", "jobs", status],
     queryFn: () => myJobs(status),

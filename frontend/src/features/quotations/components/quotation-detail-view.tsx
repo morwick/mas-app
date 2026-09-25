@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CheckCircle2,
   MessageCircle,
+  Package,
   Pencil,
   Printer,
   RotateCcw,
@@ -62,7 +63,10 @@ export function QuotationDetailView({
   const [rejectReason, setRejectReason] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const isLocked = q.status === "deal";
+  // Sekali terkirim, penawaran tidak boleh diubah lagi — hanya draft yang
+  // bisa diedit (satu-satunya jalan merevisi yang sudah ditolak: "Buka
+  // kembali" ke draft dulu).
+  const isLocked = q.status !== "draft";
 
   async function changeStatus(status: QuotationStatus, alasan?: string) {
     setLoading(true);
@@ -162,7 +166,23 @@ export function QuotationDetailView({
               {q.quote_number}
             </p>
             <p style={{ fontSize: 14, marginTop: 2 }}>{q.customer_nama}</p>
-            <p className="caption" style={{ color: "var(--text-tertiary)" }}>
+            {q.objek && (
+              <p
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginTop: 4,
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  color: "var(--brand-primary-dark)"
+                }}
+              >
+                <Package style={{ width: 14, height: 14, flexShrink: 0 }} />
+                {q.objek}
+              </p>
+            )}
+            <p className="caption" style={{ color: "var(--text-tertiary)", marginTop: 4 }}>
               {q.kota_terbit}, {formatDate(q.tanggal)}
               {q.created_by_nama ? ` · dibuat oleh ${q.created_by_nama}` : ""}
             </p>
@@ -294,7 +314,7 @@ export function QuotationDetailView({
 
           <div style={{ flex: 1 }} />
 
-          {canDelete && (
+          {canDelete && !isLocked && (
             <Button
               variant="ghost"
               leftIcon={<Trash2 style={{ width: 15, height: 15 }} />}
@@ -320,7 +340,6 @@ export function QuotationDetailView({
           }
         />
         <InfoRow label="Perihal" value={q.perihal} />
-        {q.objek && <InfoRow label="Objek" value={q.objek} />}
         {q.berlaku_sampai && (
           <InfoRow
             label="Berlaku sampai"

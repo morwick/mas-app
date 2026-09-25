@@ -160,6 +160,13 @@ def install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(PostgrestError)
     async def _postgrest_error(request: Request, exc: PostgrestError) -> JSONResponse:
+        # Pesan ke client sengaja digeneralisasi (lihat _pesan_postgres) — pesan
+        # asli Postgres (nama tabel/fungsi persis) dicatat di sini saja supaya
+        # bisa ditelusuri lewat log server saat pengguna melapor error samar.
+        logger.warning(
+            "Postgrest error pada %s %s: [%s] %s",
+            request.method, request.url.path, exc.code, exc.message,
+        )
         return _json(request, _postgrest_status(exc), _pesan_postgres(exc), {"code": exc.code})
 
     @app.exception_handler(AuthApiError)

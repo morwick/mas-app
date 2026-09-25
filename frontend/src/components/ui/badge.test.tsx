@@ -8,11 +8,12 @@ describe("status unit Terjual", () => {
     expect(screen.getByText("Terjual")).toBeTruthy();
   });
 
-  it("bisa dipilih di ubah status unit", () => {
+  it("tidak bisa dipilih di ubah status unit — wajib lewat menu Penjualan Unit", () => {
     const onConfirm = vi.fn();
     render(<UnitStatusModal open onClose={() => {}} currentStatus="standby" onConfirm={onConfirm} />);
-    fireEvent.click(screen.getByText("Terjual"));
-    expect(screen.getByText(/Unit sudah dijual/)).toBeTruthy();
+    expect(screen.queryByText("Terjual")).toBeNull();
+    fireEvent.click(screen.getByText("Diafkirkan"));
+    expect(screen.getByText(/tidak layak pakai/)).toBeTruthy();
   });
 });
 

@@ -13,6 +13,7 @@ import {
 } from "@/types";
 import { deriveServiceStatus, formatKm } from "@/lib/service";
 import { formatDate } from "@/lib/utils";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 const MILEAGE_POLL_MS = 5 * 60 * 1000;
 
@@ -23,6 +24,7 @@ interface Props {
 
 export function ServiceHistoryTab({ unit, initialRecords }: Props) {
   const toast = useToast();
+  const { canManageOperational } = useAuth();
   const [formOpen, setFormOpen] = useState(false);
   const [calibrateOpen, setCalibrateOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -272,14 +274,16 @@ export function ServiceHistoryTab({ unit, initialRecords }: Props) {
             />
             {syncing ? "Sinkron…" : "Sync sekarang"}
           </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => setCalibrateOpen(true)}
-          >
-            <Gauge style={{ width: 14, height: 14 }} />
-            Set counter
-          </button>
+          {canManageOperational && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCalibrateOpen(true)}
+            >
+              <Gauge style={{ width: 14, height: 14 }} />
+              Set counter
+            </button>
+          )}
           {unit.imei_gps && (
             <SyncIndicator polling={syncing} lastSyncAt={lastSyncAt} />
           )}

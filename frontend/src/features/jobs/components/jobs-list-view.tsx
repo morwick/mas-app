@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -33,6 +33,8 @@ interface Props {
   customers: Customer[];
   unitMap: Record<string, { kode_unit: string; jenis: string }>;
   driverMap: Record<string, string>;
+  /** Datang dari query string (mis. diklik dari kolom "Total job" di menu Customer). */
+  initialCustomerId?: string;
 }
 
 /**
@@ -90,11 +92,18 @@ export function JobsListView({
   jobs,
   customers,
   unitMap,
-  driverMap
+  driverMap,
+  initialCustomerId
 }: Props) {
   const [tab, setTab] = useState<TabKey>("aktif");
   const [q, setQ] = useState("");
-  const [customerId, setCustomerId] = useState("");
+  const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
+
+  // Menyesuaikan saat halaman dibuka lagi lewat tautan customer lain
+  // (mis. dari kolom "Total job" di menu Customer) tanpa remount komponen.
+  useEffect(() => {
+    setCustomerId(initialCustomerId ?? "");
+  }, [initialCustomerId]);
 
   const counts = useMemo(
     () => ({

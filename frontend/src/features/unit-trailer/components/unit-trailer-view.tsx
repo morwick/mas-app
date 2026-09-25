@@ -16,13 +16,13 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
-  STATUS_TRAILER,
+  STATUS_TRAILER_TAMPIL,
   createJenisUnitTrailer,
   createUnitTrailer,
   deleteUnitTrailer,
   updateUnitTrailer,
   type JenisUnitTrailer,
-  type StatusTrailer,
+  type StatusTrailerTampil,
   type UnitTrailer,
   type UnitTrailerInput
 } from "../api";
@@ -30,13 +30,14 @@ import { useJenisUnitTrailer, useUnitTrailer } from "../queries";
 import { useJenisUnit } from "@/features/settings/queries";
 import { UnitTrailerFormModal } from "./unit-trailer-form-modal";
 
-const WARNA_STATUS: Record<StatusTrailer, string> = {
+const WARNA_STATUS: Record<StatusTrailerTampil, string> = {
   standby: "badge-standby",
-  perbaikan: "badge-perbaikan"
+  perbaikan: "badge-perbaikan",
+  terjual: "badge-terjual"
 };
 
-function StatusBadge({ status }: { status: StatusTrailer }) {
-  const label = STATUS_TRAILER.find((s) => s.value === status)?.label ?? status;
+function StatusBadge({ status }: { status: StatusTrailerTampil }) {
+  const label = STATUS_TRAILER_TAMPIL.find((s) => s.value === status)?.label ?? status;
   return <span className={`badge ${WARNA_STATUS[status]}`}>{label}</span>;
 }
 
@@ -47,12 +48,12 @@ function formatKapasitas(ton: number | null) {
 
 export function UnitTrailerView() {
   const toast = useToast();
-  const { isSuperadmin } = useAuth();
+  const { canManageOperational } = useAuth();
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<StatusTrailer | "">("");
+  const [status, setStatus] = useState<StatusTrailerTampil | "">("");
   const [jenisUnitTrailerId, setJenisUnitTrailerId] = useState("");
   // Pencarian menunggu jeda ketik, tidak memanggil server tiap huruf.
   const qTunda = useDeferredValue(q);
@@ -144,6 +145,8 @@ export function UnitTrailerView() {
   };
 
   function Aksi({ t }: { t: UnitTrailer }) {
+    // Trailer terjual dikelola lewat menu Penjualan Unit.
+    if (t.status === "terjual") return null;
     return (
       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
         <button
@@ -181,7 +184,7 @@ export function UnitTrailerView() {
           </h1>
           <p className="caption">Master data trailer: kode, jenis unit trailer, tahun, dan kapasitas muatan.</p>
         </div>
-        {isSuperadmin && (
+        {canManageOperational && (
           <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />} onClick={() => setForm({ trailer: null })}>
             Tambah unit trailer
           </Button>
@@ -214,11 +217,11 @@ export function UnitTrailerView() {
         <div className="toolbar-filter">
           <Select
             value={status}
-            onChange={(e) => ubah(setStatus)(e.target.value as StatusTrailer | "")}
+            onChange={(e) => ubah(setStatus)(e.target.value as StatusTrailerTampil | "")}
             aria-label="Filter status"
           >
             <option value="">Semua status</option>
-            {STATUS_TRAILER.map((s) => (
+            {STATUS_TRAILER_TAMPIL.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>
@@ -256,7 +259,7 @@ export function UnitTrailerView() {
                   <th style={{ width: 90 }}>Tahun</th>
                   <th style={{ width: 150 }}>Kapasitas muatan</th>
                   <th style={{ width: 120 }}>Status</th>
-                  {isSuperadmin && <th style={{ width: 130 }}></th>}
+                  {canManageOperational && <th style={{ width: 130 }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -270,7 +273,7 @@ export function UnitTrailerView() {
                     <td>
                       <StatusBadge status={t.status} />
                     </td>
-                    {isSuperadmin && (
+                    {canManageOperational && (
                       <td>
                         <Aksi t={t} />
                       </td>
@@ -294,7 +297,7 @@ export function UnitTrailerView() {
                   {t.jenis_nama ?? "—"} ({t.jenis_unit_nama ?? "—"}) · {t.tahun ?? "—"} ·{" "}
                   {formatKapasitas(t.kapasitas_ton)}
                 </div>
-                {isSuperadmin && <Aksi t={t} />}
+                {canManageOperational && <Aksi t={t} />}
               </div>
             ))}
             <Pagination state={pg} label="unit trailer" />

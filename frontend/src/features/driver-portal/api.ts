@@ -13,7 +13,9 @@ import type {
   UangJalanRingkasan
 } from "@/types";
 
-export const myJobs = (status: "active" | "all" = "all") =>
+export type DriverJobFilter = "active" | "all" | "konfirmasi" | "aktif" | "selesai";
+
+export const myJobs = (status: DriverJobFilter = "all") =>
   api.get<Job[]>("/driver/jobs", { status }, "driver");
 
 export const myJob = (id: string) => api.get<Job>(`/driver/jobs/${id}`, undefined, "driver");

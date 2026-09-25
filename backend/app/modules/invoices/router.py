@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from supabase import AsyncClient
 
-from app.core.auth import AuthContext, require_auth, superadmin_client, user_client
+from app.core.auth import AuthContext, require_auth, superadmin_or_finance_client, user_client
 from app.modules.auth.schemas import OkResponse
 from app.modules.invoices.schemas import (
     Invoice,
@@ -95,6 +95,18 @@ async def delete_payment(invoice_id: str, payment_id: str, svc: InvoiceService =
     return OkResponse()
 
 
+@router.post("/invoices/{invoice_id}/faktur-pajak", response_model=OkResponse, status_code=201)
+async def upload_faktur_pajak(
+    invoice_id: str,
+    file: UploadFile = File(...),
+    svc: InvoiceService = Depends(get_service),
+) -> OkResponse:
+    """Unggah/ganti faktur pajak — hanya untuk tagihan yang sudah terkirim."""
+    data = await file.read()
+    await svc.upload_faktur_pajak(invoice_id, data=data, content_type=file.content_type)
+    return OkResponse()
+
+
 @router.delete("/invoices/{invoice_id}", response_model=OkResponse)
 async def delete_invoice(invoice_id: str, svc: InvoiceService = Depends(get_service)) -> OkResponse:
     await svc.delete(invoice_id)
@@ -102,5 +114,5 @@ async def delete_invoice(invoice_id: str, svc: InvoiceService = Depends(get_serv
 
 
 @router.get("/piutang/summary", response_model=list[PiutangSummaryRow])
-async def piutang_summary(client: AsyncClient = Depends(superadmin_client)) -> list[PiutangSummaryRow]:
+async def piutang_summary(client: AsyncClient = Depends(superadmin_or_finance_client)) -> list[PiutangSummaryRow]:
     return await InvoiceService(client).piutang_summary()

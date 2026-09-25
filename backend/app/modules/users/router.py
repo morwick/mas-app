@@ -25,7 +25,7 @@ from app.modules.auth.schemas import OkResponse
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-Role = Literal["superadmin", "operator"]
+Role = Literal["superadmin", "operator", "finance", "admin"]
 
 
 class UserRow(BaseModel):
@@ -45,7 +45,7 @@ class UserRow(BaseModel):
 
 class AkunKaryawan(BaseModel):
     user_id: str
-    role: Literal["superadmin", "operator"]
+    role: Role
 
 
 class KaryawanOption(BaseModel):
@@ -96,7 +96,12 @@ _BUKAN_KARYAWAN = "Pengguna gagal ditambahkan: karyawan tidak ditemukan atau ber
 _KARYAWAN_TIDAK_ADA = "Perubahan gagal disimpan: karyawan tidak ditemukan atau berstatus nonaktif."
 _KARYAWAN_ROLE_TERDAFTAR = "Data sudah terdaftar: karyawan ini sudah punya akun lain dengan role tersebut."
 
-_LABEL_ROLE = {"superadmin": "Super Administrator", "operator": "Operator"}
+_LABEL_ROLE = {
+    "superadmin": "Super Administrator",
+    "operator": "Operator",
+    "finance": "Finance",
+    "admin": "Admin",
+}
 
 _PESAN_KARYAWAN_NONAKTIF = (
     "Pengguna gagal diaktifkan: karyawan {nama} berstatus Nonaktif. Aktifkan dulu karyawannya di menu Karyawan."
@@ -130,7 +135,7 @@ def _to_row(r: dict, karyawan_aktif: bool = True) -> UserRow:
         id=r["id"],
         email=r["email"],
         nama=r["nama"],
-        role="superadmin" if r.get("role") == "superadmin" else "operator",
+        role=r.get("role") if r.get("role") in _LABEL_ROLE else "operator",
         roles=[x for x in (r.get("roles") or [r.get("role") or "operator"]) if x in _LABEL_ROLE],
         is_active=bool(r["is_active"]),
         allowed_jenis_unit_ids=r.get("allowed_jenis_unit_ids"),

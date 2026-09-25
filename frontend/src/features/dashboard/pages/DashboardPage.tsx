@@ -1,8 +1,10 @@
 import { PageError, PageLoading } from "@/components/ui/page-state";
+import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { DashboardView } from "../components/dashboard-view";
-import { useDashboard } from "../queries";
+import { FinanceDashboardView } from "../components/finance-dashboard-view";
+import { useDashboard, useFinanceDashboard } from "../queries";
 
-export function DashboardPage() {
+function OperationalDashboardPage() {
   const q = useDashboard();
   if (q.isPending) return <PageLoading />;
   if (q.isError) return <PageError error={q.error} onRetry={q.refetch} />;
@@ -14,7 +16,20 @@ export function DashboardPage() {
       activeJobs={activeJobs}
       jobsMenungguValidasi={q.data.jobs_menunggu_validasi}
       uangJalanDiajukan={q.data.uang_jalan_diajukan}
-      uangJalanBelumTransfer={q.data.uang_jalan_belum_transfer}
+      jobBelumKonfirmasi={q.data.job_belum_konfirmasi}
+      jobsBelumInvoice={q.data.jobs_belum_invoice}
     />
   );
+}
+
+function FinanceDashboardPage() {
+  const q = useFinanceDashboard();
+  if (q.isPending) return <PageLoading />;
+  if (q.isError) return <PageError error={q.error} onRetry={q.refetch} />;
+  return <FinanceDashboardView data={q.data} />;
+}
+
+export function DashboardPage() {
+  const user = useCurrentUser();
+  return user.role === "finance" ? <FinanceDashboardPage /> : <OperationalDashboardPage />;
 }

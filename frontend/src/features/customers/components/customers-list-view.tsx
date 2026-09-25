@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Building2, ChevronRight, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/ui/page-header";
 interface Props {
   customers: Customer[];
   jobCounts: Record<string, number>;
+  quotationCounts: Record<string, number>;
 }
 
 function abbr(nama: string) {
@@ -25,7 +26,38 @@ function abbr(nama: string) {
     .toUpperCase();
 }
 
-export function CustomersListView({ customers, jobCounts }: Props) {
+/**
+ * Angka total job/penawaran, bisa diklik untuk membuka daftarnya sudah
+ * difilter ke customer ini. `stopPropagation` + `preventDefault` supaya tidak
+ * ikut memicu tautan baris/kartu yang membungkusnya.
+ */
+function CountLink({ to, count }: { to: string; count: number }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigate(to);
+      }}
+      style={{
+        fontWeight: 600,
+        border: "none",
+        background: "none",
+        padding: 0,
+        cursor: "pointer",
+        color: "var(--brand-primary-dark)",
+        textDecoration: "underline",
+        textUnderlineOffset: 2
+      }}
+    >
+      {count}
+    </button>
+  );
+}
+
+export function CustomersListView({ customers, jobCounts, quotationCounts }: Props) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "inactive">(
     "active"
@@ -108,6 +140,7 @@ export function CustomersListView({ customers, jobCounts }: Props) {
                 <th>Nama perusahaan</th>
                 <th>Alamat</th>
                 <th style={{ width: 110 }}>Total job</th>
+                <th style={{ width: 130 }}>Jumlah penawaran</th>
                 <th style={{ width: 100 }}>Status</th>
                 <th style={{ width: 50 }}></th>
               </tr>
@@ -177,9 +210,13 @@ export function CustomersListView({ customers, jobCounts }: Props) {
                     )}
                   </td>
                   <td>
-                    <span style={{ fontWeight: 600 }}>
-                      {jobCounts[c.id] ?? 0}
-                    </span>
+                    <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
+                  </td>
+                  <td>
+                    <CountLink
+                      to={`/quotations?customer_id=${c.id}`}
+                      count={quotationCounts[c.id] ?? 0}
+                    />
                   </td>
                   <td>
                     {c.is_active ? (
@@ -281,12 +318,21 @@ export function CustomersListView({ customers, jobCounts }: Props) {
                     paddingTop: 4
                   }}
                 >
-                  <span>
-                    <span style={{ color: "var(--text-tertiary)" }}>
-                      Total job:{" "}
+                  <span style={{ display: "flex", gap: 12 }}>
+                    <span>
+                      <span style={{ color: "var(--text-tertiary)" }}>
+                        Job:{" "}
+                      </span>
+                      <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
                     </span>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                      {jobCounts[c.id] ?? 0}
+                    <span>
+                      <span style={{ color: "var(--text-tertiary)" }}>
+                        Penawaran:{" "}
+                      </span>
+                      <CountLink
+                        to={`/quotations?customer_id=${c.id}`}
+                        count={quotationCounts[c.id] ?? 0}
+                      />
                     </span>
                   </span>
                   <ChevronRight

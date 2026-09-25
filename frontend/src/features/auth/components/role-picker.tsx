@@ -1,17 +1,28 @@
 import { useState } from "react";
-import { Shield, ShieldCheck } from "lucide-react";
+import { Banknote, Shield, ShieldCheck, UserCog } from "lucide-react";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { UserRole } from "@/types";
 
 export const LABEL_ROLE: Record<UserRole, string> = {
   superadmin: "Super Administrator",
-  operator: "Operator"
+  operator: "Operator",
+  finance: "Finance",
+  admin: "Admin"
 };
 
 const KETERANGAN_ROLE: Record<UserRole, string> = {
   superadmin: "Akses penuh: master data, tagihan, laporan, pengguna.",
-  operator: "Kelola job untuk jenis unit dalam scope Anda."
+  operator: "Lihat unit, driver, job (pantau), uang jalan, dan catat service.",
+  finance: "Kelola tagihan, faktur pajak, dan pantau piutang.",
+  admin: "Kelola unit, driver, customer, penawaran, job, dan laporan."
+};
+
+const ICON_ROLE: Record<UserRole, typeof Shield> = {
+  superadmin: ShieldCheck,
+  operator: Shield,
+  finance: Banknote,
+  admin: UserCog
 };
 
 /**
@@ -45,7 +56,7 @@ export function RolePicker({ onSelesai }: { onSelesai: (role: UserRole) => void 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {user.roles.map((r) => {
-        const Icon = r === "superadmin" ? ShieldCheck : Shield;
+        const Icon = ICON_ROLE[r];
         const aktif = r === user.role;
         return (
           <button

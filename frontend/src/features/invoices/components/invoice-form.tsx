@@ -6,24 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
+import { InfoUangJalanSurat } from "./info-uang-jalan-surat";
 import {
   createInvoice,
   updateInvoice,
   type InvoiceInput
 } from "@/features/invoices/api";
-import type { Customer, Invoice } from "@/types";
+import type { Customer, Invoice, JobBelumDitagihRow } from "@/types";
 import { formatRupiah } from "@/lib/utils";
-
-/** Job selesai yang belum pernah masuk tagihan mana pun. */
-export interface JobBelumDitagih {
-  id: string;
-  job_number: string;
-  asal: string;
-  tujuan: string;
-  alat_diangkut: string;
-  etd: string;
-  completed_at: string | null;
-}
 
 interface Props {
   customers: Customer[];
@@ -37,13 +27,19 @@ interface Props {
    * semua customer sekaligus supaya memilih customer tidak perlu menunggu
    * permintaan baru — daftarnya kecil (hanya job selesai yang belum ditagih).
    */
-  jobsPerCustomer: Record<string, JobBelumDitagih[]>;
+  jobsPerCustomer: Record<string, JobBelumDitagihRow[]>;
   /** Rekening default yang tercetak di tagihan. */
   defaultBank?: {
     nama?: string | null;
     rekening?: string | null;
     atas_nama?: string | null;
   };
+  /**
+   * Dari tab "Job siap ditagih": customer & job yang sudah dicentang di sana
+   * langsung mengisi form ini (hanya berlaku saat membuat tagihan baru).
+   */
+  initialCustomerId?: string;
+  initialJobIds?: string[];
 }
 
 interface ItemForm {
@@ -100,7 +96,9 @@ export function InvoiceForm({
   nextNumber,
   defaultTtdNama,
   jobsPerCustomer,
-  defaultBank
+  defaultBank,
+  initialCustomerId,
+  initialJobIds
 }: Props) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -150,6 +148,52 @@ export function InvoiceForm({
   );
 
   const jobsTersedia = jobsPerCustomer[form.customer_id] ?? [];
+
+  /**
+   * Uang jalan & surat jalan job yang sudah dipilih di suatu baris — dicari
+   * dari daftar "belum ditagih" dulu, lalu dari rincian tagihan tersimpan
+   * (mode edit, untuk job yang sudah tidak lagi ada di daftar "belum ditagih").
+   */
+  function infoUangJalanUntukJob(jobId: string) {
+    const dariTersedia = jobsTersedia.find((j) => j.id === jobId);
+    if (dariTersedia) {
+      return {
+        pagu: dariTersedia.uang_jalan_pagu,
+        cair: dariTersedia.uang_jalan_cair,
+        urls: dariTersedia.surat_jalan_urls
+      };
+    }
+    const dariInvoice = invoice?.items.find((x) => x.job_id === jobId);
+    return {
+      pagu: dariInvoice?.uang_jalan_pagu ?? null,
+      cair: dariInvoice?.uang_jalan_cair ?? null,
+      urls: dariInvoice?.surat_jalan_urls ?? []
+    };
+  }
+
+  // Diisi sekali di awal dari job-job yang sudah dicentang di tab "Job siap
+  // ditagih" — hanya untuk tagihan baru, dan hanya sekali supaya tidak
+  // menimpa perubahan admin di form setelahnya.
+  useEffect(() => {
+    if (isEdit || !initialCustomerId || !initialJobIds?.length) return;
+    onCustomerChange(initialCustomerId);
+    const dipilih = (jobsPerCustomer[initialCustomerId] ?? []).filter((j) =>
+      initialJobIds.includes(j.id)
+    );
+    if (dipilih.length > 0) {
+      setItems(
+        dipilih.map((j) =>
+          newItem({
+            job_id: j.id,
+            deskripsi: `Pengangkutan ${j.alat_diangkut}`,
+            dari: j.asal,
+            tujuan: j.tujuan
+          })
+        )
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Jatuh tempo mengikuti tanggal + termin selama admin belum mengetiknya
   // sendiri. Begitu diketik manual, nilainya dibiarkan — kesepakatan khusus
@@ -600,6 +644,20 @@ export function InvoiceForm({
                   clearable
                 />
               </Field>
+
+              {it.job_id &&
+                (() => {
+                  const info = infoUangJalanUntukJob(it.job_id);
+                  return (
+                    <div style={{ marginTop: -2, marginBottom: 4 }}>
+                      <InfoUangJalanSurat
+                        uangJalanPagu={info.pagu}
+                        uangJalanCair={info.cair}
+                        suratJalanUrls={info.urls}
+                      />
+                    </div>
+                  );
+                })()}
 
               <div
                 style={{

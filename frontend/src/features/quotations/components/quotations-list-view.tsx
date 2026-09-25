@@ -1,19 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, ChevronRight, FileText, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
 import { QuotationStatusBadge } from "./quotation-status-badge";
-import type { QuotationListRow, QuotationStatus } from "@/types";
+import type { Customer, QuotationListRow, QuotationStatus } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
 
 interface Props {
   quotations: QuotationListRow[];
+  customers: Customer[];
+  /** Datang dari query string (mis. diklik dari kolom "Jumlah penawaran" di menu Customer). */
+  initialCustomerId?: string;
 }
 
 // "deal_pending" bukan status di database — ia turunan dari status deal yang
@@ -56,9 +60,28 @@ const toneColor: Record<Pelaksanaan["tone"], string> = {
   netral: "var(--text-tertiary)"
 };
 
-export function QuotationsListView({ quotations }: Props) {
+export function QuotationsListView({ quotations, customers, initialCustomerId }: Props) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
+
+  // Menyesuaikan saat halaman dibuka lagi lewat tautan customer lain
+  // (mis. dari kolom "Jumlah penawaran" di menu Customer) tanpa remount komponen.
+  useEffect(() => {
+    setCustomerId(initialCustomerId ?? "");
+  }, [initialCustomerId]);
+
+  const customerOptions = useMemo<ComboboxOption[]>(
+    () =>
+      customers
+        .filter((c) => c.is_active)
+        .map((c) => ({
+          value: c.id,
+          label: c.nama_perusahaan,
+          hint: c.kota ?? undefined
+        })),
+    [customers]
+  );
 
   // Dihitung dari baris yang sudah dipetakan, bukan lewat query terpisah —
   // status kedaluwarsa diturunkan saat baca, jadi COUNT di database akan
@@ -83,6 +106,7 @@ export function QuotationsListView({ quotations }: Props) {
       } else if (filter !== "all" && row.status !== filter) {
         return false;
       }
+      if (customerId && row.customer_id !== customerId) return false;
       if (!needle) return true;
       return (
         row.quote_number.toLowerCase().includes(needle) ||
@@ -91,7 +115,7 @@ export function QuotationsListView({ quotations }: Props) {
         (row.pic_nama ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [quotations, q, filter]);
+  }, [quotations, q, filter, customerId]);
 
   const totalNilai = useMemo(
     () => filtered.reduce((sum, r) => sum + r.total, 0),
@@ -104,7 +128,7 @@ export function QuotationsListView({ quotations }: Props) {
     [quotations]
   );
 
-  const pg = usePagination(filtered, { resetKey: `${q}|${filter}` });
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}|${customerId}` });
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
@@ -113,12 +137,23 @@ export function QuotationsListView({ quotations }: Props) {
         description="Surat penawaran harga ke customer beserta statusnya."
       />
       <div className="toolbar">
-        <div style={{ flex: 1, minWidth: 240 }}>
+        <div className="toolbar-search">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Cari nomor surat, customer, atau alat…"
             leftIcon={<Search style={{ width: 15, height: 15 }} />}
+          />
+        </div>
+        <div className="toolbar-filter">
+          <Combobox
+            value={customerId}
+            onChange={setCustomerId}
+            options={customerOptions}
+            placeholder="Semua customer"
+            searchPlaceholder="Cari customer…"
+            emptyText="Customer tidak ditemukan"
+            clearable
           />
         </div>
         <Link to="/quotations/new" className="hidden lg:inline-flex">
@@ -183,6 +218,7 @@ export function QuotationsListView({ quotations }: Props) {
                   <th style={{ width: 180 }}>Nomor surat</th>
                   <th>Customer</th>
                   <th style={{ width: 110 }}>Tanggal</th>
+                  <th style={{ width: 110 }}>Berlaku s.d.</th>
                   <th style={{ width: 150, textAlign: "right" }}>Nilai</th>
                   <th style={{ width: 120 }}>Status</th>
                   <th style={{ width: 170 }}>Pelaksanaan</th>
@@ -224,6 +260,15 @@ export function QuotationsListView({ quotations }: Props) {
                     </td>
                     <td className="muted" style={{ fontSize: 12.5 }}>
                       {formatDate(row.tanggal)}
+                    </td>
+                    <td
+                      style={{
+                        fontSize: 12.5,
+                        color: row.status === "kedaluwarsa" ? "#C13838" : "var(--text-secondary)",
+                        fontWeight: row.status === "kedaluwarsa" ? 600 : 400
+                      }}
+                    >
+                      {row.berlaku_sampai ? formatDate(row.berlaku_sampai) : "—"}
                     </td>
                     <td
                       className="mono"
@@ -271,7 +316,7 @@ export function QuotationsListView({ quotations }: Props) {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={3} style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                  <td colSpan={4} style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
                     {filtered.length} penawaran ditampilkan
                   </td>
                   <td
@@ -322,6 +367,19 @@ export function QuotationsListView({ quotations }: Props) {
                 >
                   <span style={{ color: "var(--text-tertiary)" }}>
                     {formatDate(row.tanggal)}
+                    {row.berlaku_sampai && (
+                      <>
+                        {" · s.d. "}
+                        <span
+                          style={{
+                            color: row.status === "kedaluwarsa" ? "#C13838" : "var(--text-tertiary)",
+                            fontWeight: row.status === "kedaluwarsa" ? 600 : 400
+                          }}
+                        >
+                          {formatDate(row.berlaku_sampai)}
+                        </span>
+                      </>
+                    )}
                   </span>
                   <span
                     className="mono"

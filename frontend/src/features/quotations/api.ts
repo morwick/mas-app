@@ -23,7 +23,7 @@ export interface QuotationInput {
   pic_nama?: string | null;
   kota_terbit: string;
   tanggal: string;
-  berlaku_sampai?: string | null;
+  berlaku_sampai: string;
   perihal: string;
   objek?: string | null;
   lampiran?: string | null;

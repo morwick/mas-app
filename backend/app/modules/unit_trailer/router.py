@@ -18,7 +18,7 @@ from postgrest.types import CountMethod
 from pydantic import BaseModel, Field, field_validator
 from supabase import AsyncClient
 
-from app.core.auth import superadmin_client, user_client
+from app.core.auth import superadmin_or_admin_client, user_client
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any, page_params
 from app.core.pg import first, rows, single
@@ -29,6 +29,8 @@ from app.modules.auth.schemas import OkResponse
 router = APIRouter(prefix="/unit-trailer", tags=["unit-trailer"])
 
 StatusTrailer = Literal["standby", "perbaikan"]
+# "terjual" hanya lewat menu Penjualan Unit — bisa tampil, tapi tidak bisa diisi di form.
+StatusTrailerTampil = Literal["standby", "perbaikan", "terjual"]
 
 _SELECT = (
     "id, kode_trailer, tahun, jenis_unit_trailer_id, kapasitas_ton, status_trailer, "
@@ -47,7 +49,7 @@ class UnitTrailer(BaseModel):
     jenis_nama: str | None
     jenis_unit_nama: str | None
     kapasitas_ton: float | None
-    status: StatusTrailer
+    status: StatusTrailerTampil
 
 
 class JenisUnitTrailer(BaseModel):
@@ -172,7 +174,7 @@ async def daftar_jenis_unit_trailer(client: AsyncClient = Depends(user_client)) 
 
 @router.post("/jenis", response_model=JenisUnitTrailer, status_code=201)
 async def tambah_jenis_unit_trailer(
-    payload: JenisUnitTrailerInput, client: AsyncClient = Depends(superadmin_client)
+    payload: JenisUnitTrailerInput, client: AsyncClient = Depends(superadmin_or_admin_client)
 ) -> JenisUnitTrailer:
     nama = " ".join(payload.nama.split())
     if not nama:
@@ -229,7 +231,7 @@ async def trailer_untuk_unit(unit_id: str, client: AsyncClient = Depends(user_cl
                 status=r["status_trailer"],
             )
             for r in data
-            if r.get("id")
+            if r.get("id") and r.get("status_trailer") != "terjual"
         ],
     )
 
@@ -241,7 +243,7 @@ async def trailer_untuk_unit(unit_id: str, client: AsyncClient = Depends(user_cl
 async def daftar_unit_trailer(
     params: PageParams = Depends(page_params),
     q: Annotated[str | None, Query(max_length=100)] = None,
-    status: StatusTrailer | None = None,
+    status: StatusTrailerTampil | None = None,
     jenis_unit_trailer_id: str | None = None,
     client: AsyncClient = Depends(user_client),
 ) -> Page[UnitTrailer]:
@@ -258,7 +260,7 @@ async def daftar_unit_trailer(
 
 @router.post("", response_model=UnitTrailer, status_code=201)
 async def tambah_unit_trailer(
-    payload: UnitTrailerInput, client: AsyncClient = Depends(superadmin_client)
+    payload: UnitTrailerInput, client: AsyncClient = Depends(superadmin_or_admin_client)
 ) -> UnitTrailer:
     data = _data(payload)
     await _pastikan_kode_unik(client, data["kode_trailer"])
@@ -274,9 +276,14 @@ async def tambah_unit_trailer(
 
 @router.patch("/{trailer_id}", response_model=OkResponse)
 async def ubah_unit_trailer(
-    trailer_id: str, payload: UnitTrailerInput, client: AsyncClient = Depends(superadmin_client)
+    trailer_id: str, payload: UnitTrailerInput, client: AsyncClient = Depends(superadmin_or_admin_client)
 ) -> OkResponse:
     data = _data(payload)
+    lama = single(
+        await client.table("unit_trailer").select("status_trailer").eq("id", trailer_id).maybe_single().execute()
+    )
+    if lama and lama.get("status_trailer") == "terjual":
+        raise ValidationError("Unit trailer sudah terjual. Batalkan penjualannya dulu lewat menu Penjualan Unit.")
     await _pastikan_kode_unik(client, data["kode_trailer"], kecuali_id=trailer_id)
     try:
         res = await client.table("unit_trailer").update(data).eq("id", trailer_id).execute()
@@ -289,7 +296,7 @@ async def ubah_unit_trailer(
 
 
 @router.delete("/{trailer_id}", response_model=OkResponse)
-async def hapus_unit_trailer(trailer_id: str, client: AsyncClient = Depends(superadmin_client)) -> OkResponse:
+async def hapus_unit_trailer(trailer_id: str, client: AsyncClient = Depends(superadmin_or_admin_client)) -> OkResponse:
     # Soft delete: UPDATE unit_trailer SET status = 2 WHERE id = … AND status = 1.
     res = await client.table("unit_trailer").update({STATUS: DIHAPUS}).eq("id", trailer_id).execute()
     if not rows(res):

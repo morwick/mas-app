@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Smartphone, KeyRound } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
 import { Card } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Input, Field } from "@/components/ui/input";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useDriverAuth } from "@/lib/auth/DriverAuthContext";
 import { DriverDashboardView } from "../components/driver-dashboard-view";
+import { DriverHistoryView } from "../components/driver-history-view";
 import { DriverJobDetailView } from "../components/driver-job-detail-view";
 import { useMyJob, useMyJobs } from "../queries";
 
@@ -97,17 +98,37 @@ export function DriverLoginPage() {
 
 export function DriverDashboardPage() {
   const { session } = useDriverAuth();
-  const jobs = useMyJobs("all");
+  // Dipisah dua panggilan bertarget (backend sudah menyaringnya) — bukan
+  // tarik semua job lalu filter di klien, supaya halaman utama cuma memuat
+  // yang benar-benar perlu tampil (0-1 job per kategori).
+  const confirmJobs = useMyJobs("konfirmasi");
+  const activeJobs = useMyJobs("aktif");
+  if (confirmJobs.isPending || activeJobs.isPending) return <PageLoading />;
+  if (confirmJobs.isError) return <PageError error={confirmJobs.error} onRetry={confirmJobs.refetch} />;
+  if (activeJobs.isError) return <PageError error={activeJobs.error} onRetry={activeJobs.refetch} />;
+  return (
+    <DriverDashboardView
+      driverNama={session?.nama ?? ""}
+      confirmJob={confirmJobs.data[0] ?? null}
+      activeJob={activeJobs.data[0] ?? null}
+    />
+  );
+}
+
+export function DriverHistoryPage() {
+  const jobs = useMyJobs("selesai");
   if (jobs.isPending) return <PageLoading />;
   if (jobs.isError) return <PageError error={jobs.error} onRetry={jobs.refetch} />;
-  return <DriverDashboardView driverNama={session?.nama ?? ""} jobs={jobs.data} />;
+  return <DriverHistoryView jobs={jobs.data} />;
 }
 
 export function DriverJobDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   // Backend hanya melepas job milik driver ini; job orang lain datang sebagai 404.
   const job = useMyJob(id);
   if (job.isPending) return <PageLoading />;
   if (job.isError) return <PageError error={job.error} onRetry={job.refetch} />;
-  return <DriverJobDetailView job={job.data} />;
+  const backTo = searchParams.get("dari") === "riwayat" ? "/driver/riwayat" : "/driver/dashboard";
+  return <DriverJobDetailView job={job.data} backTo={backTo} />;
 }

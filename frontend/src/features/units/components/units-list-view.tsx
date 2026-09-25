@@ -12,6 +12,7 @@ import { Input, Select } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/layout/fab";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { JenisUnit, Unit } from "@/types";
 import { fleetLocations } from "@/features/tracking/api";
 import { Pagination, usePagination } from "@/components/ui/pagination";
@@ -33,6 +34,7 @@ interface LocationEntry {
 const LOCATION_POLL_MS = 30_000;
 
 export function UnitsListView({ units, jenisUnitList }: Props) {
+  const { canManageOperational } = useAuth();
   const [q, setQ] = useState("");
   const [jenis, setJenis] = useState("");
   const [status, setStatus] = useState("");
@@ -125,11 +127,13 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
             <option value="diafkirkan">Diafkirkan</option>
           </Select>
         </div>
-        <Link to="/units/new" className="hidden lg:inline-flex">
-          <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
-            Tambah unit
-          </Button>
-        </Link>
+        {canManageOperational && (
+          <Link to="/units/new" className="hidden lg:inline-flex">
+            <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+              Tambah unit
+            </Button>
+          </Link>
+        )}
       </div>
 
       <label
@@ -150,13 +154,15 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
         <EmptyState
           icon={Truck}
           title="Tidak ada unit"
-          description="Coba ubah filter atau tambah unit baru."
+          description={canManageOperational ? "Coba ubah filter atau tambah unit baru." : "Coba ubah filter."}
           action={
-            <Link to="/units/new">
-              <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
-                Tambah unit
-              </Button>
-            </Link>
+            canManageOperational ? (
+              <Link to="/units/new">
+                <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+                  Tambah unit
+                </Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (
@@ -359,7 +365,7 @@ export function UnitsListView({ units, jenisUnitList }: Props) {
         </>
       )}
 
-      <Fab href="/units/new" label="Tambah unit" />
+      {canManageOperational && <Fab href="/units/new" label="Tambah unit" />}
     </div>
   );
 }

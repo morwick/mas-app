@@ -4,9 +4,17 @@ import type { ActionResult } from "@/types";
 
 export type StatusTrailer = "standby" | "perbaikan";
 
+/** "terjual" hanya lewat menu Penjualan Unit — bisa tampil, tidak bisa dipilih di form. */
+export type StatusTrailerTampil = StatusTrailer | "terjual";
+
 export const STATUS_TRAILER: { value: StatusTrailer; label: string }[] = [
   { value: "standby", label: "Standby" },
   { value: "perbaikan", label: "Perbaikan" }
+];
+
+export const STATUS_TRAILER_TAMPIL: { value: StatusTrailerTampil; label: string }[] = [
+  ...STATUS_TRAILER,
+  { value: "terjual", label: "Terjual" }
 ];
 
 export interface UnitTrailer {
@@ -18,7 +26,7 @@ export interface UnitTrailer {
   /** Jenis Unit (truk) yang terhubung ke jenis unit trailer-nya. */
   jenis_unit_nama: string | null;
   kapasitas_ton: number | null;
-  status: StatusTrailer;
+  status: StatusTrailerTampil;
 }
 
 export interface UnitTrailerInput {
@@ -40,7 +48,7 @@ export interface UnitTrailerFilter {
   page: number;
   pageSize: number;
   q: string;
-  status: StatusTrailer | "";
+  status: StatusTrailerTampil | "";
   jenisUnitTrailerId: string;
 }
 

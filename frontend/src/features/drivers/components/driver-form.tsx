@@ -11,6 +11,7 @@ import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { useKaryawanDriver } from "@/features/drivers/queries";
 import { DriverPinCard } from "./driver-pin-card";
 import { PowerOff } from "lucide-react";
+import { useAuth } from "@/lib/auth/AuthContext";
 import {
   createDriver,
   deactivateDriver,
@@ -26,6 +27,10 @@ interface Props {
 export function DriverForm({ mode, initial }: Props) {
   const navigate = useNavigate();
   const toast = useToast();
+  const { canManageOperational } = useAuth();
+  // Operator: lihat saja. Rute /drivers/new sendiri sudah tertutup untuk
+  // operator, jadi read-only cuma benar-benar berlaku saat mode "edit".
+  const readOnly = mode === "edit" && !canManageOperational;
   const [loading, setLoading] = useState(false);
   const [deactOpen, setDeactOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -104,7 +109,7 @@ export function DriverForm({ mode, initial }: Props) {
     <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-[640px]">
       <Card>
         <CardHeader
-          title={mode === "new" ? "Tambah driver" : "Edit driver"}
+          title={mode === "new" ? "Tambah driver" : readOnly ? "Detail driver" : "Edit driver"}
           description="Data identitas driver"
         />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -124,7 +129,7 @@ export function DriverForm({ mode, initial }: Props) {
               placeholder={karyawan.isLoading ? "Memuat karyawan…" : "Pilih karyawan"}
               searchPlaceholder="Ketik nama karyawan…"
               emptyText="Karyawan tidak ditemukan"
-              disabled={karyawan.isLoading}
+              disabled={karyawan.isLoading || readOnly}
               error={error.karyawan_id || sudahDriver || undefined}
             />
           </Field>
@@ -135,6 +140,7 @@ export function DriverForm({ mode, initial }: Props) {
               value={form.no_hp}
               onChange={(e) => set("no_hp", e.target.value)}
               error={error.no_hp}
+              disabled={readOnly}
             />
           </Field>
           <Field label="No SIM">
@@ -142,6 +148,7 @@ export function DriverForm({ mode, initial }: Props) {
               placeholder="B II Umum"
               value={form.no_sim ?? ""}
               onChange={(e) => set("no_sim", e.target.value)}
+              disabled={readOnly}
             />
           </Field>
           {/* Nomor SIM saja tidak memberi tahu apa pun soal layak jalan —
@@ -151,6 +158,7 @@ export function DriverForm({ mode, initial }: Props) {
               type="date"
               value={form.sim_berlaku_sampai ?? ""}
               onChange={(e) => set("sim_berlaku_sampai", e.target.value)}
+              disabled={readOnly}
             />
           </Field>
           <Field label="Alamat" className="sm:col-span-2">
@@ -158,6 +166,7 @@ export function DriverForm({ mode, initial }: Props) {
               placeholder="Alamat tempat tinggal (opsional)"
               value={form.alamat ?? ""}
               onChange={(e) => set("alamat", e.target.value)}
+              disabled={readOnly}
             />
           </Field>
           <Field label="Catatan" className="sm:col-span-2">
@@ -165,6 +174,7 @@ export function DriverForm({ mode, initial }: Props) {
               placeholder="Catatan internal (opsional)"
               value={form.catatan ?? ""}
               onChange={(e) => set("catatan", e.target.value)}
+              disabled={readOnly}
             />
           </Field>
         </div>
@@ -172,7 +182,7 @@ export function DriverForm({ mode, initial }: Props) {
 
       {mode === "edit" && initial && <DriverPinCard driver={initial} />}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        {mode === "edit" && initial?.is_active ? (
+        {!readOnly && mode === "edit" && initial?.is_active ? (
           <Button
             variant="danger"
             type="button"
@@ -187,12 +197,14 @@ export function DriverForm({ mode, initial }: Props) {
         <div className="flex items-center gap-2">
           <Link to="/drivers">
             <Button variant="secondary" type="button">
-              Batal
+              {readOnly ? "Kembali" : "Batal"}
             </Button>
           </Link>
-          <Button type="submit" loading={loading}>
-            {mode === "new" ? "Simpan driver" : "Simpan perubahan"}
-          </Button>
+          {!readOnly && (
+            <Button type="submit" loading={loading}>
+              {mode === "new" ? "Simpan driver" : "Simpan perubahan"}
+            </Button>
+          )}
         </div>
       </div>
       <LoadingOverlay

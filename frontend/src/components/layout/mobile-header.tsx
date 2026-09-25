@@ -4,7 +4,7 @@ import { Logo } from "./logo";
 import { MobileDrawer } from "./mobile-drawer";
 import { NotificationBell } from "./notification-bell";
 import { ProfileMenu } from "./profile-menu";
-import { navItems } from "./nav-items";
+import { navItems, type UserRoleLike } from "./nav-items";
 import type { AppNotification } from "@/lib/notifications";
 
 function getPageTitle(pathname: string) {
@@ -27,7 +27,7 @@ interface MobileHeaderProps {
     nama: string;
     email: string;
     initials: string;
-    role?: "superadmin" | "operator";
+    role?: UserRoleLike;
   } | null;
   counts?: {
     units?: number;

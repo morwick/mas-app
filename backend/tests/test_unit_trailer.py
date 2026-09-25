@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.auth import superadmin_client, user_client
+from app.core.auth import superadmin_or_admin_client, user_client
 from app.main import app
 
 BARIS = {
@@ -82,7 +82,7 @@ def db() -> Iterator[_FakeDb]:
         yield fake
 
     app.dependency_overrides[user_client] = override
-    app.dependency_overrides[superadmin_client] = override
+    app.dependency_overrides[superadmin_or_admin_client] = override
     yield fake
     app.dependency_overrides.clear()
 
