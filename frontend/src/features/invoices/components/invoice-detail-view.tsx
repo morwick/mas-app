@@ -18,8 +18,8 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
-import { InvoiceStatusBadge } from "./invoice-status-badge";
-import { InfoUangJalanSurat } from "./info-uang-jalan-surat";
+import { InvoiceStatusBadge, StatusBayarBadge } from "./invoice-status-badge";
+import { alasanTerkunci } from "../lib-terkunci";
 import {
   addInvoicePayment,
   deleteInvoicePayment,
@@ -66,7 +66,8 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
   const [uploadingFaktur, setUploadingFaktur] = useState(false);
   const fakturInputRef = useRef<HTMLInputElement>(null);
 
-  const bisaDiedit = inv.status === "draft" || inv.status === "terkirim";
+  const terkunci = alasanTerkunci(inv);
+  const bisaDiedit = (inv.status === "draft" || inv.status === "terkirim") && !terkunci;
 
   async function ubahStatus(
     status: "draft" | "terkirim" | "batal",
@@ -162,6 +163,8 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <Link
             to={`/invoices/${inv.id}/cetak`}
+            target="_blank"
+            rel="noreferrer"
             className="btn btn-secondary btn-sm"
             style={{ textDecoration: "none" }}
           >
@@ -240,11 +243,17 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
                 status={inv.status_tampil}
                 hariTerlambat={inv.hari_terlambat}
               />
+              <StatusBayarBadge status={inv.status_bayar} />
             </div>
             <div className="body-sm muted">
               {inv.customer_nama}
               {inv.pic_nama ? ` · ${inv.pic_sapaan ?? "Bapak"} ${inv.pic_nama}` : ""}
             </div>
+            {terkunci && inv.status !== "lunas" && inv.status !== "batal" && (
+              <div className="caption" style={{ marginTop: 4 }}>
+                {terkunci}
+              </div>
+            )}
             {inv.quotation_id && inv.quotation_number && (
               <Link
                 to={`/quotations/${inv.quotation_id}`}
@@ -347,7 +356,7 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
               <tr>
                 <th style={{ width: 40 }}>No</th>
                 <th>Uraian</th>
-                <th style={{ width: 190 }}>Job</th>
+                <th style={{ width: 140 }}>Job</th>
                 <th style={{ width: 90 }}>Jumlah</th>
                 <th style={{ width: 140, textAlign: "right" }}>Harga</th>
                 <th style={{ width: 140, textAlign: "right" }}>Total</th>
@@ -369,24 +378,18 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
                   </td>
                   <td>
                     {it.job_id && it.job_number ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <Link
-                          to={`/jobs/${it.job_id}`}
-                          className="mono"
-                          style={{
-                            fontSize: 11.5,
-                            color: "var(--brand-primary-dark)",
-                            textDecoration: "none"
-                          }}
-                        >
-                          {it.job_number}
-                        </Link>
-                        <InfoUangJalanSurat
-                          uangJalanPagu={it.uang_jalan_pagu}
-                          uangJalanCair={it.uang_jalan_cair}
-                          suratJalanUrls={it.surat_jalan_urls}
-                        />
-                      </div>
+                      <Link
+                        to={`/jobs/${it.job_id}`}
+                        className="mono"
+                        title="Buka detail job"
+                        style={{
+                          fontSize: 11.5,
+                          color: "var(--brand-primary-dark)",
+                          textDecoration: "underline"
+                        }}
+                      >
+                        {it.job_number}
+                      </Link>
                     ) : (
                       <span className="muted" style={{ fontSize: 12 }}>
                         —

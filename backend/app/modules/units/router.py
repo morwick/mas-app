@@ -12,9 +12,10 @@ from app.modules.jobs.schemas import Job
 from app.modules.jobs.service import JobService
 from app.modules.maintenance.schemas import ServiceRecord
 from app.modules.maintenance.service import MaintenanceService
+from app.modules.units.riwayat import hapus_aset, ringkasan_riwayat
 from app.modules.units.schemas import (
-    ChangeStatusRequest,
     DriverAssignment,
+    RiwayatAset,
     Unit,
     UnitCreate,
     UnitStatusHistoryEntry,
@@ -70,6 +71,19 @@ async def status_history(unit_id: str, svc: UnitService = Depends(get_service)) 
     return await svc.status_history(unit_id)
 
 
+@router.get("/{unit_id}/riwayat", response_model=RiwayatAset)
+async def unit_riwayat(unit_id: str, client: AsyncClient = Depends(user_client)) -> RiwayatAset:
+    """Jumlah riwayat — tombol Hapus hanya muncul bila semuanya kosong."""
+    return await ringkasan_riwayat(client, "unit", unit_id)
+
+
+@router.delete("/{unit_id}", response_model=OkResponse)
+async def delete_unit(unit_id: str, client: AsyncClient = Depends(user_client)) -> OkResponse:
+    """Hapus unit tanpa riwayat; yang punya riwayat ditolak DB (nonaktifkan saja)."""
+    await hapus_aset(client, "unit", unit_id)
+    return OkResponse()
+
+
 @router.get("/{unit_id}/jobs", response_model=list[Job])
 async def unit_jobs(unit_id: str, client: AsyncClient = Depends(user_client)) -> list[Job]:
     return await JobService(client).list_by_unit(unit_id)
@@ -93,14 +107,6 @@ async def create_unit(payload: UnitCreate, svc: UnitService = Depends(get_servic
 @router.patch("/{unit_id}", response_model=OkResponse)
 async def update_unit(unit_id: str, payload: UnitUpdate, svc: UnitService = Depends(get_service)) -> OkResponse:
     await svc.update(unit_id, payload)
-    return OkResponse()
-
-
-@router.post("/{unit_id}/status", response_model=OkResponse)
-async def change_status(
-    unit_id: str, payload: ChangeStatusRequest, svc: UnitService = Depends(get_service)
-) -> OkResponse:
-    await svc.change_status(unit_id, payload)
     return OkResponse()
 
 

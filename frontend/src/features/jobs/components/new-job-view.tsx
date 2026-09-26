@@ -38,9 +38,11 @@ import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
  */
 export interface JobPrefill {
   quotation_id: string;
+  /** Item penawaran (deal) yang dibuatkan job ini. */
+  quotation_item_id: string;
   quote_number: string;
-  /** Jumlah baris rute di penawaran — form ini hanya memodelkan satu A → B. */
-  jumlah_rute: number;
+  /** mis. "item 2: Pekanbaru → Dumai" — untuk banner. */
+  item_label: string;
   customer_id?: string;
   pic_nama?: string;
   pic_no_hp?: string;
@@ -309,7 +311,8 @@ export function NewJobView({
         // Hanya dikirim bila unit ini memang memakai unit trailer.
         unit_trailer_id: trailerWajib ? form.unit_trailer_id || null : null,
         uang_jalan_pagu: Math.round(Number(form.uang_jalan_pagu)),
-        quotation_id: prefill?.quotation_id ?? null
+        quotation_id: prefill?.quotation_id ?? null,
+        quotation_item_id: prefill?.quotation_item_id ?? null
       },
       { allowConflict }
     );
@@ -365,16 +368,12 @@ export function NewJobView({
             fontSize: 13
           }}
         >
-          <strong>Data diambil dari penawaran {prefill.quote_number}.</strong>{" "}
+          <strong>
+            Data diambil dari penawaran {prefill.quote_number} ({prefill.item_label}).
+          </strong>{" "}
           Customer, alat, dan rute sudah terisi — tinggal pilih unit, driver,
-          dan jadwal berangkat.
-          {prefill.jumlah_rute > 1 && (
-            <>
-              {" "}
-              Penawaran ini punya {prefill.jumlah_rute - 1} rute lain; masing-masing
-              perlu dibuatkan job tersendiri.
-            </>
-          )}
+          dan jadwal berangkat. Item deal lain dibuatkan job dari halaman
+          penawaran.
         </div>
       )}
 

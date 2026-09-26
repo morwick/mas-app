@@ -1,5 +1,6 @@
 import { Combobox } from "@/components/ui/combobox";
 import { Field } from "@/components/ui/input";
+import { UNIT_STATUS_LABEL } from "@/features/units/components/aset-detail-parts";
 import type { TrailerUntukUnit } from "../api";
 
 interface Props {
@@ -11,13 +12,15 @@ interface Props {
   error?: string;
   /** Wajib diisi? Default mengikuti `pilihan.wajib`. */
   required?: boolean;
+  /** Trailer yang sedang dipakai job ini (form edit) — tetap bisa dipilih walau Bertugas. */
+  trailerJobIni?: string | null;
 }
 
 /**
  * Pilihan Unit Trailer di form job. Hanya tampil bila jenis unit dari unit
  * yang dipilih punya jenis unit trailer; selain itu tidak dirender sama sekali.
  */
-export function UnitTrailerField({ pilihan, loading, value, onChange, error, required }: Props) {
+export function UnitTrailerField({ pilihan, loading, value, onChange, error, required, trailerJobIni }: Props) {
   if (loading) {
     return (
       <Field label="Unit trailer">
@@ -40,11 +43,18 @@ export function UnitTrailerField({ pilihan, loading, value, onChange, error, req
       <Combobox
         value={value}
         onChange={onChange}
-        options={pilihan.trailer.map((t) => ({
-          value: t.id,
-          label: t.kode_trailer,
-          hint: [t.jenis_nama, t.status === "perbaikan" ? "sedang perbaikan" : null].filter(Boolean).join(" · ")
-        }))}
+        // Sama seperti unit: hanya trailer Standby yang bisa dipakai job.
+        options={pilihan.trailer.map((t) => {
+          const bisa = t.status === "standby" || t.id === trailerJobIni;
+          return {
+            value: t.id,
+            label: t.kode_trailer,
+            hint: [t.jenis_nama, bisa ? null : `${UNIT_STATUS_LABEL[t.status]} — tidak bisa dipilih`]
+              .filter(Boolean)
+              .join(" · "),
+            disabled: !bisa
+          };
+        })}
         placeholder="Pilih unit trailer"
         searchPlaceholder="Cari kode trailer atau jenisnya…"
         emptyText="Tidak ada unit trailer yang cocok"

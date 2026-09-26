@@ -28,7 +28,7 @@ describe("UnitTrailerField", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("tampil wajib dengan trailer yang cocok, lalu bisa dipilih", () => {
+  it("tampil wajib dengan trailer yang cocok; hanya yang Standby bisa dipilih", () => {
     const onChange = vi.fn();
     render(<UnitTrailerField pilihan={PILIHAN} loading={false} value="" onChange={onChange} />);
     expect(screen.getByText("Unit trailer")).toBeTruthy();
@@ -37,10 +37,27 @@ describe("UnitTrailerField", () => {
     const opsi = within(screen.getByRole("listbox")).getAllByRole("option");
     expect(opsi.map((o) => o.textContent)).toEqual([
       expect.stringContaining("TR-01"),
-      expect.stringContaining("sedang perbaikan")
+      expect.stringContaining("Perbaikan — tidak bisa dipilih")
     ]);
+    // Sama seperti unit: trailer yang tidak Standby tidak bisa dipakai job.
+    fireEvent.click(opsi[1]);
+    expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(opsi[0]);
     expect(onChange).toHaveBeenCalledWith("t1");
+  });
+
+  it("trailer yang sedang dipakai job ini tetap bisa dipilih di form edit", () => {
+    const onChange = vi.fn();
+    const pilihan = {
+      wajib: true,
+      trailer: [{ id: "t3", kode_trailer: "TR-03", jenis_nama: "Lowbed", status: "bertugas" as const }]
+    };
+    render(
+      <UnitTrailerField pilihan={pilihan} loading={false} value="" onChange={onChange} trailerJobIni="t3" />
+    );
+    fireEvent.click(document.querySelector(".combobox-trigger")!);
+    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    expect(onChange).toHaveBeenCalledWith("t3");
   });
 
   it("wajib tapi belum ada trailer → petunjuk menambah di menu Unit Trailer", () => {

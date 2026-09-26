@@ -2,6 +2,7 @@ import { api } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
 import type {
   ActionResult,
+  KeputusanItem,
   Quotation,
   QuotationJobRef,
   QuotationListRow,
@@ -62,6 +63,22 @@ export function setQuotationStatus(
   opts?: { alasan?: string | null }
 ): Promise<ActionResult<unknown>> {
   return mutate(api.post(`/quotations/${id}/status`, { status, alasan: opts?.alasan ?? null }));
+}
+
+export interface KeputusanItemInput {
+  item_id: string;
+  keputusan: KeputusanItem;
+  /** Rupiah penuh, hanya untuk item deal. null = harga awal. */
+  harga_revisi: number | null;
+  alasan: string | null;
+}
+
+/** Keputusan deal / tolak (+ revisi harga) per item — status penawaran dihitung ulang. */
+export function simpanKeputusanItem(
+  id: string,
+  items: KeputusanItemInput[]
+): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/quotations/${id}/keputusan`, { items }));
 }
 
 export function deleteQuotation(id: string): Promise<ActionResult<unknown>> {

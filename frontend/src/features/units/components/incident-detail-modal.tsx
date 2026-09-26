@@ -16,7 +16,7 @@ import {
   type IncidentAction
 } from "@/features/units/components/incident-actions";
 import {
-  incidentStatusLabel,
+  labelStatusInsiden,
   incidentTypeLabel,
   type Incident
 } from "@/types";
@@ -94,7 +94,7 @@ export function IncidentDetailModal({ open, onClose, incident, onAction, onEdit 
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Badge variant={statusBadgeVariant[incident.status]}>
-              {incidentStatusLabel[incident.status]}
+              {labelStatusInsiden(incident)}
             </Badge>
             {incident.job_number && (
               <Badge variant="neutral">Job {incident.job_number}</Badge>

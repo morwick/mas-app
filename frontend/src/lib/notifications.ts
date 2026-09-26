@@ -13,7 +13,6 @@ import {
   PackageCheck,
   WifiOff,
   Building2,
-  AlertCircle,
   FileText,
   Receipt,
   Wallet,
@@ -24,7 +23,6 @@ export type NotificationKind =
   | "anomaly"
   | "service_overdue"
   | "service_due_soon"
-  | "incident_open"
   | "job_unassigned"
   | "gps_offline"
   | "customer_new"
@@ -59,7 +57,6 @@ export const KIND_META: Record<NotificationKind, KindMeta> = {
   anomaly: { icon: AlertTriangle, label: "Anomali" },
   service_overdue: { icon: Wrench, label: "Servis overdue" },
   service_due_soon: { icon: Wrench, label: "Servis mendekati" },
-  incident_open: { icon: AlertCircle, label: "Insiden" },
   job_unassigned: { icon: PackageCheck, label: "Job belum di-assign" },
   gps_offline: { icon: WifiOff, label: "GPS offline" },
   customer_new: { icon: Building2, label: "Customer baru" },

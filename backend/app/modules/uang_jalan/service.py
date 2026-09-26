@@ -270,6 +270,36 @@ class UangJalanService:
 
     # ── Tulis (admin) ───────────────────────────────────────────────────────
 
+    async def _tolak_bila_sudah_ditagih(self, job_id: str) -> None:
+        """Uang jalan hanya boleh ditambah selama job belum masuk tagihan
+        (tagihan batal / terhapus tidak dihitung)."""
+        res = await (
+            self._db.table("invoice_items")
+            .select("invoice:invoices!inner(invoice_number)")
+            .eq("job_id", job_id)
+            .eq("status", AKTIF)
+            .eq("invoice.status", AKTIF)
+            .neq("invoice.status_tagihan", "batal")
+            .limit(1)
+            .execute()
+        )
+        ada = rows(res)
+        if ada:
+            nomor = (first(ada[0].get("invoice")) or {}).get("invoice_number") or ""
+            raise ValidationError(f"Job ini sudah ditagihkan di tagihan {nomor} — uang jalan tidak bisa ditambah lagi.")
+
+    async def _tolak_bila_dari_pengajuan(self, uang_jalan_id: str, aksi: str) -> None:
+        """Pencairan dari pengajuan driver tidak boleh diubah / dihapus."""
+        row = single(
+            await self._db.table("uang_jalan").select("request_id").eq("id", uang_jalan_id).maybe_single().execute()
+        )
+        if row is None:
+            raise NotFoundError("Uang jalan tidak ditemukan")
+        if row.get("request_id"):
+            raise ValidationError(
+                f"Uang jalan dari pengajuan driver tidak bisa {aksi} — hanya bisa dilihat bukti transfernya."
+            )
+
     async def create(
         self,
         payload: UangJalanInput,
@@ -280,6 +310,7 @@ class UangJalanService:
     ) -> UangJalan:
         """Catat transaksi. Untuk pencairan, `bukti` (bytes, content-type) wajib."""
         _validate(payload)
+        await self._tolak_bila_sudah_ditagih(payload.job_id)
         bukti_path: str | None = None
         if payload.jenis == "pencairan":
             if bukti is None:
@@ -330,11 +361,13 @@ class UangJalanService:
 
     async def update(self, uang_jalan_id: str, payload: UangJalanInput) -> None:
         _validate(payload)
+        await self._tolak_bila_dari_pengajuan(uang_jalan_id, "diubah")
         await self._db.table("uang_jalan").update(_clean(payload)).eq("id", uang_jalan_id).execute()
 
     async def delete(self, uang_jalan_id: str) -> None:
         """Soft delete: baris ditandai terhapus. File bukti transfer sengaja
         dibiarkan di bucket supaya transaksi bisa dikembalikan utuh."""
+        await self._tolak_bila_dari_pengajuan(uang_jalan_id, "dihapus")
         await self._db.table("uang_jalan").update({STATUS: DIHAPUS}).eq("id", uang_jalan_id).execute()
 
     async def set_pagu(self, job_id: str, pagu: int) -> None:

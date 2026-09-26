@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { NotifikasiBaru } from "@/components/layout/notifikasi-baru";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useLayoutCounts } from "@/features/dashboard/queries";
 import { useNotifications } from "@/features/notifications/queries";
@@ -32,6 +33,7 @@ export function AdminLayout() {
           </div>
         </main>
         <BottomNav role={user.role} />
+        <NotifikasiBaru notifications={notificationsQuery.data} />
       </div>
     </div>
   );

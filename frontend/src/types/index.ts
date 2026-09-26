@@ -135,6 +135,17 @@ export interface JobStatusHistoryEntry {
   notes?: string | null;
 }
 
+/** Jumlah riwayat unit / unit trailer — penentu tombol Hapus atau Nonaktifkan. */
+export interface RiwayatAset {
+  job: number;
+  insiden: number;
+  service: number;
+  penjualan: number;
+  penghapusan: number;
+  /** True bila semua riwayat kosong → boleh dihapus; selain itu hanya dinonaktifkan. */
+  bisa_dihapus: boolean;
+}
+
 export interface UnitStatusHistoryEntry {
   id: string;
   unit_id: string;
@@ -194,6 +205,18 @@ export interface Job {
   /** Penawaran asal job ini. Null untuk job yang dibuat langsung tanpa penawaran. */
   quotation_id?: string | null;
   quotation_number?: string | null;
+  /** Item penawaran (yang deal) asal job ini. */
+  quotation_item_id?: string | null;
+  /** Tagihan aktif (tidak batal) yang memuat job ini — nomor & status bayar, hanya untuk admin. */
+  invoice_id?: string | null;
+  invoice_number?: string | null;
+  invoice_status_bayar?: StatusBayar | null;
+  /** Khusus superadmin & finance: status tagihan & sisa nominal. */
+  invoice_status_tampil?: InvoiceTampilStatus | null;
+  invoice_hari_terlambat?: number | null;
+  invoice_sisa?: number | null;
+  /** True = info tagihan dikirim backend (admin); operator selalu false. */
+  info_tagihan?: boolean;
   photos: JobPhoto[];
   /**
    * Driver sudah mengajukan pencairan uang jalan dan menunggu keputusan admin.
@@ -222,8 +245,11 @@ export interface IncidentPhoto {
 
 export interface Incident {
   id: string;
-  unit_id: string;
+  /** Tepat satu terisi: insiden unit atau insiden unit trailer. */
+  unit_id?: string | null;
   unit_kode?: string;
+  unit_trailer_id?: string | null;
+  unit_trailer_kode?: string | null;
   job_id?: string | null;
   job_number?: string | null;
   tipe: IncidentType;
@@ -234,6 +260,9 @@ export interface Incident {
   vendor_repair?: string | null;
   status: IncidentStatus;
   resolved_at?: string | null;
+  /** Ditutup otomatis (Selesai) karena aset diafkirkan / terjual. */
+  ditutup_karena?: "diafkirkan" | "terjual" | null;
+  status_sebelum_ditutup?: IncidentStatus | null;
   created_by_nama?: string | null;
   created_at: string;
   photos: IncidentPhoto[];
@@ -251,6 +280,13 @@ export const incidentStatusLabel: Record<IncidentStatus, string> = {
   in_progress: "Dalam penanganan",
   resolved: "Selesai"
 };
+
+/** Label status insiden, termasuk "Selesai (diafkirkan)" / "Selesai (terjual)" bila ditutup sistem. */
+export function labelStatusInsiden(inc: Pick<Incident, "status" | "ditutup_karena">): string {
+  return inc.status === "resolved" && inc.ditutup_karena
+    ? `Selesai (${inc.ditutup_karena})`
+    : incidentStatusLabel[inc.status];
+}
 
 /** Urutan tahap job v2 (PRD §6.1) — dipakai stepper internal. */
 export const jobStatusOrder: Array<{ key: JobStatus; label: string }> = [
@@ -339,10 +375,29 @@ export interface QuotationItem {
   qty: number;
   satuan: string;
   nama_alat?: string | null;
+  /** Harga awal penawaran — tidak pernah ditimpa oleh revisi. */
   harga_satuan: number;
   /** Dihitung database (qty x harga_satuan), tidak pernah dikirim client. */
   subtotal: number;
+  keputusan: KeputusanItem;
+  /** Harga satuan hasil negosiasi; null = harga awal tetap berlaku. */
+  harga_revisi?: number | null;
+  /** Harga yang berlaku (revisi bila ada) dan qty × harga itu. */
+  harga_final: number;
+  subtotal_final: number;
+  alasan_ditolak?: string | null;
+  diputuskan_at?: string | null;
+  /** Job aktif (tidak dibatalkan) dari item ini. */
+  jumlah_job: number;
 }
+
+export type KeputusanItem = "menunggu" | "deal" | "ditolak";
+
+export const keputusanItemLabel: Record<KeputusanItem, string> = {
+  menunggu: "Menunggu",
+  deal: "Deal",
+  ditolak: "Ditolak"
+};
 
 export interface Quotation {
   id: string;
@@ -385,6 +440,8 @@ export interface Quotation {
   updated_at: string;
 
   items: QuotationItem[];
+  /** Jumlah subtotal item yang deal (harga final, sebelum PPN). */
+  nilai_deal: number;
 }
 
 /** Baris untuk halaman daftar — tanpa items, supaya query-nya ringan. */
@@ -393,6 +450,8 @@ export type QuotationListRow = Omit<Quotation, "items"> & {
   /** Job yang sudah dibuat dari penawaran ini, tidak termasuk yang dibatalkan. */
   jumlah_job: number;
   jumlah_job_selesai: number;
+  /** Item deal yang belum punya job aktif. */
+  jumlah_item_deal_belum_job?: number;
 };
 
 /** Ringkasan job yang lahir dari sebuah penawaran. */
@@ -403,6 +462,7 @@ export interface QuotationJobRef {
   asal: string;
   tujuan: string;
   etd: string;
+  quotation_item_id?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -519,6 +579,25 @@ export const invoiceTampilStatusLabel: Record<InvoiceTampilStatus, string> = {
   jatuh_tempo: "Jatuh tempo"
 };
 
+/** Status bayar tagihan — diturunkan dari dibayar vs total. */
+export type StatusBayar = "unpaid" | "partial_paid" | "completed";
+
+export const statusBayarLabel: Record<StatusBayar, string> = {
+  unpaid: "Unpaid",
+  partial_paid: "Partial Paid",
+  completed: "Completed"
+};
+
+/** Satu transaksi uang jalan job — ditampilkan di form & detail tagihan. */
+export interface UangJalanTransaksi {
+  jenis: "pencairan" | "penambahan_pagu";
+  tanggal: string;
+  jumlah: number;
+  keterangan: string | null;
+  /** URL bertanda tangan sementara; null bila tanpa bukti transfer. */
+  bukti_url: string | null;
+}
+
 export interface InvoiceItem {
   id: string;
   invoice_id: string;
@@ -538,6 +617,12 @@ export interface InvoiceItem {
   uang_jalan_pagu?: number | null;
   uang_jalan_cair?: number | null;
   surat_jalan_urls?: string[];
+  /** Surat jalan per tahap: saat loading & saat unloading. */
+  surat_jalan_loading_urls?: string[];
+  surat_jalan_unloading_urls?: string[];
+  /** Rincian uang jalan: pagu awal + tiap pencairan / penambahan (dengan bukti transfer). */
+  uang_jalan_pagu_awal?: number | null;
+  uang_jalan_transaksi?: UangJalanTransaksi[];
 }
 
 export interface InvoicePayment {
@@ -589,6 +674,8 @@ export interface Invoice {
   status: InvoiceStatus;
   /** Status untuk ditampilkan; termasuk `jatuh_tempo` yang diturunkan tanggal. */
   status_tampil: InvoiceTampilStatus;
+  /** Unpaid (belum ada pembayaran) / Partial Paid / Completed (lunas). */
+  status_bayar: StatusBayar;
   /** Berapa hari lewat jatuh tempo. Null bila belum/tidak jatuh tempo. */
   hari_terlambat?: number | null;
 
@@ -743,6 +830,11 @@ export interface JobBelumDitagihRow {
   uang_jalan_pagu: number;
   uang_jalan_cair: number;
   surat_jalan_urls: string[];
+  /** Surat jalan per tahap: saat loading & saat unloading. */
+  surat_jalan_loading_urls: string[];
+  surat_jalan_unloading_urls: string[];
+  uang_jalan_pagu_awal: number;
+  uang_jalan_transaksi: UangJalanTransaksi[];
 }
 
 export interface UangJalanJobRow {

@@ -1,14 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { listNotifications, listNotificationsPage } from "./api";
 
-/** Lonceng disegarkan tiap 2 menit — isinya keadaan sekarang, bukan kejadian. */
+/** Lonceng disegarkan tiap 30 detik supaya notifikasi baru cepat muncul (popup). */
 export const useNotifications = (enabled = true) =>
   useQuery({
     queryKey: ["notifications"],
     queryFn: listNotifications,
     enabled,
-    refetchInterval: 120_000,
-    staleTime: 60_000
+    refetchInterval: 30_000,
+    staleTime: 20_000
   });
 
 export const notificationPageKey = (page: number, pageSize: number) =>

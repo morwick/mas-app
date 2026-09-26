@@ -14,12 +14,15 @@ import {
 } from "@/features/units/api";
 import { incidentTypeLabel } from "@/types";
 import type { Incident, IncidentType, Job } from "@/types";
-import { cn } from "@/lib/utils";
+import { cn, isoToLocalInput } from "@/lib/utils";
+
+/** Aset pemilik insiden: unit atau unit trailer. */
+export type AsetInsiden = { unit_id: string } | { unit_trailer_id: string };
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  unitId: string;
+  aset: AsetInsiden;
   activeJobs: Job[];
   /** Diisi = mode edit insiden ini; kosong = tambah insiden baru. */
   incident?: Incident | null;
@@ -35,20 +38,12 @@ interface PhotoItem {
   error?: string;
 }
 
-/** Waktu (default: sekarang) dalam format input datetime-local, zona lokal. */
-function toLocalDateTime(iso?: string): string {
-  const d = iso ? new Date(iso) : new Date();
-  const offset = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
 const tipeOptions: IncidentType[] = ["kecelakaan", "kerusakan", "breakdown", "lainnya"];
 
 function initialForm(incident?: Incident | null) {
   return {
     tipe: (incident?.tipe ?? "kerusakan") as IncidentType,
-    tanggal: toLocalDateTime(incident?.tanggal),
+    tanggal: isoToLocalInput(incident?.tanggal),
     lokasi: incident?.lokasi ?? "",
     deskripsi: incident?.deskripsi ?? "",
     biaya_repair:
@@ -58,8 +53,9 @@ function initialForm(incident?: Incident | null) {
   };
 }
 
-export function IncidentFormModal({ open, onClose, unitId, activeJobs, incident }: Props) {
+export function IncidentFormModal({ open, onClose, aset, activeJobs, incident }: Props) {
   const toast = useToast();
+  const labelAset = "unit_trailer_id" in aset ? "unit trailer" : "unit";
   const inputRef = useRef<HTMLInputElement>(null);
   const isEdit = !!incident;
   const [submitting, setSubmitting] = useState(false);
@@ -125,7 +121,7 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs, incident 
       }
       incidentId = incident.id;
     } else {
-      const res = await createIncident({ unit_id: unitId, ...fields });
+      const res = await createIncident({ ...aset, ...fields });
       if (!res.ok) {
         setSubmitting(false);
         toast.error(res.error);
@@ -191,8 +187,8 @@ export function IncidentFormModal({ open, onClose, unitId, activeJobs, incident 
       title={isEdit ? "Edit insiden" : "Catat insiden"}
       description={
         incident?.status === "in_progress"
-          ? "Insiden sedang dalam penanganan — unit tetap berstatus Perbaikan."
-          : "Selama insiden belum ditangani, unit otomatis berstatus Breakdown."
+          ? `Insiden sedang dalam penanganan — ${labelAset} tetap berstatus Perbaikan.`
+          : `Selama insiden belum ditangani, ${labelAset} otomatis berstatus Breakdown.`
       }
       maxWidth="max-w-[640px]"
       footer={

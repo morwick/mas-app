@@ -58,11 +58,13 @@ class _FakeDb:
         self.hasil_update: list[dict[str, Any]] = [BARIS]
         self.terakhir: dict[str, Any] | None = None
         self.rpc_data: list[dict[str, Any]] = []
+        self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
 
     def table(self, nama: str) -> _Query:
         return _Query(self, nama)
 
     def rpc(self, nama: str, params: dict[str, Any]) -> "_Rpc":
+        self.rpc_calls.append((nama, params))
         return _Rpc(self.rpc_data)
 
 
@@ -109,6 +111,11 @@ def test_daftar_paging_limit_offset_dan_filter(client: TestClient, db: _FakeDb) 
         "jenis_unit_nama": "Lowbed",
         "kapasitas_ton": 40.0,
         "status": "standby",
+        "kir_nomor": None,
+        "kir_berlaku_sampai": None,
+        "srut_nomor": None,
+        "srut_tanggal": None,
+        "is_active": True,
     }
 
 
@@ -127,15 +134,31 @@ def test_tambah_berhasil(client: TestClient, db: _FakeDb) -> None:
     assert res.status_code == 201
     insert = next(a for n, a in db.query[1] if n == "insert")
     assert insert[0]["kode_trailer"] == "TR-02"
-    assert insert[0]["status_trailer"] == "standby"
+    # Status tidak diisi dari form — trailer baru Standby dari default DB.
+    assert "status_trailer" not in insert[0]
 
 
-def test_hapus_adalah_update_status_2(client: TestClient, db: _FakeDb) -> None:
+def test_hapus_lewat_fungsi_db_yang_menolak_trailer_berriwayat(client: TestClient, db: _FakeDb) -> None:
+    # hapus_aset (migration 20260926000010): soft delete, hanya bila tanpa riwayat.
     res = client.delete("/api/unit-trailer/t1")
     assert res.status_code == 200
-    ops = db.query[0]
-    assert ("update", ({"status": 2},)) in ops
-    assert not any(n == "delete" for n, _ in ops)
+    assert db.rpc_calls == [("hapus_aset", {"p_jenis_aset": "unit_trailer", "p_asset_id": "t1"})]
+    assert not db.query
+
+
+def test_nonaktifkan_trailer(client: TestClient, db: _FakeDb) -> None:
+    res = client.post("/api/unit-trailer/t1/nonaktifkan")
+    assert res.status_code == 200
+    assert ("update", ({"is_active": False},)) in db.query[0]
+
+
+def test_ringkasan_riwayat_menentukan_boleh_hapus(client: TestClient, db: _FakeDb) -> None:
+    db.rpc_data = [{"job": 0, "insiden": 2, "service": 0, "penjualan": 0, "penghapusan": 0}]
+    res = client.get("/api/unit-trailer/t1/riwayat")
+    assert res.status_code == 200
+    assert res.json() == {"job": 0, "insiden": 2, "service": 0, "penjualan": 0, "penghapusan": 0, "bisa_dihapus": False}
+    db.rpc_data = [{"job": 0, "insiden": 0, "service": 0, "penjualan": 0, "penghapusan": 0}]
+    assert client.get("/api/unit-trailer/t1/riwayat").json()["bisa_dihapus"] is True
 
 
 def test_ubah_data_yang_sudah_dihapus_404(client: TestClient, db: _FakeDb) -> None:
@@ -199,10 +222,42 @@ def test_tahun_atau_kapasitas_tidak_valid_menggagalkan_tambah(
     assert not any(n == "insert" for q in db.query for n, _ in q), "tidak boleh ada data yang tersimpan"
 
 
-def test_status_terpakai_tidak_lagi_diterima(client: TestClient, db: _FakeDb) -> None:
+def test_status_dari_form_diabaikan(client: TestClient, db: _FakeDb) -> None:
+    # Status trailer hanya dari job / insiden / penjualan / ubah status, bukan form.
     db.baris = []
     res = client.post(
-        "/api/unit-trailer", json={"kode_trailer": "TR-06", "jenis_unit_trailer_id": "j1", "status": "terpakai"}
+        "/api/unit-trailer", json={"kode_trailer": "TR-06", "jenis_unit_trailer_id": "j1", "status": "perbaikan"}
+    )
+    assert res.status_code == 201
+    insert = next(a for n, a in db.query[1] if n == "insert")
+    assert "status_trailer" not in insert[0]
+
+
+def test_dokumen_kir_dan_srut_opsional(client: TestClient, db: _FakeDb) -> None:
+    db.baris = []
+    res = client.post(
+        "/api/unit-trailer",
+        json={
+            "kode_trailer": "TR-07",
+            "jenis_unit_trailer_id": "j1",
+            "kir_nomor": "  KIR  123 ",
+            "kir_berlaku_sampai": "2027-01-31",
+            "srut_nomor": "",
+            "srut_tanggal": "",
+        },
+    )
+    assert res.status_code == 201
+    insert = next(a for n, a in db.query[1] if n == "insert")
+    assert insert[0]["kir_nomor"] == "KIR 123"
+    assert insert[0]["kir_berlaku_sampai"] == "2027-01-31"
+    assert insert[0]["srut_nomor"] is None and insert[0]["srut_tanggal"] is None
+
+
+def test_tanggal_dokumen_tidak_valid_ditolak(client: TestClient, db: _FakeDb) -> None:
+    db.baris = []
+    res = client.post(
+        "/api/unit-trailer",
+        json={"kode_trailer": "TR-08", "jenis_unit_trailer_id": "j1", "kir_berlaku_sampai": "31-01-2027"},
     )
     assert res.status_code == 422
 

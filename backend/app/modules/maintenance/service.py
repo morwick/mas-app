@@ -7,9 +7,9 @@ from typing import Any
 from supabase import AsyncClient
 
 from app.core.pg import clean_text, first, num, rows
-from app.core.soft_delete import DIHAPUS, STATUS
+from app.core.soft_delete import AKTIF, DIHAPUS, STATUS
 from app.modules.maintenance.schemas import CalibrateRequest, ServiceCreate, ServiceRecord
-from app.modules.units.schemas import UnitWithService
+from app.modules.units.schemas import BUKAN_ARMADA, UnitWithService
 from app.modules.units.service import UnitService
 
 SERVICE_SELECT = """
@@ -51,7 +51,13 @@ class MaintenanceService:
         """MAX(odometer_km) per unit dalam satu round-trip — hindari N+1."""
         if not unit_ids:
             return {}
-        res = await self._db.table("service_records").select("unit_id, odometer_km").in_("unit_id", unit_ids).execute()
+        res = await (
+            self._db.table("service_records")
+            .select("unit_id, odometer_km")
+            .in_("unit_id", unit_ids)
+            .eq("status", AKTIF)  # catatan service yang dihapus tidak dihitung
+            .execute()
+        )
         out: dict[str, float] = {}
         for r in rows(res):
             km = num(r.get("odometer_km"), default=float("nan"))
@@ -63,7 +69,11 @@ class MaintenanceService:
         return out
 
     async def units_with_service(self) -> list[UnitWithService]:
-        units = await UnitService(self._db).list_all(include_inactive=False)
+        """Unit aktif yang masih armada (bukan terjual / diafkirkan) — dipakai
+        menu Service dan kartu "Perlu tindakan" dashboard, supaya angkanya sama."""
+        units = [
+            u for u in await UnitService(self._db).list_all(include_inactive=False) if u.status not in BUKAN_ARMADA
+        ]
         last_map = await self.last_service_odometer_map([u.id for u in units])
         return [UnitWithService(**u.model_dump(), last_service_odometer_km=last_map.get(u.id)) for u in units]
 

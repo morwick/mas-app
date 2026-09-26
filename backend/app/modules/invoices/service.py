@@ -34,6 +34,7 @@ from app.modules.invoices.schemas import (
     PaymentInput,
     PiutangSummaryRow,
     SetInvoiceStatusRequest,
+    UangJalanTransaksi,
 )
 
 INVOICE_SELECT = """
@@ -82,6 +83,39 @@ def derive_tampil(stored: str, jatuh_tempo: str | None) -> tuple[str, int | None
     return "jatuh_tempo", terlambat
 
 
+# Transaksi uang jalan per job: untuk ringkasan (pagu & cair) dan rinciannya.
+_UANG_JALAN_EMBED = "uang_jalan(jenis, jumlah, tanggal, keperluan, catatan, bukti_transfer_path, created_at)"
+SIGNED_URL_BUKTI_TTL_S = 60 * 60
+
+
+def _surat_jalan(foto: list[dict[str, Any]], bucket: str) -> dict[str, list[str]]:
+    """URL foto surat jalan — semua, dan dipisah per tahap loading / unloading."""
+
+    def urls(stage: str | None) -> list[str]:
+        return [storage_public_url(bucket, p["file_path"]) for p in foto if stage is None or p.get("stage") == stage]
+
+    return {
+        "surat_jalan_urls": urls(None),
+        "surat_jalan_loading_urls": urls("loading"),
+        "surat_jalan_unloading_urls": urls("unloading"),
+    }
+
+
+def _transaksi(transaksi: list[dict[str, Any]], bukti: dict[str, str]) -> list[UangJalanTransaksi]:
+    """Transaksi uang jalan urut waktu, lengkap dengan URL bukti transfer."""
+    urut = sorted(transaksi, key=lambda t: (t.get("tanggal") or "", t.get("created_at") or ""))
+    return [
+        UangJalanTransaksi(
+            jenis=t["jenis"],
+            tanggal=t.get("tanggal") or "",
+            jumlah=num(t.get("jumlah")),
+            keterangan=t.get("keperluan") or t.get("catatan"),
+            bukti_url=bukti.get(t.get("bukti_transfer_path") or ""),
+        )
+        for t in urut
+    ]
+
+
 def _uang_jalan_ringkas(pagu: Any, transaksi: list[dict[str, Any]]) -> tuple[float, float]:
     """Pagu efektif (awal + penambahan) & total pencairan dari transaksi uang_jalan job."""
     pagu_awal = num(pagu)
@@ -107,6 +141,10 @@ def _to_item(r: dict[str, Any], uj: dict[str, Any] | None) -> InvoiceItem:
         uang_jalan_pagu=(uj or {}).get("uang_jalan_pagu"),
         uang_jalan_cair=(uj or {}).get("uang_jalan_cair"),
         surat_jalan_urls=(uj or {}).get("surat_jalan_urls") or [],
+        surat_jalan_loading_urls=(uj or {}).get("surat_jalan_loading_urls") or [],
+        surat_jalan_unloading_urls=(uj or {}).get("surat_jalan_unloading_urls") or [],
+        uang_jalan_pagu_awal=(uj or {}).get("uang_jalan_pagu_awal"),
+        uang_jalan_transaksi=(uj or {}).get("uang_jalan_transaksi") or [],
     )
 
 
@@ -124,6 +162,15 @@ def _to_payment(r: dict[str, Any]) -> InvoicePayment:
         created_by_nama=(first(r.get("created_by_profile")) or {}).get("nama"),
         created_at=r["created_at"],
     )
+
+
+def status_bayar(total: float, dibayar: float) -> str:
+    """Unpaid (belum ada pembayaran) → Partial Paid → Completed (lunas)."""
+    if dibayar <= 0:
+        return "unpaid"
+    if total > 0 and dibayar >= total:
+        return "completed"
+    return "partial_paid"
 
 
 def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
@@ -156,6 +203,7 @@ def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
         "sisa": total - dibayar,
         "status": r["status_tagihan"],
         "status_tampil": status_tampil,
+        "status_bayar": status_bayar(total, dibayar),
         "hari_terlambat": hari_terlambat,
         "ttd_nama": r.get("ttd_nama"),
         "ttd_jabatan": r.get("ttd_jabatan"),
@@ -172,6 +220,15 @@ def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def alasan_terkunci(dibayar: float, faktur_pajak_path: str | None) -> str | None:
+    """Tagihan yang sudah ada pembayaran / faktur pajak tidak boleh diedit & dihapus."""
+    if dibayar > 0:
+        return "Tagihan ini sudah ada pembayarannya sehingga tidak bisa diedit atau dihapus."
+    if faktur_pajak_path:
+        return "Tagihan ini sudah ada faktur pajaknya sehingga tidak bisa diedit atau dihapus."
+    return None
+
+
 def _validate(payload: InvoiceInput) -> None:
     if not payload.tanggal:
         raise ValidationError("Tanggal tagihan wajib diisi")
@@ -186,6 +243,16 @@ def _validate(payload: InvoiceInput) -> None:
             raise ValidationError(f"Baris {i}: jumlah harus lebih dari 0")
         if it.harga_satuan < 0:
             raise ValidationError(f"Baris {i}: harga satuan tidak valid")
+    # Satu job hanya boleh satu baris (DB juga menjaganya, migration 20260926000013).
+    baris_job: dict[str, int] = {}
+    for i, it in enumerate(payload.items, start=1):
+        if not it.job_id:
+            continue
+        if it.job_id in baris_job:
+            raise ValidationError(
+                f"Baris {i}: job ini sudah dipilih di baris {baris_job[it.job_id]} — satu job hanya boleh satu baris"
+            )
+        baris_job[it.job_id] = i
     if payload.ppn_aktif and not (0 <= payload.ppn_persen <= 100):
         raise ValidationError("Persentase PPN harus antara 0 dan 100")
     if payload.termin_hari is not None and payload.termin_hari < 0:
@@ -315,24 +382,40 @@ class InvoiceService:
         """Ringkasan uang jalan & link surat jalan per job — untuk ditampilkan di rincian tagihan."""
         res = await (
             self._db.table("jobs")
-            .select("id, uang_jalan_pagu, uang_jalan(jenis, jumlah), job_photos(file_path, slot)")
+            .select(f"id, uang_jalan_pagu, {_UANG_JALAN_EMBED}, job_photos(file_path, slot, stage)")
             .in_("id", job_ids)
             .eq("uang_jalan.status", AKTIF)
             .eq("job_photos.status", AKTIF)
             .eq("job_photos.slot", "surat_jalan")
             .execute()
         )
+        data = rows(res)
+        bukti = await self._bukti_transfer_urls([t for r in data for t in (r.get("uang_jalan") or [])])
         out: dict[str, dict[str, Any]] = {}
-        for r in rows(res):
+        for r in data:
             pagu, cair = _uang_jalan_ringkas(r.get("uang_jalan_pagu"), r.get("uang_jalan") or [])
             out[r["id"]] = {
                 "uang_jalan_pagu": pagu,
                 "uang_jalan_cair": cair,
-                "surat_jalan_urls": [
-                    storage_public_url(self._photos_bucket, p["file_path"]) for p in (r.get("job_photos") or [])
-                ],
+                "uang_jalan_pagu_awal": num(r.get("uang_jalan_pagu")),
+                "uang_jalan_transaksi": _transaksi(r.get("uang_jalan") or [], bukti),
+                **_surat_jalan(r.get("job_photos") or [], self._photos_bucket),
             }
         return out
+
+    async def _bukti_transfer_urls(self, transaksi: list[dict[str, Any]]) -> dict[str, str]:
+        """{path: signed URL} bukti transfer — satu panggilan untuk semua file."""
+        paths = sorted({t["bukti_transfer_path"] for t in transaksi if t.get("bukti_transfer_path")})
+        if not paths:
+            return {}
+        try:
+            res = await self._db.storage.from_(get_settings().bukti_transfer_bucket).create_signed_urls(
+                paths, SIGNED_URL_BUKTI_TTL_S
+            )
+        except Exception as exc:  # noqa: BLE001 — bukti yang tidak terbaca jangan gagalkan form
+            log.warning("signed url bukti transfer gagal: %s", exc)
+            return {}
+        return {r["path"]: url for r in res if (url := r.get("signedURL") or r.get("signedUrl"))}
 
     async def peek_next_number(self) -> str:
         today = today_wib()
@@ -367,8 +450,8 @@ class InvoiceService:
             self._db.table("jobs")
             .select(
                 "id, customer_id, job_number, asal, tujuan, alat_diangkut, etd, completed_at,"
-                " uang_jalan_pagu, uang_jalan(jenis, jumlah),"
-                " job_photos(file_path, slot)"
+                f" uang_jalan_pagu, {_UANG_JALAN_EMBED},"
+                " job_photos(file_path, slot, stage)"
             )
             # Hanya job yang sudah divalidasi admin yang bisa ditagihkan.
             .eq("status_job", "selesai")
@@ -381,19 +464,23 @@ class InvoiceService:
         if customer_id:
             q = q.eq("customer_id", customer_id)
 
+        data = [r for r in rows(await q.execute()) if r["id"] not in sudah]
+        bukti = await self._bukti_transfer_urls([t for r in data for t in (r.get("uang_jalan") or [])])
         out: dict[str, list[JobBelumDitagihRow]] = {}
-        for r in rows(await q.execute()):
-            if r["id"] in sudah:
-                continue
+        for r in data:
             cid = r.pop("customer_id")
             foto = r.pop("job_photos") or []
-            pagu, cair = _uang_jalan_ringkas(r.pop("uang_jalan_pagu"), r.pop("uang_jalan") or [])
+            pagu_awal = r.pop("uang_jalan_pagu")
+            transaksi = r.pop("uang_jalan") or []
+            pagu, cair = _uang_jalan_ringkas(pagu_awal, transaksi)
             out.setdefault(cid, []).append(
                 JobBelumDitagihRow(
                     **r,
                     uang_jalan_pagu=pagu,
                     uang_jalan_cair=cair,
-                    surat_jalan_urls=[storage_public_url(self._photos_bucket, p["file_path"]) for p in foto],
+                    uang_jalan_pagu_awal=num(pagu_awal),
+                    uang_jalan_transaksi=_transaksi(transaksi, bukti),
+                    **_surat_jalan(foto, self._photos_bucket),
                 )
             )
         return out
@@ -483,8 +570,31 @@ class InvoiceService:
 
     # ── Tulis ───────────────────────────────────────────────────────────────
 
+    async def _cek_job_belum_ditagih(self, payload: InvoiceInput, *, kecuali_invoice: str | None = None) -> None:
+        """Tolak job yang sudah ada di tagihan lain yang tidak dibatalkan."""
+        job_ids = [it.job_id for it in payload.items if it.job_id]
+        if not job_ids:
+            return
+        res = await (
+            self._db.table("invoice_items")
+            .select("job_id, invoice_id, job:jobs(job_number), invoice:invoices!inner(invoice_number, status_tagihan)")
+            .in_("job_id", job_ids)
+            .eq("invoice.status", AKTIF)
+            .neq("invoice.status_tagihan", "batal")
+            .execute()
+        )
+        for r in rows(res):
+            if r["invoice_id"] == kecuali_invoice:
+                continue
+            job = (first(r.get("job")) or {}).get("job_number") or "ini"
+            nomor = (first(r.get("invoice")) or {}).get("invoice_number") or "lain"
+            raise ValidationError(
+                f"Job {job} sudah ditagihkan di tagihan {nomor}. Satu job hanya boleh ditagihkan satu kali."
+            )
+
     async def create(self, payload: InvoiceInput, *, created_by: str | None) -> InvoiceCreated:
         _validate(payload)
+        await self._cek_job_belum_ditagih(payload)
         cust = single(
             await self._db.table("customers")
             .select("nama_perusahaan, alamat, npwp, pic_sapaan, pic_nama, termin_hari")
@@ -524,9 +634,10 @@ class InvoiceService:
 
     async def update(self, invoice_id: str, payload: InvoiceInput) -> None:
         _validate(payload)
+        await self._cek_job_belum_ditagih(payload, kecuali_invoice=invoice_id)
         existing = single(
             await self._db.table("invoices")
-            .select("status_tagihan, termin_hari")
+            .select("status_tagihan, termin_hari, dibayar, faktur_pajak_path")
             .eq("id", invoice_id)
             .maybe_single()
             .execute()
@@ -539,6 +650,9 @@ class InvoiceService:
                 if existing["status_tagihan"] == "lunas"
                 else "Tagihan yang dibatalkan tidak bisa diubah. Terbitkan tagihan baru."
             )
+        terkunci = alasan_terkunci(num(existing.get("dibayar")), existing.get("faktur_pajak_path"))
+        if terkunci:
+            raise ValidationError(terkunci)
 
         termin = payload.termin_hari if payload.termin_hari is not None else existing.get("termin_hari")
         # Satu transaksi: header, penghapusan rincian lama, dan rincian baru.
@@ -633,4 +747,16 @@ class InvoiceService:
             await remove_object_quietly(self._db, self._faktur_bucket, lama)
 
     async def delete(self, invoice_id: str) -> None:
+        inv = single(
+            await self._db.table("invoices")
+            .select("dibayar, faktur_pajak_path")
+            .eq("id", invoice_id)
+            .maybe_single()
+            .execute()
+        )
+        if inv is None:
+            raise NotFoundError("Tagihan tidak ditemukan")
+        terkunci = alasan_terkunci(num(inv.get("dibayar")), inv.get("faktur_pajak_path"))
+        if terkunci:
+            raise ValidationError(terkunci)
         await self._db.table("invoices").update({STATUS: DIHAPUS}).eq("id", invoice_id).execute()

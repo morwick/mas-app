@@ -12,8 +12,9 @@ import {
 import type { Incident } from "@/types";
 
 /**
- * Alur insiden (status unit diubah trigger DB, migration 20260925000006):
- *   Open (unit Breakdown) → Dalam penanganan (unit Perbaikan) → Selesai (unit Standby).
+ * Alur insiden (status unit / unit trailer diubah trigger DB, migration
+ * 20260925000006 & 20260926000006):
+ *   Open (Breakdown) → Dalam penanganan (Perbaikan) → Selesai (Standby).
  * Hanya insiden Open yang boleh dihapus.
  */
 export type IncidentAction = "proses" | "selesai" | "hapus";
@@ -31,17 +32,17 @@ const COPY: Record<
 > = {
   proses: {
     title: "Tandai insiden dalam penanganan?",
-    body: (kode) =>
-      `Status unit ${kode} akan berubah menjadi Perbaikan. Setelah ini catatan insiden tidak bisa dihapus lagi.`,
+    body: (aset) =>
+      `Status ${aset} akan berubah menjadi Perbaikan. Setelah ini catatan insiden tidak bisa dihapus lagi.`,
     confirmText: "Ya, tandai",
     variant: "primary",
     busy: "Menandai insiden dalam penanganan…",
-    success: "Insiden dalam penanganan — unit kini Perbaikan"
+    success: "Insiden dalam penanganan — status kini Perbaikan"
   },
   selesai: {
     title: "Selesaikan perbaikan?",
-    body: (kode) =>
-      `Insiden ditandai Selesai dan unit ${kode} kembali Standby (atau Bertugas bila masih ada job berjalan). Bila unit masih punya insiden lain yang belum selesai, statusnya mengikuti insiden itu.`,
+    body: (aset) =>
+      `Insiden ditandai Selesai dan ${aset} kembali Standby (atau Bertugas bila masih ada job berjalan). Bila masih ada insiden lain yang belum selesai, statusnya mengikuti insiden itu.`,
     confirmText: "Ya, selesaikan",
     variant: "primary",
     busy: "Menyelesaikan perbaikan…",
@@ -50,7 +51,7 @@ const COPY: Record<
   hapus: {
     title: "Hapus catatan insiden?",
     body: () =>
-      "Catatan insiden beserta foto buktinya akan dihapus, dan status unit dihitung ulang dari insiden lain yang masih terbuka.",
+      "Catatan insiden beserta foto buktinya akan dihapus, dan status aset dihitung ulang dari insiden lain yang masih terbuka.",
     confirmText: "Ya, hapus",
     variant: "danger",
     busy: "Menghapus insiden…",
@@ -69,7 +70,8 @@ function runAction(action: IncidentAction, id: string) {
  * panggil `request(aksi, insiden)` dari tombol mana pun (kartu atau modal).
  */
 export function useIncidentActions(
-  unitKode: string,
+  /** Sebutan aset di konfirmasi, mis. "unit TR-01" / "unit trailer TL-01". */
+  asetLabel: string,
   onDone?: (action: IncidentAction, incident: Incident) => void
 ) {
   const toast = useToast();
@@ -100,7 +102,7 @@ export function useIncidentActions(
         open={pending !== null}
         onClose={() => setPending(null)}
         title={copy?.title ?? ""}
-        body={copy?.body(unitKode)}
+        body={copy?.body(asetLabel)}
         confirmText={copy?.confirmText}
         variant={copy?.variant ?? "primary"}
         onConfirm={confirm}

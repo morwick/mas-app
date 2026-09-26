@@ -5,6 +5,35 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * ISO (dari server, UTC) → nilai `<input type="datetime-local">`
+ * ("YYYY-MM-DDTHH:mm") di jam lokal browser. Tanpa argumen: waktu sekarang.
+ */
+export function isoToLocalInput(iso?: string | null): string {
+  if (iso === null) return "";
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return "";
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+/**
+ * Nilai `<input type="datetime-local">` (jam lokal browser, tanpa zona) → ISO
+ * dengan offset zona browser, mis. "2026-09-26T10:30:00+07:00".
+ *
+ * Tanpa offset, server menganggap jamnya UTC sehingga tersimpan 7 jam
+ * bergeser. Bagian tanggalnya sengaja tetap tanggal lokal karena server
+ * memakainya untuk cek "tanggal sudah lewat".
+ */
+export function localInputToIso(value: string): string {
+  if (!value) return value;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const menit = -d.getTimezoneOffset();
+  const tanda = menit >= 0 ? "+" : "-";
+  const pad = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+  return `${value.slice(0, 16)}:00${tanda}${pad(menit / 60)}:${pad(menit % 60)}`;
+}
+
 export function formatRupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -78,6 +107,8 @@ export function timeAgo(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
   const diffMs = Date.now() - d.getTime();
   const sec = Math.floor(diffMs / 1000);
+  // Waktu di masa depan (jam perangkat tidak sinkron) tidak ditampilkan minus.
+  if (sec < 10) return "Baru saja";
   if (sec < 60) return `${sec} detik lalu`;
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min} menit lalu`;

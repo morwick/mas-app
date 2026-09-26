@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCustomer, useCustomers } from "@/features/customers/queries";
 import { useDrivers } from "@/features/drivers/queries";
@@ -7,12 +7,13 @@ import { useUnits } from "@/features/units/queries";
 import { useQuotation } from "@/features/quotations/queries";
 import { EditJobView } from "../components/edit-job-view";
 import { NewJobView, type JobPrefill } from "../components/new-job-view";
-import { buildPrefill } from "../quotation-prefill";
+import { buildPrefill, pilihItemDeal } from "../quotation-prefill";
 import { useJob, useJobs } from "../queries";
 
 export function NewJobPage() {
   const [params] = useSearchParams();
   const quotationId = params.get("quotation") ?? undefined;
+  const itemId = params.get("item");
 
   const customers = useCustomers();
   const drivers = useDrivers();
@@ -24,9 +25,11 @@ export function NewJobPage() {
   const dealQuotation = quotation.data?.status === "deal" ? quotation.data : undefined;
   const customer = useCustomer(dealQuotation?.customer_id);
 
+  // Satu job = satu item penawaran yang deal.
+  const item = dealQuotation ? pilihItemDeal(dealQuotation, itemId) : null;
   const prefill = useMemo<JobPrefill | undefined>(
-    () => (dealQuotation ? buildPrefill(dealQuotation, customer.data ?? null) : undefined),
-    [dealQuotation, customer.data]
+    () => (dealQuotation && item ? buildPrefill(dealQuotation, item, customer.data ?? null) : undefined),
+    [dealQuotation, item, customer.data]
   );
 
   const waitingPrefill = !!quotationId && (quotation.isPending || (dealQuotation && customer.isPending));
@@ -43,6 +46,26 @@ export function NewJobPage() {
     return <PageLoading />;
   const error = customers.error ?? drivers.error ?? units.error;
   if (error) return <PageError error={error} />;
+  if (dealQuotation && !item) {
+    return (
+      <div className="card card-pad" style={{ maxWidth: 560 }}>
+        <div className="h3" style={{ marginBottom: 6 }}>
+          Pilih item penawaran dulu
+        </div>
+        <p style={{ marginBottom: 12 }}>
+          Job dibuat per item penawaran yang deal. Buka penawaran{" "}
+          {dealQuotation.quote_number} lalu klik "Buat job" pada item yang dimaksud.
+        </p>
+        <Link
+          to={`/quotations/${dealQuotation.id}`}
+          className="btn btn-secondary btn-sm"
+          style={{ textDecoration: "none" }}
+        >
+          Buka penawaran
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <NewJobView

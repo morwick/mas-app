@@ -160,14 +160,20 @@ export function InvoiceForm({
       return {
         pagu: dariTersedia.uang_jalan_pagu,
         cair: dariTersedia.uang_jalan_cair,
-        urls: dariTersedia.surat_jalan_urls
+        loading: dariTersedia.surat_jalan_loading_urls,
+        unloading: dariTersedia.surat_jalan_unloading_urls,
+        paguAwal: dariTersedia.uang_jalan_pagu_awal,
+        transaksi: dariTersedia.uang_jalan_transaksi
       };
     }
     const dariInvoice = invoice?.items.find((x) => x.job_id === jobId);
     return {
       pagu: dariInvoice?.uang_jalan_pagu ?? null,
       cair: dariInvoice?.uang_jalan_cair ?? null,
-      urls: dariInvoice?.surat_jalan_urls ?? []
+      loading: dariInvoice?.surat_jalan_loading_urls ?? [],
+      unloading: dariInvoice?.surat_jalan_unloading_urls ?? [],
+      paguAwal: dariInvoice?.uang_jalan_pagu_awal ?? null,
+      transaksi: dariInvoice?.uang_jalan_transaksi ?? []
     };
   }
 
@@ -254,6 +260,11 @@ export function InvoiceForm({
     }
     const job = jobsTersedia.find((j) => j.id === jobId);
     if (!job) return;
+    // Satu job hanya boleh satu baris.
+    if (items.some((r) => r.key !== key && r.job_id === jobId)) {
+      toast.error(`Job ${job.job_number} sudah dipilih di baris lain`);
+      return;
+    }
     setItem(key, {
       job_id: jobId,
       deskripsi: `Pengangkutan ${job.alat_diangkut}`,
@@ -336,7 +347,27 @@ export function InvoiceForm({
     };
   }
 
+  /** Cek job ganda di form sebelum dikirim (server & database juga menolaknya). */
+  function cekJobGanda(): string | null {
+    const baris = new Map<string, number>();
+    for (const [i, it] of items.entries()) {
+      if (!it.job_id) continue;
+      const sebelumnya = baris.get(it.job_id);
+      if (sebelumnya !== undefined) {
+        return `Baris ${i + 1}: job ini sudah dipilih di baris ${sebelumnya} — satu job hanya boleh satu baris`;
+      }
+      baris.set(it.job_id, i + 1);
+    }
+    return null;
+  }
+
   async function onSubmit() {
+    const ganda = cekJobGanda();
+    if (ganda) {
+      setError(ganda);
+      toast.error(ganda);
+      return;
+    }
     setLoading(true);
     setError(null);
     const payload = buildPayload();
@@ -631,11 +662,14 @@ export function InvoiceForm({
                           }
                         ]
                       : []),
-                    ...jobsTersedia.map((j) => ({
-                      value: j.id,
-                      label: j.job_number,
-                      hint: `${j.asal} → ${j.tujuan}`
-                    }))
+                    // Job yang sudah dipilih di baris lain tidak ditawarkan lagi.
+                    ...jobsTersedia
+                      .filter((j) => j.id === it.job_id || !items.some((r) => r.job_id === j.id))
+                      .map((j) => ({
+                        value: j.id,
+                        label: j.job_number,
+                        hint: `${j.asal} → ${j.tujuan}`
+                      }))
                   ]}
                   placeholder="— tanpa job —"
                   searchPlaceholder="Cari nomor job atau rute…"
@@ -653,7 +687,10 @@ export function InvoiceForm({
                       <InfoUangJalanSurat
                         uangJalanPagu={info.pagu}
                         uangJalanCair={info.cair}
-                        suratJalanUrls={info.urls}
+                        suratJalanLoadingUrls={info.loading}
+                        suratJalanUnloadingUrls={info.unloading}
+                        uangJalanPaguAwal={info.paguAwal}
+                        uangJalanTransaksi={info.transaksi}
                       />
                     </div>
                   );

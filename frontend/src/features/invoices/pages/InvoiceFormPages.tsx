@@ -1,8 +1,9 @@
-import { useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useCustomers } from "@/features/customers/queries";
 import { InvoiceForm } from "../components/invoice-form";
+import { alasanTerkunci } from "../lib-terkunci";
 import { useInvoice, useJobsBelumDitagih, useNextInvoiceNumber } from "../queries";
 
 /** Dikirim navigasi dari tab "Job siap ditagih" di menu Tagihan. */
@@ -43,6 +44,21 @@ export function EditInvoicePage() {
   if (invoice.isPending || customers.isPending) return <PageLoading />;
   if (invoice.isError) return <PageError error={invoice.error} onRetry={invoice.refetch} />;
   if (customers.isError) return <PageError error={customers.error} onRetry={customers.refetch} />;
+  // Dibuka lewat URL langsung: tagihan terkunci tidak menampilkan form.
+  const terkunci = alasanTerkunci(invoice.data);
+  if (terkunci) {
+    return (
+      <div className="card card-pad" style={{ maxWidth: 560 }}>
+        <div className="h3" style={{ marginBottom: 6 }}>
+          Tagihan {invoice.data.invoice_number} tidak bisa diedit
+        </div>
+        <p style={{ marginBottom: 12 }}>{terkunci}</p>
+        <Link to={`/invoices/${invoice.data.id}`} className="btn btn-secondary btn-sm" style={{ textDecoration: "none" }}>
+          Kembali ke detail tagihan
+        </Link>
+      </div>
+    );
+  }
   return (
     <InvoiceForm
       customers={customers.data}

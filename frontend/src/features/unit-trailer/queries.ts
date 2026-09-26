@@ -1,5 +1,9 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  getUnitTrailer,
+  getUnitTrailerHistory,
+  getUnitTrailerIncidents,
+  getUnitTrailerJobs,
   listJenisUnitTrailer,
   listUnitTrailer,
   trailerUntukUnit,
@@ -23,4 +27,25 @@ export const useUnitTrailer = (filter: UnitTrailerFilter) =>
     queryFn: () => listUnitTrailer(filter),
     // Halaman sebelumnya tetap tampil selama halaman berikutnya dimuat.
     placeholderData: keepPreviousData
+  });
+
+// ── Detail unit trailer ─────────────────────────────────────────────────────
+export const useUnitTrailerDetail = (id: string) =>
+  useQuery({ queryKey: ["unit-trailer", "detail", id], queryFn: () => getUnitTrailer(id), enabled: Boolean(id) });
+
+export const useUnitTrailerJobs = (id: string) =>
+  useQuery({ queryKey: ["unit-trailer", "jobs", id], queryFn: () => getUnitTrailerJobs(id), enabled: Boolean(id) });
+
+export const useUnitTrailerIncidents = (id: string) =>
+  useQuery({
+    queryKey: ["unit-trailer", "incidents", id],
+    queryFn: () => getUnitTrailerIncidents(id),
+    enabled: Boolean(id)
+  });
+
+export const useUnitTrailerHistory = (id: string) =>
+  useQuery({
+    queryKey: ["unit-trailer", "history", id],
+    queryFn: () => getUnitTrailerHistory(id),
+    enabled: Boolean(id)
   });

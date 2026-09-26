@@ -18,12 +18,38 @@ interface Props {
   customers: Customer[];
   /** Datang dari query string (mis. diklik dari kolom "Jumlah penawaran" di menu Customer). */
   initialCustomerId?: string;
+  /** Filter awal dari URL (`?filter=`), mis. dari kartu "Perlu tindakan" dashboard. */
+  initialFilter?: string;
+  /** Finance: hanya melihat — tanpa tombol buat penawaran. */
+  hanyaLihat?: boolean;
 }
 
 // "deal_pending" bukan status di database — ia turunan dari status deal yang
 // belum punya job sama sekali. Dipisah sebagai chip sendiri karena itulah
 // daftar kerja admin: penawaran yang sudah disetujui tapi belum dijadwalkan.
-type FilterKey = "all" | QuotationStatus | "deal_pending";
+type FilterKey = "all" | QuotationStatus | "deal_pending" | "akan_kedaluwarsa";
+
+/** Terkirim & masa berlakunya habis dalam sekian hari (sama dengan dashboard). */
+const AKAN_KEDALUWARSA_HARI = 7;
+
+function tanggalLokal(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function akanKedaluwarsa(row: QuotationListRow, hariIni: string, batas: string): boolean {
+  if (row.status !== "terkirim" || !row.berlaku_sampai) return false;
+  const t = row.berlaku_sampai.slice(0, 10);
+  return t >= hariIni && t <= batas;
+}
+
+/** Deal yang masih punya item deal belum dibuatkan job. */
+function dealBelumJob(row: QuotationListRow): boolean {
+  if (row.status !== "deal") return false;
+  return row.jumlah_item_deal_belum_job != null ? row.jumlah_item_deal_belum_job > 0 : row.jumlah_job === 0;
+}
+
+const FILTER_URL: FilterKey[] = ["all", "draft", "terkirim", "deal", "deal_pending", "akan_kedaluwarsa", "ditolak", "kedaluwarsa"];
 
 interface Pelaksanaan {
   label: string;
@@ -60,9 +86,23 @@ const toneColor: Record<Pelaksanaan["tone"], string> = {
   netral: "var(--text-tertiary)"
 };
 
-export function QuotationsListView({ quotations, customers, initialCustomerId }: Props) {
+export function QuotationsListView({
+  quotations,
+  customers,
+  initialCustomerId,
+  initialFilter,
+  hanyaLihat = false
+}: Props) {
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [filter, setFilter] = useState<FilterKey>(
+    FILTER_URL.includes(initialFilter as FilterKey) ? (initialFilter as FilterKey) : "all"
+  );
+  const { hariIni, batasKedaluwarsa } = useMemo(() => {
+    const now = new Date();
+    const batas = new Date(now);
+    batas.setDate(batas.getDate() + AKAN_KEDALUWARSA_HARI);
+    return { hariIni: tanggalLokal(now), batasKedaluwarsa: tanggalLokal(batas) };
+  }, []);
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
 
   // Menyesuaikan saat halaman dibuka lagi lewat tautan customer lain
@@ -102,7 +142,9 @@ export function QuotationsListView({ quotations, customers, initialCustomerId }:
     const needle = q.trim().toLowerCase();
     return quotations.filter((row) => {
       if (filter === "deal_pending") {
-        if (row.status !== "deal" || row.jumlah_job > 0) return false;
+        if (!dealBelumJob(row)) return false;
+      } else if (filter === "akan_kedaluwarsa") {
+        if (!akanKedaluwarsa(row, hariIni, batasKedaluwarsa)) return false;
       } else if (filter !== "all" && row.status !== filter) {
         return false;
       }
@@ -115,17 +157,17 @@ export function QuotationsListView({ quotations, customers, initialCustomerId }:
         (row.pic_nama ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [quotations, q, filter, customerId]);
+  }, [quotations, q, filter, customerId, hariIni, batasKedaluwarsa]);
 
   const totalNilai = useMemo(
     () => filtered.reduce((sum, r) => sum + r.total, 0),
     [filtered]
   );
 
-  const dealBelumJalan = useMemo(
-    () =>
-      quotations.filter((r) => r.status === "deal" && r.jumlah_job === 0).length,
-    [quotations]
+  const dealBelumJalan = useMemo(() => quotations.filter(dealBelumJob).length, [quotations]);
+  const jumlahAkanKedaluwarsa = useMemo(
+    () => quotations.filter((r) => akanKedaluwarsa(r, hariIni, batasKedaluwarsa)).length,
+    [quotations, hariIni, batasKedaluwarsa]
   );
 
   const pg = usePagination(filtered, { resetKey: `${q}|${filter}|${customerId}` });
@@ -156,11 +198,13 @@ export function QuotationsListView({ quotations, customers, initialCustomerId }:
             clearable
           />
         </div>
-        <Link to="/quotations/new" className="hidden lg:inline-flex">
-          <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
-            Buat penawaran
-          </Button>
-        </Link>
+        {!hanyaLihat && (
+          <Link to="/quotations/new" className="hidden lg:inline-flex">
+            <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
+              Buat penawaran
+            </Button>
+          </Link>
+        )}
       </div>
 
       <FilterChips
@@ -173,8 +217,13 @@ export function QuotationsListView({ quotations, customers, initialCustomerId }:
           { key: "deal", label: "Deal", count: counts.deal },
           {
             key: "deal_pending",
-            label: "Deal — belum dijalankan",
+            label: "Deal — belum ada job",
             count: dealBelumJalan
+          },
+          {
+            key: "akan_kedaluwarsa",
+            label: "Akan kedaluwarsa",
+            count: jumlahAkanKedaluwarsa
           },
           { key: "ditolak", label: "Ditolak", count: counts.ditolak },
           {
@@ -199,7 +248,7 @@ export function QuotationsListView({ quotations, customers, initialCustomerId }:
               : "Coba ubah kata kunci atau filter statusnya."
           }
           action={
-            quotations.length === 0 ? (
+            quotations.length === 0 && !hanyaLihat ? (
               <Link to="/quotations/new">
                 <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
                   Buat penawaran
@@ -410,7 +459,7 @@ export function QuotationsListView({ quotations, customers, initialCustomerId }:
         </>
       )}
 
-      <Fab href="/quotations/new" label="Buat penawaran" />
+      {!hanyaLihat && <Fab href="/quotations/new" label="Buat penawaran" />}
     </div>
   );
 }

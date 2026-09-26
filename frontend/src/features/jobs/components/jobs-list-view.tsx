@@ -23,9 +23,12 @@ import { ACTIVE_JOB_STATUSES } from "@/lib/job-status";
 import type { Customer, Job, JobStatus } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { UangJalanPendingBadge } from "./uang-jalan-pending-badge";
+import { TagihanJobInfo } from "./tagihan-job-info";
 import { PageHeader } from "@/components/ui/page-header";
 
-type TabKey = "aktif" | "validasi" | "selesai" | "cancelled";
+// "ditugaskan" = sudah ditugaskan tapi driver belum menekan Terima Job.
+export type TabKey = "semua" | "aktif" | "ditugaskan" | "validasi" | "selesai" | "cancelled";
+export const TAB_JOB: readonly TabKey[] = ["semua", "aktif", "ditugaskan", "validasi", "selesai", "cancelled"];
 const activeStatuses: JobStatus[] = ACTIVE_JOB_STATUSES;
 
 interface Props {
@@ -35,6 +38,8 @@ interface Props {
   driverMap: Record<string, string>;
   /** Datang dari query string (mis. diklik dari kolom "Total job" di menu Customer). */
   initialCustomerId?: string;
+  /** Tab awal dari query string (?tab=semua|aktif|validasi|selesai|cancelled). */
+  initialTab?: TabKey;
 }
 
 /**
@@ -93,9 +98,13 @@ export function JobsListView({
   customers,
   unitMap,
   driverMap,
-  initialCustomerId
+  initialCustomerId,
+  initialTab
 }: Props) {
-  const [tab, setTab] = useState<TabKey>("aktif");
+  // Dari "Total job" di menu Customer → tampilkan semua job customer itu,
+  // supaya jumlahnya sama dengan angka yang diklik.
+  const tabAwal: TabKey = initialTab ?? (initialCustomerId ? "semua" : "aktif");
+  const [tab, setTab] = useState<TabKey>(tabAwal);
   const [q, setQ] = useState("");
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
 
@@ -103,17 +112,21 @@ export function JobsListView({
   // (mis. dari kolom "Total job" di menu Customer) tanpa remount komponen.
   useEffect(() => {
     setCustomerId(initialCustomerId ?? "");
-  }, [initialCustomerId]);
+    setTab(tabAwal);
+  }, [initialCustomerId, tabAwal]);
 
-  const counts = useMemo(
-    () => ({
-      aktif: jobs.filter((j) => activeStatuses.includes(j.status)).length,
-      validasi: jobs.filter((j) => j.status === "menunggu_validasi").length,
-      selesai: jobs.filter((j) => j.status === "selesai").length,
-      cancelled: jobs.filter((j) => j.status === "cancelled").length
-    }),
-    [jobs]
-  );
+  // Angka tab mengikuti customer yang dipilih — angka "Semua" = "Total job" di menu Customer.
+  const counts = useMemo(() => {
+    const dasar = customerId ? jobs.filter((j) => j.customer_id === customerId) : jobs;
+    return {
+      semua: dasar.length,
+      aktif: dasar.filter((j) => activeStatuses.includes(j.status)).length,
+      ditugaskan: dasar.filter((j) => j.status === "ditugaskan").length,
+      validasi: dasar.filter((j) => j.status === "menunggu_validasi").length,
+      selesai: dasar.filter((j) => j.status === "selesai").length,
+      cancelled: dasar.filter((j) => j.status === "cancelled").length
+    };
+  }, [jobs, customerId]);
 
   const customerOptions = useMemo<ComboboxOption[]>(
     () =>
@@ -130,6 +143,7 @@ export function JobsListView({
   const filtered = useMemo(() => {
     return jobs.filter((j) => {
       if (tab === "aktif" && !activeStatuses.includes(j.status)) return false;
+      if (tab === "ditugaskan" && j.status !== "ditugaskan") return false;
       if (tab === "validasi" && j.status !== "menunggu_validasi") return false;
       if (tab === "selesai" && j.status !== "selesai") return false;
       if (tab === "cancelled" && j.status !== "cancelled") return false;
@@ -172,7 +186,9 @@ export function JobsListView({
             value={tab}
             onChange={(k) => setTab(k as TabKey)}
             items={[
+              { key: "semua", label: "Semua", count: counts.semua },
               { key: "aktif", label: "Aktif", count: counts.aktif },
+              { key: "ditugaskan", label: "Ditugaskan", count: counts.ditugaskan },
               { key: "validasi", label: "Menunggu validasi", count: counts.validasi },
               { key: "selesai", label: "Selesai", count: counts.selesai },
               { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
@@ -220,8 +236,14 @@ export function JobsListView({
           <EmptyState
             icon={PackageCheck}
             title={
-              tab === "aktif"
+              tab === "semua"
+                ? "Belum ada job"
+                : tab === "aktif"
                 ? "Belum ada job aktif"
+                : tab === "ditugaskan"
+                ? "Tidak ada job yang menunggu konfirmasi driver"
+                : tab === "validasi"
+                ? "Belum ada job menunggu validasi"
                 : tab === "selesai"
                   ? "Belum ada job selesai"
                   : "Belum ada job dibatalkan"
@@ -388,6 +410,7 @@ export function JobsListView({
                     </td>
                     <td>
                       <StatusBadge status={j.status} />
+                      <TagihanJobInfo job={j} ringkas />
                       {j.uang_jalan_pending && (
                         <div style={{ marginTop: 4 }}>
                           <UangJalanPendingBadge
@@ -457,6 +480,7 @@ export function JobsListView({
                     </div>
                     <StatusBadge status={j.status} />
                   </div>
+                  <TagihanJobInfo job={j} ringkas />
                   {j.uang_jalan_pending && (
                     <UangJalanPendingBadge
                       nominal={j.uang_jalan_pending_nominal}

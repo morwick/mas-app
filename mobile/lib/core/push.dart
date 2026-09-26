@@ -201,9 +201,13 @@ class PushService {
     _foregroundController.add(message);
   }
 
-  void _handleOpened(RemoteMessage message) {
-    final jobId = message.data['job_id'] as String?;
-    unawaited(_tandaiPushDibaca(jobId, message.data['kind'] as String?));
+  void _handleOpened(RemoteMessage message) => bukaDariPush(message.data);
+
+  /// Sama seperti mengetuk notifikasi di tray: tandai dibaca lalu buka job.
+  /// Dipakai juga oleh banner notifikasi saat aplikasi sedang terbuka.
+  void bukaDariPush(Map<String, dynamic> data) {
+    final jobId = data['job_id'] as String?;
+    unawaited(_tandaiPushDibaca(jobId, data['kind'] as String?));
     onOpenJob?.call(jobId);
   }
 
@@ -228,7 +232,7 @@ class PushService {
 
   final _foregroundController = StreamController<RemoteMessage>.broadcast();
 
-  /// Pesan yang datang saat aplikasi terbuka, untuk ditampilkan sebagai snackbar.
+  /// Pesan yang datang saat aplikasi terbuka, untuk ditampilkan sebagai banner melayang.
   Stream<RemoteMessage> get foregroundMessages => _foregroundController.stream;
 
   void dispose() {

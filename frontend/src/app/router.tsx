@@ -57,7 +57,11 @@ import { PiutangPage } from "@/features/invoices/pages/PiutangPage";
 import { LogSistemPage } from "@/features/log-sistem/pages/LogSistemPage";
 import { KaryawanPage } from "@/features/karyawan/pages/KaryawanPage";
 import { PenjualanUnitPage } from "@/features/penjualan-unit/pages/PenjualanUnitPage";
+import { BastPenjualanPage, SuratPenjualanPage } from "@/features/penjualan-unit/pages/DokumenPenjualanPages";
+import { BeritaAcaraPenghapusanPage } from "@/features/penghapusan-aset/pages/BeritaAcaraPenghapusanPage";
+import { PenghapusanAsetPage } from "@/features/penghapusan-aset/pages/PenghapusanAsetPage";
 import { UnitTrailerPage } from "@/features/unit-trailer/pages/UnitTrailerPage";
+import { UnitTrailerDetailPage } from "@/features/unit-trailer/pages/UnitTrailerDetailPage";
 import {
   CustomersReportPage,
   LabaReportPage,
@@ -144,6 +148,7 @@ export const router = createBrowserRouter([
               { path: "/units/:id", element: <UnitDetailPage /> },
               { path: "/units/:id/edit", element: <EditUnitPage /> },
               { path: "/unit-trailer", element: <UnitTrailerPage /> },
+              { path: "/unit-trailer/:id", element: <UnitTrailerDetailPage /> },
 
               { path: "/drivers", element: <DriversPage /> },
               { path: "/drivers/new", element: <NewDriverPage /> },
@@ -159,19 +164,35 @@ export const router = createBrowserRouter([
           },
 
           {
+            // Detail job: finance ikut melihat (dibuka dari tagihan) — tanpa
+            // tombol aksi; backend juga menolak perubahan job dari finance.
+            element: <RequireRole roles={["superadmin", "admin", "finance"]} />,
+            children: [
+              // Penawaran: finance hanya melihat (tombol aksi disembunyikan,
+              // backend menolak perubahan dari finance).
+              { path: "/quotations", element: <QuotationsPage /> },
+              { path: "/quotations/:id", element: <QuotationDetailPage /> }
+            ]
+          },
+
+          {
+            // Detail job: finance (dari tagihan) & operator (dari Pantau) hanya
+            // melihat — semua tombol aksi disembunyikan.
+            element: <RequireRole roles={["superadmin", "admin", "finance", "operator"]} />,
+            children: [{ path: "/jobs/:id", element: <JobDetailPage /> }]
+          },
+
+          {
             // Job & Penawaran penuh (buat/ubah/hapus): superadmin & admin saja.
             element: <RequireRole roles={["superadmin", "admin"]} />,
             children: [
               { path: "/jobs", element: <JobsPage /> },
               { path: "/jobs/new", element: <NewJobPage /> },
               { path: "/jobs/jadwal", element: <JadwalPage /> },
-              { path: "/jobs/:id", element: <JobDetailPage /> },
               { path: "/jobs/:id/edit", element: <EditJobPage /> },
               { path: "/jobs/:id/confirmation", element: <JobConfirmationPage /> },
 
-              { path: "/quotations", element: <QuotationsPage /> },
               { path: "/quotations/new", element: <NewQuotationPage /> },
-              { path: "/quotations/:id", element: <QuotationDetailPage /> },
               { path: "/quotations/:id/edit", element: <EditQuotationPage /> },
 
               { path: "/jenis-unit", element: <JenisUnitPage /> },
@@ -209,6 +230,7 @@ export const router = createBrowserRouter([
             children: [
               { path: "/karyawan", element: <KaryawanPage /> },
               { path: "/penjualan-unit", element: <PenjualanUnitPage /> },
+              { path: "/penghapusan-aset", element: <PenghapusanAsetPage /> },
               { path: "/pengguna", element: <UsersPage /> }
             ]
           }
@@ -220,7 +242,10 @@ export const router = createBrowserRouter([
         children: [
           { path: "/jobs/:id/surat-jalan", element: <SuratJalanPage /> },
           { path: "/quotations/:id/cetak", element: <QuotationPrintPage /> },
-          { path: "/invoices/:id/cetak", element: <InvoicePrintPage /> }
+          { path: "/invoices/:id/cetak", element: <InvoicePrintPage /> },
+          { path: "/penjualan-unit/:id/surat", element: <SuratPenjualanPage /> },
+          { path: "/penjualan-unit/:id/bast", element: <BastPenjualanPage /> },
+          { path: "/penghapusan-aset/:id/berita-acara", element: <BeritaAcaraPenghapusanPage /> }
         ]
       }
     ]

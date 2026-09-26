@@ -22,6 +22,8 @@ import { PageHeader } from "@/components/ui/page-header";
 interface Props {
   units: Unit[];
   jenisUnitList: JenisUnit[];
+  /** Filter status awal dari query string (mis. ?status=breakdown dari dashboard). */
+  initialStatus?: string;
 }
 
 interface LocationEntry {
@@ -33,11 +35,11 @@ interface LocationEntry {
 
 const LOCATION_POLL_MS = 30_000;
 
-export function UnitsListView({ units, jenisUnitList }: Props) {
+export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
   const { canManageOperational } = useAuth();
   const [q, setQ] = useState("");
   const [jenis, setJenis] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus ?? "");
   const [showInactive, setShowInactive] = useState(false);
 
   // Alamat real-time per unit. State diisi via polling /api/units/locations.

@@ -3,15 +3,9 @@ import { Plus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { Field, Input, Select } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import {
-  STATUS_TRAILER,
-  type JenisUnitTrailer,
-  type StatusTrailer,
-  type UnitTrailer,
-  type UnitTrailerInput
-} from "../api";
+import { type JenisUnitTrailer, type UnitTrailer, type UnitTrailerInput } from "../api";
 
 interface Props {
   open: boolean;
@@ -66,7 +60,11 @@ interface FormState {
   jenisId: string;
   tahun: string;
   kapasitas: string;
-  status: StatusTrailer;
+  // Dokumen opsional: KIR & SRUT (Surat Registrasi Uji Tipe).
+  kirNomor: string;
+  kirBerlaku: string;
+  srutNomor: string;
+  srutTanggal: string;
 }
 
 function awal(trailer: UnitTrailer | null): FormState {
@@ -75,8 +73,10 @@ function awal(trailer: UnitTrailer | null): FormState {
     jenisId: trailer?.jenis_unit_trailer_id ?? "",
     tahun: trailer?.tahun != null ? String(trailer.tahun) : "",
     kapasitas: trailer?.kapasitas_ton != null ? String(trailer.kapasitas_ton) : "",
-    // Trailer terjual tidak bisa diedit (tombolnya disembunyikan).
-    status: trailer && trailer.status !== "terjual" ? trailer.status : "standby"
+    kirNomor: trailer?.kir_nomor ?? "",
+    kirBerlaku: trailer?.kir_berlaku_sampai ?? "",
+    srutNomor: trailer?.srut_nomor ?? "",
+    srutTanggal: trailer?.srut_tanggal ?? ""
   };
 }
 
@@ -144,7 +144,10 @@ export function UnitTrailerFormModal({
       jenis_unit_trailer_id: form.jenisId,
       tahun: tahun.nilai,
       kapasitas_ton: kapasitas.nilai,
-      status: form.status
+      kir_nomor: form.kirNomor.trim() || null,
+      kir_berlaku_sampai: form.kirBerlaku || null,
+      srut_nomor: form.srutNomor.trim() || null,
+      srut_tanggal: form.srutTanggal || null
     });
   }
 
@@ -242,18 +245,34 @@ export function UnitTrailerFormModal({
             </Field>
           </div>
 
-          <Field label="Status">
-            <Select
-              value={form.status}
-              onChange={(e) => set("status", e.target.value as StatusTrailer)}
-            >
-              {STATUS_TRAILER.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {/* Status tidak diisi di sini — sama seperti unit: Bertugas dari job,
+              Breakdown / Perbaikan dari insiden, Standby / Diafkirkan lewat
+              tombol Ubah status di halaman detail. */}
+          <div className="field-label" style={{ marginTop: 4 }}>
+            Dokumen <span className="caption">(opsional)</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
+            <Field label="Nomor KIR">
+              <Input value={form.kirNomor} onChange={(e) => set("kirNomor", e.target.value)} />
+            </Field>
+            <Field label="KIR berlaku sampai">
+              <Input
+                type="date"
+                value={form.kirBerlaku}
+                onChange={(e) => set("kirBerlaku", e.target.value)}
+              />
+            </Field>
+            <Field label="Nomor SRUT" hint="Surat Registrasi Uji Tipe">
+              <Input value={form.srutNomor} onChange={(e) => set("srutNomor", e.target.value)} />
+            </Field>
+            <Field label="Tanggal SRUT">
+              <Input
+                type="date"
+                value={form.srutTanggal}
+                onChange={(e) => set("srutTanggal", e.target.value)}
+              />
+            </Field>
+          </div>
         </form>
       </Modal>
 

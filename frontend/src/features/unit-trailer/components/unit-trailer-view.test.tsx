@@ -6,6 +6,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui/toast";
 import { UnitTrailerView } from "@/features/unit-trailer/components/unit-trailer-view";
@@ -29,14 +30,30 @@ const TRAILER = {
 type Panggilan = { method: string; url: URL; body: unknown };
 let panggilan: Panggilan[];
 
+let lokasiSekarang = "";
+function lokasi() {
+  return lokasiSekarang;
+}
+
+function CatatLokasi() {
+  lokasiSekarang = useLocation().pathname;
+  return null;
+}
+
 function renderView() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
-    <QueryClientProvider client={client}>
-      <ToastProvider>
-        <UnitTrailerView />
-      </ToastProvider>
-    </QueryClientProvider>
+    <MemoryRouter initialEntries={["/unit-trailer"]}>
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/unit-trailer" element={<UnitTrailerView />} />
+            <Route path="*" element={null} />
+          </Routes>
+          <CatatLokasi />
+        </ToastProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
   );
 }
 
@@ -116,27 +133,28 @@ describe("UnitTrailerView", () => {
 
     await waitFor(() => {
       const post = panggilan.find((p) => p.method === "POST" && p.url.pathname.endsWith("/unit-trailer"));
-      expect(post?.body).toMatchObject({ kode_trailer: "TR-02", jenis_unit_trailer_id: "j9", status: "standby" });
+      expect(post?.body).toMatchObject({ kode_trailer: "TR-02", jenis_unit_trailer_id: "j9" });
+      // Status tidak diisi di form — trailer baru Standby dari default DB.
+      expect(post?.body).not.toHaveProperty("status");
     });
   });
 
-  it("hapus lewat konfirmasi mengirim DELETE (soft delete di server)", async () => {
+  it("baris bisa diklik ke halaman detail; tanpa tombol edit/hapus di tabel (seperti unit)", async () => {
     renderView();
-    await screen.findAllByText("TR-01");
-    fireEvent.click(screen.getAllByRole("button", { name: "Hapus TR-01" })[0]);
-    const dialog = await screen.findByText(/Hapus unit trailer TR-01\?/);
-    fireEvent.click(within(dialog.closest("div.bg-white") as HTMLElement).getByRole("button", { name: "Ya, hapus" }));
-    await waitFor(() =>
-      expect(panggilan.some((p) => p.method === "DELETE" && p.url.pathname.endsWith("/unit-trailer/t1"))).toBe(true)
-    );
+    const sel = (await screen.findAllByText("TR-01"))[0];
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hapus TR-01" })).toBeNull();
+    const baris = sel.closest("tr") as HTMLElement;
+    expect(baris.className).toContain("row-link");
+    fireEvent.click(baris);
+    await waitFor(() => expect(lokasi()).toBe("/unit-trailer/t1"));
   });
 
-  it("operator hanya bisa melihat, tanpa tombol tambah/edit/hapus", async () => {
+  it("operator hanya bisa melihat, tanpa tombol tambah", async () => {
     superadmin = false;
     renderView();
     await screen.findAllByText("TR-01");
     expect(screen.queryByRole("button", { name: /Tambah unit trailer/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Hapus TR-01" })).toBeNull();
   });
 
   it("filter & pencarian dikirim ke server dan kembali ke halaman 1", async () => {
@@ -170,6 +188,15 @@ describe("UnitTrailerView", () => {
     renderView();
     await screen.findAllByText("TR-01");
     const opsi = Array.from(screen.getByLabelText("Filter status").querySelectorAll("option")).map((o) => o.textContent);
-    expect(opsi).toEqual(["Semua status", "Standby", "Perbaikan", "Terjual"]);
+    // Status trailer sama dengan status unit.
+    expect(opsi).toEqual([
+      "Semua status",
+      "Standby",
+      "Bertugas",
+      "Breakdown",
+      "Perbaikan",
+      "Terjual",
+      "Diafkirkan"
+    ]);
   });
 });

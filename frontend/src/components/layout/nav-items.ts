@@ -21,6 +21,7 @@ import {
   Container,
   IdCard,
   BadgeDollarSign,
+  PackageX,
   type LucideIcon
 } from "lucide-react";
 
@@ -105,7 +106,8 @@ const penawaran: NavItem = {
   label: "Penawaran",
   icon: FileText,
   match: (p) => p.startsWith("/quotations"),
-  roles: ["superadmin", "admin"]
+  // Finance: hanya melihat.
+  roles: ["superadmin", "admin", "finance"]
 };
 
 const job: NavItem = {
@@ -164,9 +166,19 @@ const penjualan: NavItem = {
   // Satu-satunya jalan menandai unit / unit trailer "Terjual" — lengkap
   // dengan data pembeli, harga, dan bukti transaksinya.
   href: "/penjualan-unit",
-  label: "Penjualan Unit",
+  label: "Penjualan Unit & Unit Trailer",
   icon: BadgeDollarSign,
   match: (p) => p.startsWith("/penjualan-unit"),
+  roles: ["superadmin"]
+};
+
+const penghapusan: NavItem = {
+  // Satu-satunya jalan menandai unit / unit trailer "Diafkirkan" — lengkap
+  // dengan tanggal, alasan, dan bukti (berita acara).
+  href: "/penghapusan-aset",
+  label: "Penghapusan Unit & Unit Trailer",
+  icon: PackageX,
+  match: (p) => p.startsWith("/penghapusan-aset"),
   roles: ["superadmin"]
 };
 
@@ -239,7 +251,7 @@ export const navTree: NavEntry[] = [
     key: "monitoring",
     label: "Monitoring",
     icon: Activity,
-    items: [penawaran, job, pantau, uangJalan, service, tagihan, piutang, penjualan]
+    items: [penawaran, job, pantau, uangJalan, service, tagihan, piutang, penjualan, penghapusan]
   },
   laporan,
   logSistem,

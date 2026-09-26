@@ -9,10 +9,8 @@ from supabase import AsyncClient
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
 from app.core.pg import clean_text, first, num, rows, single
-from app.core.transaksi import Transaksi
 from app.modules.units.schemas import (
     BUKAN_ARMADA,
-    ChangeStatusRequest,
     DriverAssignment,
     Unit,
     UnitCreate,
@@ -257,18 +255,6 @@ class UnitService:
             if exc.code == "23505" and "units_default_driver_unique" in (exc.message or ""):
                 raise ConflictError("Driver sudah dipakai unit lain") from exc
             raise
-
-    async def change_status(self, unit_id: str, payload: ChangeStatusRequest) -> None:
-        # "Terjual" wajib lewat menu Penjualan supaya data pembeli & harganya
-        # ikut tercatat — bukan sekadar ganti status tanpa jejak transaksi.
-        if payload.status == "terjual":
-            raise ValidationError("Tandai unit terjual lewat menu Penjualan Unit, bukan di sini.")
-        # Satu transaksi: log riwayat dibuat trigger DB, alasannya dititipkan
-        # lewat `app.status_note` sehingga tersimpan bersama baris riwayatnya.
-        tx = Transaksi(self._db)
-        tx.setting("app.status_note", clean_text(payload.reason))
-        tx.update("units", {"status_operasional": payload.status}, {"id": unit_id})
-        await tx.jalankan()
 
     async def deactivate(self, unit_id: str) -> None:
         await self._db.table("units").update({"is_active": False}).eq("id", unit_id).execute()

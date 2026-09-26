@@ -19,6 +19,10 @@ interface Props {
   ringkasan: UangJalanRingkasan;
   /** Pengajuan driver (BR-05); yang berstatus `diajukan` menahan perjalanan. */
   pengajuan?: UangJalanRequest[];
+  /** Finance: hanya melihat — tanpa tombol aksi. */
+  hanyaLihat?: boolean;
+  /** Nomor tagihan bila job sudah ditagihkan — uang jalan tidak bisa ditambah lagi. */
+  nomorTagihan?: string | null;
 }
 
 function Angka({
@@ -56,7 +60,9 @@ export function UangJalanCard({
   sumberDana,
   transaksi,
   ringkasan,
-  pengajuan = []
+  pengajuan = [],
+  hanyaLihat = false,
+  nomorTagihan = null
 }: Props) {
   const toast = useToast();
 
@@ -120,18 +126,26 @@ export function UangJalanCard({
           <Wallet style={{ width: 13, height: 13 }} />
           Uang jalan
         </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => {
-            setEditing(null);
-            setModalOpen(true);
-          }}
-        >
-          <Plus style={{ width: 13, height: 13 }} />
-          Catat
-        </Button>
+        {!hanyaLihat && !nomorTagihan && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setEditing(null);
+              setModalOpen(true);
+            }}
+          >
+            <Plus style={{ width: 13, height: 13 }} />
+            Catat
+          </Button>
+        )}
       </div>
+
+      {nomorTagihan && !hanyaLihat && (
+        <p className="caption" style={{ marginTop: -6, marginBottom: 12 }}>
+          Job sudah ditagihkan ({nomorTagihan}) — uang jalan tidak bisa ditambah lagi.
+        </p>
+      )}
 
       {/* Ringkasan */}
       {editPagu ? (
@@ -180,6 +194,7 @@ export function UangJalanCard({
                 {formatRupiah(ringkasan.penambahan)}
               </div>
             )}
+            {!hanyaLihat && (
             <button
               type="button"
               className="btn-link"
@@ -191,6 +206,7 @@ export function UangJalanCard({
             >
               Ubah pagu awal
             </button>
+            )}
           </div>
           <Angka label="Sudah dikasih" value={formatRupiah(ringkasan.cair)} />
           <Angka
@@ -234,19 +250,23 @@ export function UangJalanCard({
                   {r.catatan ? ` · ${r.catatan}` : ""} — perjalanan tertahan sampai dicairkan
                 </div>
               </div>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditing(null);
-                  setFulfilling(r);
-                  setModalOpen(true);
-                }}
-              >
-                Cairkan + bukti
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setRejecting(r)}>
-                Tolak
-              </Button>
+              {!hanyaLihat && !nomorTagihan && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditing(null);
+                    setFulfilling(r);
+                    setModalOpen(true);
+                  }}
+                >
+                  Cairkan + bukti
+                </Button>
+              )}
+              {!hanyaLihat && (
+                <Button size="sm" variant="secondary" onClick={() => setRejecting(r)}>
+                  Tolak
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -328,6 +348,8 @@ export function UangJalanCard({
                   {tambah ? "+" : ""}
                   {formatRupiah(t.jumlah)}
                 </div>
+                {/* Pencairan dari pengajuan driver: hanya lihat bukti transfer. */}
+                {!hanyaLihat && !t.request_id && (
                 <div style={{ display: "flex", gap: 2 }}>
                   <button
                     type="button"
@@ -349,6 +371,7 @@ export function UangJalanCard({
                     <Trash2 style={{ width: 13, height: 13 }} />
                   </button>
                 </div>
+                )}
               </div>
             );
           })}

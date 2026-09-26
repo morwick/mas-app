@@ -2,12 +2,12 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Plus, Receipt, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
-import { InvoiceStatusBadge } from "./invoice-status-badge";
-import type { InvoiceListRow, InvoiceTampilStatus } from "@/types";
+import { InvoiceStatusBadge, StatusBayarBadge } from "./invoice-status-badge";
+import { statusBayarLabel, type InvoiceListRow, type InvoiceTampilStatus, type StatusBayar } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 
@@ -20,6 +20,7 @@ type FilterKey = "all" | InvoiceTampilStatus;
 export function InvoicesListView({ invoices }: Props) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [filterBayar, setFilterBayar] = useState<"all" | StatusBayar>("all");
 
   // Dihitung dari baris yang sudah dipetakan, bukan lewat query terpisah —
   // status jatuh tempo diturunkan saat baca, jadi COUNT di database akan
@@ -40,6 +41,7 @@ export function InvoicesListView({ invoices }: Props) {
     const needle = q.trim().toLowerCase();
     return invoices.filter((row) => {
       if (filter !== "all" && row.status_tampil !== filter) return false;
+      if (filterBayar !== "all" && row.status_bayar !== filterBayar) return false;
       if (!needle) return true;
       return (
         row.invoice_number.toLowerCase().includes(needle) ||
@@ -47,7 +49,7 @@ export function InvoicesListView({ invoices }: Props) {
         (row.pic_nama ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [invoices, q, filter]);
+  }, [invoices, q, filter, filterBayar]);
 
   // Yang menarik dari daftar tagihan bukan total nilainya, melainkan berapa
   // yang belum masuk. Tagihan batal tidak ikut — itu bukan piutang.
@@ -59,7 +61,7 @@ export function InvoicesListView({ invoices }: Props) {
     [filtered]
   );
 
-  const pg = usePagination(filtered, { resetKey: `${q}|${filter}` });
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}|${filterBayar}` });
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
@@ -71,6 +73,20 @@ export function InvoicesListView({ invoices }: Props) {
             placeholder="Cari nomor tagihan atau customer…"
             leftIcon={<Search style={{ width: 15, height: 15 }} />}
           />
+        </div>
+        <div style={{ width: 180 }}>
+          <Select
+            value={filterBayar}
+            onChange={(e) => setFilterBayar(e.target.value as "all" | StatusBayar)}
+            aria-label="Filter status bayar"
+          >
+            <option value="all">Semua status bayar</option>
+            {(Object.keys(statusBayarLabel) as StatusBayar[]).map((k) => (
+              <option key={k} value={k}>
+                {statusBayarLabel[k]}
+              </option>
+            ))}
+          </Select>
         </div>
         <Link to="/invoices/new" className="hidden lg:inline-flex">
           <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
@@ -127,6 +143,7 @@ export function InvoicesListView({ invoices }: Props) {
                   <th style={{ width: 140, textAlign: "right" }}>Total</th>
                   <th style={{ width: 140, textAlign: "right" }}>Sisa</th>
                   <th style={{ width: 150 }}>Status</th>
+                  <th style={{ width: 130 }}>Status bayar</th>
                   <th style={{ width: 44 }} />
                 </tr>
               </thead>
@@ -196,6 +213,9 @@ export function InvoicesListView({ invoices }: Props) {
                       />
                     </td>
                     <td>
+                      <StatusBayarBadge status={row.status_bayar} />
+                    </td>
+                    <td>
                       <Link
                         to={`/invoices/${row.id}`}
                         style={{
@@ -227,7 +247,7 @@ export function InvoicesListView({ invoices }: Props) {
                   >
                     {formatRupiah(sisaTertagih)}
                   </td>
-                  <td colSpan={2} />
+                  <td colSpan={3} />
                 </tr>
               </tfoot>
             </table>
@@ -245,10 +265,13 @@ export function InvoicesListView({ invoices }: Props) {
                   <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>
                     {row.invoice_number}
                   </span>
-                  <InvoiceStatusBadge
-                    status={row.status_tampil}
-                    hariTerlambat={row.hari_terlambat}
-                  />
+                  <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <InvoiceStatusBadge
+                      status={row.status_tampil}
+                      hariTerlambat={row.hari_terlambat}
+                    />
+                    <StatusBayarBadge status={row.status_bayar} />
+                  </span>
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
                   {row.customer_nama}

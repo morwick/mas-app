@@ -1,60 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PeringatanBatal, WatermarkBatal } from "@/components/surat/watermark-batal";
+import { rp, tanggalPanjang, terbilangRupiah } from "@/lib/surat";
 import type { Invoice } from "@/types";
 
 interface Props {
   invoice: Invoice;
-}
-
-/** "7 September 2026" — format tanggal dokumen resmi, bukan singkatan. */
-function tanggalPanjang(iso: string): string {
-  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric"
-  }).format(d);
-}
-
-/** "Rp. 5.000.000,-" — gaya penulisan yang dipakai di dokumen MAS. */
-function rp(n: number): string {
-  return `Rp. ${new Intl.NumberFormat("id-ID").format(n)},-`;
-}
-
-const SATUAN = [
-  "", "satu", "dua", "tiga", "empat", "lima",
-  "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"
-];
-
-/**
- * Terbilang — nilai tagihan dieja dengan huruf.
- *
- * Bukan hiasan: pada dokumen tagihan, angka yang dieja adalah pengaman kalau
- * digitnya terbaca keliru atau berubah saat dipindai. Semua invoice cetak yang
- * dipakai perusahaan transport memuatnya.
- */
-function terbilang(n: number): string {
-  if (n < 0) return `minus ${terbilang(-n)}`;
-  if (n < 12) return SATUAN[n] ?? "nol";
-  if (n < 20) return `${terbilang(n - 10)} belas`;
-  if (n < 100) return `${terbilang(Math.floor(n / 10))} puluh ${terbilang(n % 10)}`;
-  if (n < 200) return `seratus ${terbilang(n - 100)}`;
-  if (n < 1000) return `${terbilang(Math.floor(n / 100))} ratus ${terbilang(n % 100)}`;
-  if (n < 2000) return `seribu ${terbilang(n - 1000)}`;
-  if (n < 1_000_000)
-    return `${terbilang(Math.floor(n / 1000))} ribu ${terbilang(n % 1000)}`;
-  if (n < 1_000_000_000)
-    return `${terbilang(Math.floor(n / 1_000_000))} juta ${terbilang(n % 1_000_000)}`;
-  return `${terbilang(Math.floor(n / 1_000_000_000))} miliar ${terbilang(
-    n % 1_000_000_000
-  )}`;
-}
-
-function terbilangRupiah(n: number): string {
-  const kata = terbilang(Math.round(n)).replace(/\s+/g, " ").trim();
-  if (!kata) return "Nol rupiah";
-  return `${kata.charAt(0).toUpperCase()}${kata.slice(1)} rupiah`;
 }
 
 export function InvoicePrintView({ invoice: inv }: Props) {
@@ -73,6 +25,7 @@ export function InvoicePrintView({ invoice: inv }: Props) {
             <ArrowLeft className="w-4 h-4" />
             Kembali ke tagihan
           </button>
+          <PeringatanBatal aktif={inv.status === "batal"} teks="Tagihan ini dibatalkan" />
           <div className="flex items-center gap-2">
             <p className="hidden md:block text-[11px] text-text-muted max-w-[280px] leading-snug">
               Di dialog yang muncul, ubah <strong>Destination</strong> (Tujuan)
@@ -88,7 +41,8 @@ export function InvoicePrintView({ invoice: inv }: Props) {
         </div>
       </div>
 
-      <div className="surat-page max-w-[820px] mx-auto my-6 bg-white border border-border print:border-0 print:my-0 print:max-w-none">
+      <div className="surat-page relative max-w-[820px] mx-auto my-6 bg-white border border-border print:border-0 print:my-0 print:max-w-none">
+        <WatermarkBatal aktif={inv.status === "batal"} />
         <div className="px-8 sm:px-12 py-8 print:px-10 print:py-6">
           {/* Kop */}
           <header className="pb-3 border-b-2 border-brand flex items-end justify-between gap-4">

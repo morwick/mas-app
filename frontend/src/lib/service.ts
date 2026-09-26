@@ -14,6 +14,16 @@ export interface DerivedServiceStatus {
 export function deriveServiceStatus(
   info: UnitServiceInfo
 ): DerivedServiceStatus {
+  if (!(info.service_interval_km > 0)) {
+    // Interval belum diisi → unit ini tidak dipantau (sama dengan backend).
+    return {
+      status: "ok",
+      next_service_at_km: 0,
+      km_to_next_service: 0,
+      km_since_last_service: 0,
+      progress_percent: 0
+    };
+  }
   const baseline = info.last_service_odometer_km ?? 0;
   const next = baseline + info.service_interval_km;
   const km_to_next_service = next - info.current_odometer_km;

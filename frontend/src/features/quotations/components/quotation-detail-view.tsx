@@ -4,31 +4,31 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
+  ListChecks,
   MessageCircle,
   Package,
   Pencil,
   Printer,
   RotateCcw,
   Send,
-  Trash2,
-  XCircle
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Field, Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { QuotationStatusBadge } from "./quotation-status-badge";
+import { KeputusanItemModal } from "./keputusan-item-modal";
 import {
   deleteQuotation,
   setQuotationStatus
 } from "@/features/quotations/api";
-import type {
-  Quotation,
-  QuotationJobRef,
-  QuotationStatus
+import {
+  keputusanItemLabel,
+  type KeputusanItem,
+  type Quotation,
+  type QuotationJobRef,
+  type QuotationStatus
 } from "@/types";
 import { formatDate, formatDateTime, formatRupiah } from "@/lib/utils";
 
@@ -39,6 +39,8 @@ interface Props {
   /** Job yang sudah lahir dari penawaran ini. */
   jobs: QuotationJobRef[];
   canDelete: boolean;
+  /** Finance: hanya melihat — tanpa tombol aksi apa pun. */
+  hanyaLihat?: boolean;
 }
 
 /** 08xx… / +62… → 62xx… sesuai yang diminta wa.me */
@@ -53,14 +55,14 @@ export function QuotationDetailView({
   quotation: q,
   picNoHp,
   jobs,
-  canDelete
+  canDelete,
+  hanyaLihat = false
 }: Props) {
   const navigate = useNavigate();
   const toast = useToast();
 
   const [loading, setLoading] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
+  const [keputusanOpen, setKeputusanOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Sekali terkirim, penawaran tidak boleh diubah lagi — hanya draft yang
@@ -68,17 +70,20 @@ export function QuotationDetailView({
   // kembali" ke draft dulu).
   const isLocked = q.status !== "draft";
 
-  async function changeStatus(status: QuotationStatus, alasan?: string) {
+  async function changeStatus(status: QuotationStatus) {
     setLoading(true);
-    const res = await setQuotationStatus(q.id, status, { alasan });
+    const res = await setQuotationStatus(q.id, status);
     setLoading(false);
     if (!res.ok) {
       toast.error(res.error);
       return;
     }
     toast.success("Status penawaran diperbarui");
-    setRejectOpen(false);
   }
+
+  // Nomor urut item — untuk kolom "Item" di daftar job.
+  const nomorItem = new Map(q.items.map((it, i) => [it.id, i + 1]));
+  const adaKeputusan = q.items.some((it) => it.keputusan !== "menunggu");
 
   async function onDelete() {
     setLoading(true);
@@ -202,8 +207,7 @@ export function QuotationDetailView({
             }}
           >
             Masa berlaku habis {q.berlaku_sampai ? formatDate(q.berlaku_sampai) : "—"}.
-            Surat ini masih bisa ditandai Deal bila customer baru menjawab, atau
-            perpanjang tanggalnya lewat tombol Ubah.
+            Keputusan per item masih bisa diisi bila customer baru menjawab.
           </p>
         )}
 
@@ -223,6 +227,7 @@ export function QuotationDetailView({
         )}
 
         {/* Aksi */}
+        {!hanyaLihat && (
         <div
           style={{
             display: "flex",
@@ -271,34 +276,16 @@ export function QuotationDetailView({
             </Button>
           )}
 
-          {/* Kedaluwarsa ikut di sini: customer kadang baru menjawab setelah
-              masa berlaku lewat, dan memaksa admin membuka ulang surat hanya
-              untuk mencatat "deal" itu birokrasi yang tidak perlu. */}
-          {(q.status === "terkirim" || q.status === "kedaluwarsa") && (
-            <>
-              <Button
-                leftIcon={<CheckCircle2 style={{ width: 15, height: 15 }} />}
-                loading={loading}
-                onClick={() => changeStatus("deal")}
-              >
-                Deal
-              </Button>
-              <Button
-                variant="secondary"
-                leftIcon={<XCircle style={{ width: 15, height: 15 }} />}
-                onClick={() => setRejectOpen(true)}
-              >
-                Ditolak
-              </Button>
-            </>
-          )}
-
-          {q.status === "deal" && (
-            <Link to={`/jobs/new?quotation=${q.id}`}>
-              <Button rightIcon={<ArrowRight style={{ width: 15, height: 15 }} />}>
-                {jobs.length > 0 ? "Buat job lagi" : "Buat Job dari penawaran ini"}
-              </Button>
-            </Link>
+          {/* Deal / tolak ditentukan per item. Kedaluwarsa ikut: customer
+              kadang baru menjawab setelah masa berlaku lewat. */}
+          {(q.status === "terkirim" || q.status === "kedaluwarsa" || q.status === "deal") && (
+            <Button
+              variant={q.status === "deal" ? "secondary" : "primary"}
+              leftIcon={<ListChecks style={{ width: 15, height: 15 }} />}
+              onClick={() => setKeputusanOpen(true)}
+            >
+              {q.status === "deal" ? "Ubah keputusan item" : "Keputusan per item"}
+            </Button>
           )}
 
           {q.status === "ditolak" && (
@@ -324,6 +311,7 @@ export function QuotationDetailView({
             </Button>
           )}
         </div>
+        )}
       </div>
 
       {/* Tujuan surat */}
@@ -361,8 +349,10 @@ export function QuotationDetailView({
                 <th>Dari</th>
                 <th>Tujuan</th>
                 <th style={{ width: 110 }}>Unit</th>
-                <th style={{ width: 140, textAlign: "right" }}>@ Price</th>
-                <th style={{ width: 140, textAlign: "right" }}>Total</th>
+                <th style={{ width: 150, textAlign: "right" }}>@ Price</th>
+                <th style={{ width: 150, textAlign: "right" }}>Total</th>
+                <th style={{ width: 150 }}>Keputusan</th>
+                {!hanyaLihat && q.status === "deal" && <th style={{ width: 150 }}>Job</th>}
               </tr>
             </thead>
             <tbody>
@@ -382,14 +372,50 @@ export function QuotationDetailView({
                     )}
                   </td>
                   <td className="mono" style={{ textAlign: "right" }}>
-                    {formatRupiah(it.harga_satuan)}
+                    <Harga awal={it.harga_satuan} revisi={it.harga_revisi} />
                   </td>
                   <td
                     className="mono"
                     style={{ textAlign: "right", fontWeight: 600 }}
                   >
-                    {formatRupiah(it.subtotal)}
+                    <Harga
+                      awal={it.subtotal}
+                      revisi={it.harga_revisi != null ? it.subtotal_final : null}
+                    />
                   </td>
+                  <td>
+                    <KeputusanBadge keputusan={it.keputusan} />
+                    {it.keputusan === "ditolak" && it.alasan_ditolak && (
+                      <div className="caption" style={{ marginTop: 2 }}>
+                        {it.alasan_ditolak}
+                      </div>
+                    )}
+                  </td>
+                  {/* Kolom tombol job — hanya saat penawaran deal. */}
+                  {!hanyaLihat && q.status === "deal" && (
+                    <td>
+                      {it.keputusan === "deal" ? (
+                        <>
+                          <Link to={`/jobs/new?quotation=${q.id}&item=${it.id}`}>
+                            <Button
+                              size="sm"
+                              variant={it.jumlah_job > 0 ? "secondary" : "primary"}
+                              rightIcon={<ArrowRight style={{ width: 13, height: 13 }} />}
+                            >
+                              {it.jumlah_job > 0 ? "Buat job lagi" : "Buat job"}
+                            </Button>
+                          </Link>
+                          {it.jumlah_job > 0 && (
+                            <div className="caption" style={{ marginTop: 3 }}>
+                              Sudah {it.jumlah_job} job
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -413,6 +439,9 @@ export function QuotationDetailView({
             />
           )}
           <SumRow label="Total" value={q.total} strong />
+          {adaKeputusan && (
+            <SumRow label="Nilai deal (sebelum PPN)" value={q.nilai_deal} />
+          )}
         </div>
       </div>
 
@@ -423,7 +452,7 @@ export function QuotationDetailView({
           <div className="card-header">
             <p className="eyebrow">Job dari penawaran ini</p>
             <span className="caption" style={{ color: "var(--text-tertiary)" }}>
-              {jobs.length} dari {q.items.length} rute
+              {jobs.length} job · {q.items.filter((it) => it.keputusan === "deal").length} item deal
             </span>
           </div>
           <div className="table-scroll">
@@ -431,6 +460,7 @@ export function QuotationDetailView({
               <thead>
                 <tr>
                   <th style={{ width: 150 }}>Nomor job</th>
+                  <th style={{ width: 60 }}>Item</th>
                   <th>Rute</th>
                   <th style={{ width: 150 }}>Berangkat</th>
                   <th style={{ width: 140 }}>Status</th>
@@ -452,6 +482,9 @@ export function QuotationDetailView({
                       >
                         {j.job_number}
                       </Link>
+                    </td>
+                    <td className="muted" style={{ fontSize: 12.5 }}>
+                      {j.quotation_item_id ? `#${nomorItem.get(j.quotation_item_id) ?? "—"}` : "—"}
                     </td>
                     <td style={{ fontSize: 12.5 }}>
                       {j.asal} → {j.tujuan}
@@ -482,37 +515,11 @@ export function QuotationDetailView({
         </div>
       )}
 
-      {/* Modal tolak */}
-      <Modal
-        open={rejectOpen}
-        onClose={() => setRejectOpen(false)}
-        title="Tandai penawaran ditolak"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setRejectOpen(false)}>
-              Batal
-            </Button>
-            <Button
-              variant="danger"
-              loading={loading}
-              onClick={() => changeStatus("ditolak", rejectReason)}
-            >
-              Tandai ditolak
-            </Button>
-          </>
-        }
-      >
-        <Field
-          label="Alasan"
-          hint="Berguna sebagai bahan follow-up dan acuan harga rute serupa."
-        >
-          <Textarea
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="mis. harga di atas budget customer, pakai vendor lain"
-          />
-        </Field>
-      </Modal>
+      <KeputusanItemModal
+        quotation={q}
+        open={keputusanOpen}
+        onClose={() => setKeputusanOpen(false)}
+      />
 
       <ConfirmDialog
         open={deleteOpen}
@@ -574,5 +581,33 @@ function SumRow({
       <span>{label}</span>
       <span className="mono">{formatRupiah(value)}</span>
     </div>
+  );
+}
+
+const KEPUTUSAN_KELAS: Record<KeputusanItem, string> = {
+  menunggu: "",
+  deal: "badge-selesai",
+  ditolak: "badge-cancelled"
+};
+
+function KeputusanBadge({ keputusan }: { keputusan: KeputusanItem }) {
+  return (
+    <span className={`badge ${KEPUTUSAN_KELAS[keputusan]}`}>
+      <span className="badge-dot" />
+      {keputusanItemLabel[keputusan]}
+    </span>
+  );
+}
+
+/** Harga awal tetap terlihat (dicoret) bila ada revisi. */
+function Harga({ awal, revisi }: { awal: number; revisi?: number | null }) {
+  if (revisi == null) return <>{formatRupiah(awal)}</>;
+  return (
+    <>
+      <div style={{ textDecoration: "line-through", color: "var(--text-tertiary)", fontWeight: 400, fontSize: 11.5 }}>
+        {formatRupiah(awal)}
+      </div>
+      <div>{formatRupiah(revisi)}</div>
+    </>
   );
 }

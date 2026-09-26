@@ -4,7 +4,7 @@ import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCustomers } from "@/features/customers/queries";
 import { useDrivers } from "@/features/drivers/queries";
 import { useUnits } from "@/features/units/queries";
-import { JobsListView } from "../components/jobs-list-view";
+import { JobsListView, TAB_JOB } from "../components/jobs-list-view";
 import { useJobs } from "../queries";
 
 export function JobsPage() {
@@ -35,6 +35,7 @@ export function JobsPage() {
       unitMap={unitMap}
       driverMap={driverMap}
       initialCustomerId={searchParams.get("customer_id") ?? undefined}
+      initialTab={TAB_JOB.find((t) => t === searchParams.get("tab"))}
     />
   );
 }

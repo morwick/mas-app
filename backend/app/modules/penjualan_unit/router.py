@@ -7,7 +7,14 @@ from supabase import AsyncClient
 from app.core.auth import superadmin_client
 from app.core.paging import Page, PageParams, page_params
 from app.modules.auth.schemas import OkResponse
-from app.modules.penjualan_unit.schemas import AsetTerjual, JenisAset, PenjualanUnit, PenjualanUnitInput
+from app.modules.penjualan_unit.schemas import (
+    AsetTerjual,
+    DokumenTtd,
+    JenisAset,
+    PenjualanUnit,
+    PenjualanUnitInput,
+    PenjualanUnitUbah,
+)
 from app.modules.penjualan_unit.service import PenjualanUnitService
 
 router = APIRouter(prefix="/penjualan-unit", tags=["penjualan-unit"])
@@ -23,7 +30,7 @@ def get_service(client: AsyncClient = Depends(superadmin_client)) -> PenjualanUn
 
 @router.get("", response_model=Page[PenjualanUnit])
 async def list_penjualan(
-    q: str | None = Query(None, description="Cari nama pembeli"),
+    q: str | None = Query(None, description="Cari nomor surat, nama, no HP, atau email pembeli"),
     jenis_aset: JenisAset | None = Query(None),
     params: PageParams = Depends(page_params),
     svc: PenjualanUnitService = Depends(get_service),
@@ -53,6 +60,15 @@ async def create_penjualan(
     return PenjualanCreated(id=penjualan_id)
 
 
+@router.patch("/{penjualan_id}", response_model=OkResponse)
+async def update_penjualan(
+    penjualan_id: str, payload: PenjualanUnitUbah, svc: PenjualanUnitService = Depends(get_service)
+) -> OkResponse:
+    """Edit selama surat / BAST bertanda tangan belum diunggah."""
+    await svc.update(penjualan_id, payload)
+    return OkResponse()
+
+
 @router.post("/{penjualan_id}/batalkan", response_model=OkResponse)
 async def batalkan_penjualan(penjualan_id: str, svc: PenjualanUnitService = Depends(get_service)) -> OkResponse:
     await svc.batalkan(penjualan_id)
@@ -62,9 +78,10 @@ async def batalkan_penjualan(penjualan_id: str, svc: PenjualanUnitService = Depe
 @router.post("/{penjualan_id}/bukti", response_model=OkResponse, status_code=201)
 async def upload_bukti(
     penjualan_id: str,
+    dokumen: DokumenTtd = Query("surat", description="surat = surat penjualan, bast = BAST — bertanda tangan"),
     file: UploadFile = File(...),
     svc: PenjualanUnitService = Depends(get_service),
 ) -> OkResponse:
     data = await file.read()
-    await svc.upload_bukti(penjualan_id, data=data, content_type=file.content_type)
+    await svc.upload_bukti(penjualan_id, dokumen=dokumen, data=data, content_type=file.content_type)
     return OkResponse()

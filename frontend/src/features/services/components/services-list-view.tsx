@@ -6,7 +6,7 @@ import { ServiceStatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { JenisUnit, ServiceStatus, UnitWithService } from "@/types";
 import { deriveServiceStatus, formatKm } from "@/lib/service";
-import { syncAllMileage } from "@/features/services/api";
+import { sinkronOdometer } from "@/features/services/api";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { Combobox } from "@/components/ui/combobox";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,6 +16,8 @@ const MILEAGE_POLL_MS = 5 * 60 * 1000; // 5 menit
 interface Props {
   units: UnitWithService[];
   jenisUnitList: JenisUnit[];
+  /** Filter status awal dari URL (`overdue` / `mendekati` / `ok`). */
+  initialStatus?: string;
 }
 
 interface EnrichedRow {
@@ -33,10 +35,12 @@ const STATUS_RANK: Record<ServiceStatus, number> = {
   ok: 2
 };
 
-export function ServicesListView({ units, jenisUnitList }: Props) {
+export function ServicesListView({ units, jenisUnitList, initialStatus }: Props) {
   const [q, setQ] = useState("");
   const [jenis, setJenis] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | ServiceStatus>("");
+  const [statusFilter, setStatusFilter] = useState<"" | ServiceStatus>(
+    initialStatus && initialStatus in STATUS_RANK ? (initialStatus as ServiceStatus) : ""
+  );
 
   // Override odometer per unit dari hasil polling client-side. Awal kosong
   // → pakai nilai dari prop. Setelah polling sukses, prefer angka fresh.
@@ -49,8 +53,9 @@ export function ServicesListView({ units, jenisUnitList }: Props) {
     async function fetchMileage() {
       setPolling(true);
       try {
-        const body = await syncAllMileage();
-        if (!cancelled && body.odometers) {
+        // Dipaksa: halaman Service selalu ingin angka terbaru saat dibuka.
+        const body = await sinkronOdometer(true);
+        if (!cancelled && body?.odometers) {
           setLiveOdometer(body.odometers);
           setLastSyncAt(new Date());
         }

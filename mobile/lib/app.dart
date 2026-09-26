@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/push.dart';
 import 'core/theme.dart';
+import 'core/widgets/banner_notifikasi.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/jobs/job_detail_screen.dart';
@@ -72,7 +73,9 @@ class MasDriverApp extends ConsumerWidget {
   }
 }
 
-/// Tampilkan pesan push yang datang saat aplikasi terbuka sebagai snackbar.
+/// Pesan push yang datang saat aplikasi terbuka ditampilkan sebagai banner
+/// melayang di atas layar (lihat [BannerNotifikasi]), bukan snackbar kecil
+/// yang mudah terlewat.
 class _ForegroundPushBanner extends ConsumerStatefulWidget {
   const _ForegroundPushBanner({required this.child});
   final Widget child;
@@ -82,22 +85,18 @@ class _ForegroundPushBanner extends ConsumerStatefulWidget {
 }
 
 class _ForegroundPushBannerState extends ConsumerState<_ForegroundPushBanner> {
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  late final Stream<NotifikasiMasuk> _masuk = ref.read(pushServiceProvider).foregroundMessages.map(
+        (msg) => NotifikasiMasuk(
+          judul: msg.notification?.title ?? (msg.data['title'] as String?) ?? 'Notifikasi',
+          isi: msg.notification?.body ?? (msg.data['body'] as String?) ?? '',
+          data: msg.data,
+        ),
+      );
 
   @override
-  void initState() {
-    super.initState();
-    ref.read(pushServiceProvider).foregroundMessages.listen((msg) {
-      final title = msg.notification?.title ?? 'Notifikasi';
-      final body = msg.notification?.body ?? '';
-      _messengerKey.currentState?.showSnackBar(SnackBar(
-        content: Text(body.isEmpty ? title : '$title\n$body'),
-        duration: const Duration(seconds: 5),
-      ));
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      ScaffoldMessenger(key: _messengerKey, child: widget.child);
+  Widget build(BuildContext context) => BannerNotifikasi(
+        masuk: _masuk,
+        onBuka: (n) => ref.read(pushServiceProvider).bukaDariPush(n.data),
+        child: widget.child,
+      );
 }

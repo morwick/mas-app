@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PeringatanBatal, WatermarkBatal } from "@/components/surat/watermark-batal";
+import { PERUSAHAAN } from "@/lib/surat";
 import type { Driver, Job, Unit } from "@/types";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
@@ -12,14 +14,6 @@ interface Props {
   driver: Driver | null;
   currentUserNama: string;
 }
-
-const COMPANY = {
-  nama: "PT. MITRA ANGKUTAN SEJATI",
-  tagline: "Layanan Angkutan Alat Berat",
-  alamat: "Jl. Industri Raya Blok C12, Cikarang, Jawa Barat",
-  telepon: "(021) 1234-5678",
-  email: "info@mitraangkutansejati.id"
-};
 
 export function SuratJalanView({
   job,
@@ -49,6 +43,7 @@ export function SuratJalanView({
             <ArrowLeft className="w-4 h-4" />
             Kembali ke job
           </button>
+          <PeringatanBatal aktif={job.status === "cancelled"} teks="Job ini dibatalkan" />
           <div className="flex items-center gap-2">
             <p className="hidden sm:block text-[11px] text-text-muted">
               Klik Cetak, lalu pilih &quot;Save as PDF&quot; di dialog browser
@@ -64,7 +59,8 @@ export function SuratJalanView({
       </div>
 
       {/* Surat jalan content */}
-      <div className="surat-jalan-page max-w-[820px] mx-auto my-6 bg-white border border-border print:border-0 print:my-0 print:max-w-none">
+      <div className="surat-jalan-page relative max-w-[820px] mx-auto my-6 bg-white border border-border print:border-0 print:my-0 print:max-w-none">
+        <WatermarkBatal aktif={job.status === "cancelled"} />
         <div className="px-8 sm:px-12 py-8 print:px-12 print:py-10">
           {/* Header */}
           <header className="flex items-start justify-between gap-6 pb-5 border-b-2 border-brand">
@@ -76,16 +72,16 @@ export function SuratJalanView({
               />
               <div>
                 <p className="text-[16px] font-bold text-text leading-tight">
-                  {COMPANY.nama}
+                  {PERUSAHAAN.nama}
                 </p>
                 <p className="text-[11px] text-text-muted mt-0.5">
-                  {COMPANY.tagline}
+                  {PERUSAHAAN.tagline}
                 </p>
                 <p className="text-[10px] text-text-muted mt-1.5">
-                  {COMPANY.alamat}
+                  {PERUSAHAAN.alamat}
                 </p>
                 <p className="text-[10px] text-text-muted">
-                  Telp: {COMPANY.telepon} · {COMPANY.email}
+                  Telp: {PERUSAHAAN.telepon} · {PERUSAHAAN.email}
                 </p>
               </div>
             </div>
@@ -108,8 +104,8 @@ export function SuratJalanView({
               <p className="text-[10px] uppercase tracking-wider text-text-subtle mb-1">
                 Pengirim
               </p>
-              <p className="text-[13px] font-medium">{COMPANY.nama}</p>
-              <p className="text-[11px] text-text-muted">{COMPANY.alamat}</p>
+              <p className="text-[13px] font-medium">{PERUSAHAAN.nama}</p>
+              <p className="text-[11px] text-text-muted">{PERUSAHAAN.alamat}</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-text-subtle mb-1">

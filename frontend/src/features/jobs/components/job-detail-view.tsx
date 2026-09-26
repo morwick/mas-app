@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { TagihanJobInfo } from "./tagihan-job-info";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Lightbox } from "@/components/ui/lightbox";
 import { useToast } from "@/components/ui/toast";
@@ -61,6 +62,8 @@ interface Props {
   uangJalan: UangJalan[];
   uangJalanRingkasan: UangJalanRingkasan;
   uangJalanPengajuan?: UangJalanRequest[];
+  /** Finance: hanya melihat — tidak ada tombol aksi apa pun. */
+  hanyaLihat?: boolean;
 }
 
 function driverInitials(nama: string) {
@@ -81,7 +84,8 @@ export function JobDetailView({
   sumberDana,
   uangJalan,
   uangJalanRingkasan,
-  uangJalanPengajuan = []
+  uangJalanPengajuan = [],
+  hanyaLihat = false
 }: Props) {
   const toast = useToast();
 
@@ -138,7 +142,7 @@ export function JobDetailView({
 
   return (
     <div className="flex flex-col gap-4">
-      {job.status === "menunggu_validasi" && (
+      {!hanyaLihat && job.status === "menunggu_validasi" && (
         <ValidationPanel
           job={job}
           uangJalan={{
@@ -190,7 +194,7 @@ export function JobDetailView({
               <StatusBadge status={job.status} />
               {/* Hanya muncul untuk job yang lahir dari penawaran — job yang
                   dibuat langsung memang tidak punya, dan itu sah. */}
-              {job.quotation_id && job.quotation_number && (
+              {!hanyaLihat && job.quotation_id && job.quotation_number && (
                 <Link
                   to={`/quotations/${job.quotation_id}`}
                   className="mono"
@@ -216,6 +220,7 @@ export function JobDetailView({
                 Dibuat {formatDateTime(job.created_at)}
               </span>
             </div>
+            <TagihanJobInfo job={job} />
             <div className="h1" style={{ marginBottom: 4 }}>
               {job.alat_diangkut}
             </div>
@@ -231,6 +236,7 @@ export function JobDetailView({
               )}
             </div>
           </div>
+          {!hanyaLihat && (
           <div
             style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
           >
@@ -278,6 +284,7 @@ export function JobDetailView({
               </button>
             )}
           </div>
+          )}
         </div>
         <div
           style={{
@@ -405,8 +412,8 @@ export function JobDetailView({
                     : undefined
               }
               onOpen={(p) => setLightbox({ images: allPhotoUrls, index: allPhotoUrls.indexOf(p.file_url) })}
-              onDelete={closed ? undefined : (p) => setDeletePhoto({ id: p.id, path: p.file_path })}
-              onUpload={closed ? undefined : (slot) => setUploadTarget({ stage, slot })}
+              onDelete={closed || hanyaLihat ? undefined : (p) => setDeletePhoto({ id: p.id, path: p.file_path })}
+              onUpload={closed || hanyaLihat ? undefined : (slot) => setUploadTarget({ stage, slot })}
             />
           ))}
           {legacyPhotos.length > 0 && (
@@ -415,8 +422,8 @@ export function JobDetailView({
               photos={legacyPhotos}
               onUpload={() => setUploadTarget({ stage: "loading", slot: null })}
               onOpen={(i) => setLightbox({ images: legacyPhotos.map((p) => p.file_url), index: i })}
-              onDelete={(p) => setDeletePhoto({ id: p.id, path: p.file_path })}
-              canUpload={!closed}
+              onDelete={hanyaLihat ? undefined : (p) => setDeletePhoto({ id: p.id, path: p.file_path })}
+              canUpload={!closed && !hanyaLihat}
               max={5}
             />
           )}
@@ -425,6 +432,7 @@ export function JobDetailView({
         {/* Right column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Share link card */}
+          {!hanyaLihat && (
           <div
             className="card card-pad"
             style={{
@@ -502,8 +510,10 @@ export function JobDetailView({
               </Link>
             </div>
           </div>
+          )}
 
           {/* TrackSolid */}
+          {!hanyaLihat && (
           <div className="card card-pad">
             <div
               style={{
@@ -547,6 +557,7 @@ export function JobDetailView({
               </p>
             )}
           </div>
+          )}
 
           {/* Unit */}
           {unit && (
@@ -581,13 +592,15 @@ export function JobDetailView({
                     {unit.jenis_unit_nama} · {unit.no_polisi}
                   </div>
                 </div>
-                <Link
-                  to={`/units/${unit.id}`}
-                  className="btn-link"
-                  style={{ display: "inline-flex" }}
-                >
-                  <ArrowRight style={{ width: 14, height: 14 }} />
-                </Link>
+                {!hanyaLihat && (
+                  <Link
+                    to={`/units/${unit.id}`}
+                    className="btn-link"
+                    style={{ display: "inline-flex" }}
+                  >
+                    <ArrowRight style={{ width: 14, height: 14 }} />
+                  </Link>
+                )}
               </div>
               {job.unit_trailer_kode && (
                 <div
@@ -633,6 +646,7 @@ export function JobDetailView({
                   <div style={{ fontWeight: 600 }}>{driver.nama}</div>
                   <div className="caption mono">{driver.no_hp}</div>
                 </div>
+                {!hanyaLihat && (
                 <a
                   href={`https://wa.me/${driver.no_hp.replace(/^\+?0/, "62")}`}
                   target="_blank"
@@ -643,6 +657,7 @@ export function JobDetailView({
                 >
                   <MessageCircle style={{ width: 14, height: 14 }} />
                 </a>
+                )}
               </div>
 
               {/* Konfirmasi driver.
@@ -710,6 +725,8 @@ export function JobDetailView({
             transaksi={uangJalan}
             ringkasan={uangJalanRingkasan}
             pengajuan={uangJalanPengajuan}
+            hanyaLihat={hanyaLihat}
+            nomorTagihan={job.invoice_id ? job.invoice_number : null}
           />
 
           {(riwayatGantiTruk.data ?? []).length > 0 && (
@@ -927,7 +944,7 @@ interface PhotoSectionProps {
   photos: { id: string; file_path: string; file_url: string }[];
   onUpload: () => void;
   onOpen: (i: number) => void;
-  onDelete: (p: { id: string; file_path: string }) => void;
+  onDelete?: (p: { id: string; file_path: string }) => void;
   canUpload: boolean;
   max: number;
 }
@@ -1027,6 +1044,7 @@ function PhotoSection({
                   }}
                 />
               </button>
+              {onDelete && (
               <button
                 type="button"
                 onClick={() => onDelete(p)}
@@ -1050,6 +1068,7 @@ function PhotoSection({
                   style={{ width: 13, height: 13, color: "#C13838" }}
                 />
               </button>
+              )}
             </div>
           ))
         )}

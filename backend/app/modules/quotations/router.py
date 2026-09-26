@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from supabase import AsyncClient
 
 from app.core.auth import AuthContext, require_auth, require_role, user_client
+from app.core.errors import ForbiddenError
 from app.modules.auth.schemas import OkResponse
 from app.modules.quotations.schemas import (
     NextNumberResponse,
@@ -14,6 +15,7 @@ from app.modules.quotations.schemas import (
     QuotationListRow,
     QuotationStatus,
     SetQuotationStatusRequest,
+    SimpanKeputusanRequest,
 )
 from app.modules.quotations.service import QuotationService
 
@@ -22,6 +24,12 @@ router = APIRouter(prefix="/quotations", tags=["quotations"])
 
 def get_service(client: AsyncClient = Depends(user_client)) -> QuotationService:
     return QuotationService(client)
+
+
+def _bukan_finance(auth: AuthContext = Depends(require_auth)) -> None:
+    """Finance hanya boleh melihat penawaran, tidak mengubahnya."""
+    if auth.user.role == "finance":
+        raise ForbiddenError("Role finance hanya bisa melihat penawaran, tidak bisa mengubahnya.")
 
 
 @router.get("", response_model=list[QuotationListRow])
@@ -49,7 +57,7 @@ async def quotation_jobs(quotation_id: str, svc: QuotationService = Depends(get_
     return await svc.jobs_for(quotation_id)
 
 
-@router.post("", response_model=QuotationCreated, status_code=201)
+@router.post("", response_model=QuotationCreated, status_code=201, dependencies=[Depends(_bukan_finance)])
 async def create_quotation(
     payload: QuotationInput,
     auth: AuthContext = Depends(require_auth),
@@ -58,7 +66,7 @@ async def create_quotation(
     return await svc.create(payload, created_by=auth.user.id)
 
 
-@router.put("/{quotation_id}", response_model=OkResponse)
+@router.put("/{quotation_id}", response_model=OkResponse, dependencies=[Depends(_bukan_finance)])
 async def update_quotation(
     quotation_id: str, payload: QuotationInput, svc: QuotationService = Depends(get_service)
 ) -> OkResponse:
@@ -66,7 +74,7 @@ async def update_quotation(
     return OkResponse()
 
 
-@router.post("/{quotation_id}/status", response_model=OkResponse)
+@router.post("/{quotation_id}/status", response_model=OkResponse, dependencies=[Depends(_bukan_finance)])
 async def set_status(
     quotation_id: str,
     payload: SetQuotationStatusRequest,
@@ -76,7 +84,21 @@ async def set_status(
     return OkResponse()
 
 
-@router.delete("/{quotation_id}", response_model=OkResponse, dependencies=[Depends(require_role("superadmin", "admin"))])
+@router.post("/{quotation_id}/keputusan", response_model=OkResponse, dependencies=[Depends(_bukan_finance)])
+async def simpan_keputusan(
+    quotation_id: str,
+    payload: SimpanKeputusanRequest,
+    svc: QuotationService = Depends(get_service),
+) -> OkResponse:
+    await svc.simpan_keputusan(quotation_id, payload)
+    return OkResponse()
+
+
+@router.delete(
+    "/{quotation_id}",
+    response_model=OkResponse,
+    dependencies=[Depends(_bukan_finance), Depends(require_role("superadmin", "admin"))],
+)
 async def delete_quotation(quotation_id: str, svc: QuotationService = Depends(get_service)) -> OkResponse:
     await svc.delete(quotation_id)
     return OkResponse()
