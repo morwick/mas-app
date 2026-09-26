@@ -26,6 +26,15 @@ def derive_service_status(
     last_service_odometer_km: float | None,
     service_interval_km: float,
 ) -> DerivedServiceStatus:
+    if service_interval_km <= 0:
+        # Interval belum diisi → unit ini tidak dipantau (bukan "lewat jadwal").
+        return DerivedServiceStatus(
+            status="ok",
+            next_service_at_km=0.0,
+            km_to_next_service=0.0,
+            km_since_last_service=0.0,
+            progress_percent=0.0,
+        )
     baseline = last_service_odometer_km or 0.0
     next_at = baseline + service_interval_km
     km_to_next = next_at - current_odometer_km

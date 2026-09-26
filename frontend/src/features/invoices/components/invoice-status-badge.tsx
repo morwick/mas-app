@@ -1,7 +1,9 @@
 import { cn } from "@/lib/utils";
 import {
   invoiceTampilStatusLabel,
-  type InvoiceTampilStatus
+  statusBayarLabel,
+  type InvoiceTampilStatus,
+  type StatusBayar
 } from "@/types";
 
 // Dipetakan ke kelas badge yang sudah ada di globals.css supaya warnanya
@@ -32,6 +34,28 @@ export function InvoiceStatusBadge({
       <span className="badge-dot" />
       {invoiceTampilStatusLabel[status]}
       {status === "jatuh_tempo" && hariTerlambat ? ` · ${hariTerlambat} hari` : ""}
+    </span>
+  );
+}
+
+const statusBayarClass: Record<StatusBayar, string> = {
+  unpaid: "badge-cancelled",
+  partial_paid: "badge-perbaikan",
+  completed: "badge-selesai"
+};
+
+/** Status bayar: Unpaid → Partial Paid → Completed. */
+export function StatusBayarBadge({
+  status,
+  className
+}: {
+  status: StatusBayar;
+  className?: string;
+}) {
+  return (
+    <span className={cn("badge", statusBayarClass[status], className)}>
+      <span className="badge-dot" />
+      {statusBayarLabel[status]}
     </span>
   );
 }

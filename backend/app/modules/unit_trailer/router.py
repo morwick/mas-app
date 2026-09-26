@@ -3,14 +3,18 @@
 - Daftar: pagination di server (LIMIT/OFFSET lewat `.range()`), pencarian, dan
   filter status trailer & jenis. Hanya baris aktif (status = 1 — otomatis oleh
   DataClient).
-- Tambah / ubah / hapus: superadmin. Masing-masing satu permintaan = satu
-  transaksi database; tercatat di log sistem oleh trigger.
+- Tambah / ubah / hapus: superadmin & admin. Masing-masing satu permintaan =
+  satu transaksi database; tercatat di log sistem oleh trigger.
+- Status trailer sama dengan unit (migration 20260926000006) dan tidak diisi
+  di form: Bertugas dari job, Breakdown / Perbaikan dari insiden, Terjual dari
+  Penjualan Unit & Unit Trailer, Diafkirkan dari Penghapusan Unit & Unit Trailer.
 - Hapus = soft delete: SQL-nya `UPDATE unit_trailer SET status = 2`.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from datetime import date
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from postgrest.exceptions import APIError
@@ -22,18 +26,20 @@ from app.core.auth import superadmin_or_admin_client, user_client
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any, page_params
 from app.core.pg import first, rows, single
-from app.core.soft_delete import DIHAPUS, STATUS
 from app.core.timeutil import today_wib
 from app.modules.auth.schemas import OkResponse
+from app.modules.incidents.schemas import Incident
+from app.modules.incidents.service import IncidentService
+from app.modules.jobs.schemas import Job
+from app.modules.jobs.service import JobService
+from app.modules.units.riwayat import hapus_aset, ringkasan_riwayat
+from app.modules.units.schemas import RiwayatAset, UnitStatus, UnitStatusHistoryEntry
 
 router = APIRouter(prefix="/unit-trailer", tags=["unit-trailer"])
 
-StatusTrailer = Literal["standby", "perbaikan"]
-# "terjual" hanya lewat menu Penjualan Unit — bisa tampil, tapi tidak bisa diisi di form.
-StatusTrailerTampil = Literal["standby", "perbaikan", "terjual"]
-
 _SELECT = (
     "id, kode_trailer, tahun, jenis_unit_trailer_id, kapasitas_ton, status_trailer, "
+    "kir_nomor, kir_berlaku_sampai, srut_nomor, srut_tanggal, is_active, "
     "jenis:jenis_unit_trailer(nama, jenis_unit:jenis_unit(nama))"
 )
 _JENIS_SELECT = "id, nama, jenis_unit_id, jenis_unit:jenis_unit(nama)"
@@ -49,7 +55,14 @@ class UnitTrailer(BaseModel):
     jenis_nama: str | None
     jenis_unit_nama: str | None
     kapasitas_ton: float | None
-    status: StatusTrailerTampil
+    status: UnitStatus
+    # Dokumen (opsional): KIR & SRUT (Surat Registrasi Uji Tipe).
+    kir_nomor: str | None = None
+    kir_berlaku_sampai: str | None = None
+    srut_nomor: str | None = None
+    srut_tanggal: str | None = None
+    # False = dinonaktifkan: tidak muncul di pilihan job, penjualan, penghapusan.
+    is_active: bool = True
 
 
 class JenisUnitTrailer(BaseModel):
@@ -81,7 +94,30 @@ class UnitTrailerInput(BaseModel):
     tahun: int | None = None
     jenis_unit_trailer_id: str = Field(min_length=1)
     kapasitas_ton: float | None = None
-    status: StatusTrailer = "standby"
+    kir_nomor: str | None = Field(default=None, max_length=60)
+    kir_berlaku_sampai: str | None = None
+    srut_nomor: str | None = Field(default=None, max_length=60)
+    srut_tanggal: str | None = None
+
+    @field_validator("kir_nomor", "srut_nomor", mode="before")
+    @classmethod
+    def _teks_opsional(cls, v: object) -> object:
+        if v is None:
+            return None
+        teks = " ".join(str(v).split())
+        return teks or None
+
+    @field_validator("kir_berlaku_sampai", "srut_tanggal", mode="before")
+    @classmethod
+    def _tanggal_opsional(cls, v: object) -> object:
+        if v is None or str(v).strip() == "":
+            return None
+        teks = str(v).strip()[:10]
+        try:
+            date.fromisoformat(teks)
+        except ValueError:
+            raise ValueError("Tanggal tidak valid (format YYYY-MM-DD)") from None
+        return teks
 
     # Isian yang tidak valid menggagalkan simpan (bukan dikosongkan diam-diam).
     @field_validator("tahun", mode="before")
@@ -128,6 +164,11 @@ def _to_trailer(r: dict[str, Any]) -> UnitTrailer:
         jenis_unit_nama=(jenis_unit or {}).get("nama"),
         kapasitas_ton=float(kapasitas) if kapasitas is not None else None,
         status=r["status_trailer"],
+        kir_nomor=r.get("kir_nomor"),
+        kir_berlaku_sampai=r.get("kir_berlaku_sampai"),
+        srut_nomor=r.get("srut_nomor"),
+        srut_tanggal=r.get("srut_tanggal"),
+        is_active=bool(r.get("is_active", True)),
     )
 
 
@@ -140,7 +181,10 @@ def _data(payload: UnitTrailerInput) -> dict[str, Any]:
         "tahun": payload.tahun,
         "jenis_unit_trailer_id": payload.jenis_unit_trailer_id,
         "kapasitas_ton": payload.kapasitas_ton,
-        "status_trailer": payload.status,
+        "kir_nomor": payload.kir_nomor,
+        "kir_berlaku_sampai": payload.kir_berlaku_sampai,
+        "srut_nomor": payload.srut_nomor,
+        "srut_tanggal": payload.srut_tanggal,
     }
 
 
@@ -208,7 +252,7 @@ class TrailerPilihan(BaseModel):
     id: str
     kode_trailer: str
     jenis_nama: str | None
-    status: StatusTrailer
+    status: UnitStatus
 
 
 class TrailerUntukUnit(BaseModel):
@@ -231,7 +275,7 @@ async def trailer_untuk_unit(unit_id: str, client: AsyncClient = Depends(user_cl
                 status=r["status_trailer"],
             )
             for r in data
-            if r.get("id") and r.get("status_trailer") != "terjual"
+            if r.get("id") and r.get("status_trailer") not in ("terjual", "diafkirkan")
         ],
     )
 
@@ -243,7 +287,7 @@ async def trailer_untuk_unit(unit_id: str, client: AsyncClient = Depends(user_cl
 async def daftar_unit_trailer(
     params: PageParams = Depends(page_params),
     q: Annotated[str | None, Query(max_length=100)] = None,
-    status: StatusTrailerTampil | None = None,
+    status: UnitStatus | None = None,
     jenis_unit_trailer_id: str | None = None,
     client: AsyncClient = Depends(user_client),
 ) -> Page[UnitTrailer]:
@@ -283,7 +327,9 @@ async def ubah_unit_trailer(
         await client.table("unit_trailer").select("status_trailer").eq("id", trailer_id).maybe_single().execute()
     )
     if lama and lama.get("status_trailer") == "terjual":
-        raise ValidationError("Unit trailer sudah terjual. Batalkan penjualannya dulu lewat menu Penjualan Unit.")
+        raise ValidationError(
+            "Unit trailer sudah terjual. Batalkan penjualannya dulu lewat menu Penjualan Unit & Unit Trailer."
+        )
     await _pastikan_kode_unik(client, data["kode_trailer"], kecuali_id=trailer_id)
     try:
         res = await client.table("unit_trailer").update(data).eq("id", trailer_id).execute()
@@ -297,8 +343,73 @@ async def ubah_unit_trailer(
 
 @router.delete("/{trailer_id}", response_model=OkResponse)
 async def hapus_unit_trailer(trailer_id: str, client: AsyncClient = Depends(superadmin_or_admin_client)) -> OkResponse:
-    # Soft delete: UPDATE unit_trailer SET status = 2 WHERE id = … AND status = 1.
-    res = await client.table("unit_trailer").update({STATUS: DIHAPUS}).eq("id", trailer_id).execute()
+    """Hapus unit trailer tanpa riwayat (soft delete berantai lewat fungsi DB);
+    yang sudah punya riwayat ditolak — nonaktifkan saja."""
+    await hapus_aset(client, "unit_trailer", trailer_id)
+    return OkResponse()
+
+
+@router.post("/{trailer_id}/nonaktifkan", response_model=OkResponse)
+async def nonaktifkan_unit_trailer(
+    trailer_id: str, client: AsyncClient = Depends(superadmin_or_admin_client)
+) -> OkResponse:
+    res = await client.table("unit_trailer").update({"is_active": False}).eq("id", trailer_id).execute()
     if not rows(res):
         raise NotFoundError("Unit trailer tidak ditemukan atau sudah dihapus")
     return OkResponse()
+
+
+# ── Detail unit trailer (setara detail unit) ────────────────────────────────
+
+
+async def _ambil(client: AsyncClient, trailer_id: str) -> UnitTrailer:
+    row = single(await client.table("unit_trailer").select(_SELECT).eq("id", trailer_id).maybe_single().execute())
+    if row is None:
+        raise NotFoundError("Unit trailer tidak ditemukan")
+    return _to_trailer(row)
+
+
+@router.get("/{trailer_id}", response_model=UnitTrailer)
+async def detail_unit_trailer(trailer_id: str, client: AsyncClient = Depends(user_client)) -> UnitTrailer:
+    return await _ambil(client, trailer_id)
+
+
+@router.get("/{trailer_id}/riwayat", response_model=RiwayatAset)
+async def riwayat_unit_trailer(trailer_id: str, client: AsyncClient = Depends(user_client)) -> RiwayatAset:
+    """Jumlah riwayat — tombol Hapus hanya muncul bila semuanya kosong."""
+    return await ringkasan_riwayat(client, "unit_trailer", trailer_id)
+
+
+@router.get("/{trailer_id}/jobs", response_model=list[Job])
+async def job_unit_trailer(trailer_id: str, client: AsyncClient = Depends(user_client)) -> list[Job]:
+    return await JobService(client).list_by_unit_trailer(trailer_id)
+
+
+@router.get("/{trailer_id}/incidents", response_model=list[Incident])
+async def insiden_unit_trailer(trailer_id: str, client: AsyncClient = Depends(user_client)) -> list[Incident]:
+    return await IncidentService(client).list_by_unit_trailer(trailer_id)
+
+
+@router.get("/{trailer_id}/status-history", response_model=list[UnitStatusHistoryEntry])
+async def riwayat_status_unit_trailer(
+    trailer_id: str, client: AsyncClient = Depends(user_client)
+) -> list[UnitStatusHistoryEntry]:
+    res = await (
+        client.table("unit_trailer_status_history")
+        .select("*, profiles(nama)")
+        .eq("unit_trailer_id", trailer_id)
+        .order("changed_at", desc=True)
+        .execute()
+    )
+    return [
+        UnitStatusHistoryEntry(
+            id=r["id"],
+            unit_id=r["unit_trailer_id"],
+            status_old=r.get("status_old"),
+            status_new=r["status_new"],
+            changed_by_nama=(first(r.get("profiles")) or {}).get("nama") or "Sistem",
+            changed_at=r["changed_at"],
+            reason=r.get("reason"),
+        )
+        for r in rows(res)
+    ]

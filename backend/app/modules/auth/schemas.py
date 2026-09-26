@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, EmailStr, Field
 
-from app.core.auth import CurrentUser
+from app.core.auth import CurrentUser, UserRole
 
 
 class LoginRequest(BaseModel):
@@ -13,7 +11,8 @@ class LoginRequest(BaseModel):
 
 
 class GantiRoleRequest(BaseModel):
-    role: Literal["superadmin", "operator"]
+    # Semua role (superadmin, operator, finance, admin) — dulu hanya dua.
+    role: UserRole
 
 
 class RefreshRequest(BaseModel):

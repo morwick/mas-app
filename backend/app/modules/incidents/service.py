@@ -25,9 +25,11 @@ from app.modules.incidents.schemas import (
 )
 
 INCIDENT_SELECT = """
-  id, unit_id, job_id, tipe, tanggal, lokasi, deskripsi,
+  id, unit_id, unit_trailer_id, job_id, tipe, tanggal, lokasi, deskripsi,
   biaya_repair, vendor_repair, status_penanganan, resolved_at, created_at,
+  ditutup_karena, status_sebelum_ditutup,
   unit:units(kode_unit),
+  unit_trailer:unit_trailer(kode_trailer),
   job:jobs(job_number),
   creator:profiles(nama),
   photos:incident_photos(id, file_path, uploaded_at)
@@ -41,8 +43,10 @@ def _bucket() -> str:
 def to_incident(row: dict[str, Any]) -> Incident:
     return Incident(
         id=row["id"],
-        unit_id=row["unit_id"],
+        unit_id=row.get("unit_id"),
         unit_kode=(first(row.get("unit")) or {}).get("kode_unit"),
+        unit_trailer_id=row.get("unit_trailer_id"),
+        unit_trailer_kode=(first(row.get("unit_trailer")) or {}).get("kode_trailer"),
         job_id=row.get("job_id"),
         job_number=(first(row.get("job")) or {}).get("job_number"),
         tipe=row["tipe"],
@@ -53,6 +57,8 @@ def to_incident(row: dict[str, Any]) -> Incident:
         vendor_repair=row.get("vendor_repair"),
         status=row["status_penanganan"],
         resolved_at=row.get("resolved_at"),
+        ditutup_karena=row.get("ditutup_karena"),
+        status_sebelum_ditutup=row.get("status_sebelum_ditutup"),
         created_by_nama=(first(row.get("creator")) or {}).get("nama"),
         created_at=row["created_at"],
         photos=[
@@ -73,11 +79,17 @@ class IncidentService:
         self._db = client
 
     async def list_by_unit(self, unit_id: str) -> list[Incident]:
+        return await self._list_by("unit_id", unit_id)
+
+    async def list_by_unit_trailer(self, unit_trailer_id: str) -> list[Incident]:
+        return await self._list_by("unit_trailer_id", unit_trailer_id)
+
+    async def _list_by(self, kolom: str, asset_id: str) -> list[Incident]:
         res = await (
             self._db.table("incident_logs")
             .select(INCIDENT_SELECT)
             .eq("photos.status", AKTIF)
-            .eq("unit_id", unit_id)
+            .eq(kolom, asset_id)
             .order("tanggal", desc=True)
             .execute()
         )
@@ -103,7 +115,8 @@ class IncidentService:
             self._db.table("incident_logs")
             .insert(
                 {
-                    "unit_id": payload.unit_id,
+                    "unit_id": payload.unit_id or None,
+                    "unit_trailer_id": payload.unit_trailer_id or None,
                     "job_id": payload.job_id or None,
                     "tipe": payload.tipe,
                     "tanggal": iso_utc(parse_iso(payload.tanggal)),

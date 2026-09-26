@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FileCheck2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,6 @@ import { useToast } from "@/components/ui/toast";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { formatDate } from "@/lib/utils";
 import type { Customer, JobBelumDitagihRow } from "@/types";
-import { InfoUangJalanSurat } from "./info-uang-jalan-surat";
 
 interface Props {
   /** Job selesai & tervalidasi yang belum masuk tagihan mana pun, per customer. */
@@ -156,7 +155,6 @@ export function JobsSiapTagihView({ jobsPerCustomer, customers }: Props) {
                   <th>Customer</th>
                   <th>Alat</th>
                   <th>Rute</th>
-                  <th style={{ width: 140 }}>Uang jalan / Surat jalan</th>
                   <th style={{ width: 110 }}>Selesai</th>
                 </tr>
               </thead>
@@ -177,7 +175,16 @@ export function JobsSiapTagihView({ jobsPerCustomer, customers }: Props) {
                         />
                       </td>
                       <td className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>
-                        {r.job.job_number}
+                        <Link
+                          to={`/jobs/${r.job.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Buka detail job di tab baru"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ color: "var(--brand-primary-dark)", textDecoration: "underline" }}
+                        >
+                          {r.job.job_number}
+                        </Link>
                       </td>
                       <td style={{ fontWeight: 500, fontSize: 13.5 }}>{r.customerNama}</td>
                       <td className="muted" style={{ fontSize: 12.5 }}>
@@ -185,13 +192,6 @@ export function JobsSiapTagihView({ jobsPerCustomer, customers }: Props) {
                       </td>
                       <td style={{ fontSize: 12 }}>
                         {r.job.asal} → {r.job.tujuan}
-                      </td>
-                      <td>
-                        <InfoUangJalanSurat
-                          uangJalanPagu={r.job.uang_jalan_pagu}
-                          uangJalanCair={r.job.uang_jalan_cair}
-                          suratJalanUrls={r.job.surat_jalan_urls}
-                        />
                       </td>
                       <td className="muted" style={{ fontSize: 12 }}>
                         {r.job.completed_at ? formatDate(r.job.completed_at) : "—"}
@@ -223,7 +223,16 @@ export function JobsSiapTagihView({ jobsPerCustomer, customers }: Props) {
                   />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>
-                      {r.job.job_number}
+                      <Link
+                        to={`/jobs/${r.job.id}`}
+                        target="_blank"
+                          rel="noreferrer"
+                          title="Buka detail job di tab baru"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: "var(--brand-primary-dark)", textDecoration: "underline" }}
+                      >
+                        {r.job.job_number}
+                      </Link>
                     </div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{r.customerNama}</div>
                     <div className="muted" style={{ fontSize: 12.5 }}>
@@ -241,11 +250,6 @@ export function JobsSiapTagihView({ jobsPerCustomer, customers }: Props) {
                         marginTop: 2
                       }}
                     >
-                      <InfoUangJalanSurat
-                        uangJalanPagu={r.job.uang_jalan_pagu}
-                        uangJalanCair={r.job.uang_jalan_cair}
-                        suratJalanUrls={r.job.surat_jalan_urls}
-                      />
                       <span className="muted" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
                         Selesai {r.job.completed_at ? formatDate(r.job.completed_at) : "—"}
                       </span>

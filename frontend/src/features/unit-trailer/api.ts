@@ -1,20 +1,28 @@
 import { api } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
-import type { ActionResult } from "@/types";
+import type {
+  ActionResult,
+  Incident,
+  Job,
+  RiwayatAset,
+  UnitStatus,
+  UnitStatusHistoryEntry
+} from "@/types";
 
-export type StatusTrailer = "standby" | "perbaikan";
-
-/** "terjual" hanya lewat menu Penjualan Unit — bisa tampil, tidak bisa dipilih di form. */
-export type StatusTrailerTampil = StatusTrailer | "terjual";
-
-export const STATUS_TRAILER: { value: StatusTrailer; label: string }[] = [
-  { value: "standby", label: "Standby" },
-  { value: "perbaikan", label: "Perbaikan" }
-];
+/**
+ * Status unit trailer sama dengan status unit (migration 20260926000006) dan
+ * tidak diisi di form: Bertugas dari job, Breakdown / Perbaikan dari insiden,
+ * Terjual dari Penjualan Unit & Unit Trailer; manual hanya Standby / Diafkirkan.
+ */
+export type StatusTrailerTampil = UnitStatus;
 
 export const STATUS_TRAILER_TAMPIL: { value: StatusTrailerTampil; label: string }[] = [
-  ...STATUS_TRAILER,
-  { value: "terjual", label: "Terjual" }
+  { value: "standby", label: "Standby" },
+  { value: "bertugas", label: "Bertugas" },
+  { value: "breakdown", label: "Breakdown" },
+  { value: "perbaikan", label: "Perbaikan" },
+  { value: "terjual", label: "Terjual" },
+  { value: "diafkirkan", label: "Diafkirkan" }
 ];
 
 export interface UnitTrailer {
@@ -27,6 +35,13 @@ export interface UnitTrailer {
   jenis_unit_nama: string | null;
   kapasitas_ton: number | null;
   status: StatusTrailerTampil;
+  /** Dokumen (opsional): KIR & SRUT (Surat Registrasi Uji Tipe). */
+  kir_nomor: string | null;
+  kir_berlaku_sampai: string | null;
+  srut_nomor: string | null;
+  srut_tanggal: string | null;
+  /** False = dinonaktifkan: tidak muncul di pilihan job, penjualan, penghapusan. */
+  is_active: boolean;
 }
 
 export interface UnitTrailerInput {
@@ -34,7 +49,10 @@ export interface UnitTrailerInput {
   tahun: number | null;
   jenis_unit_trailer_id: string;
   kapasitas_ton: number | null;
-  status: StatusTrailer;
+  kir_nomor: string | null;
+  kir_berlaku_sampai: string | null;
+  srut_nomor: string | null;
+  srut_tanggal: string | null;
 }
 
 export interface UnitTrailerPage {
@@ -74,7 +92,7 @@ export function createJenisUnitTrailer(
 export interface TrailerUntukUnit {
   /** True bila jenis unit dari unit itu punya jenis unit trailer → trailer wajib diisi. */
   wajib: boolean;
-  trailer: { id: string; kode_trailer: string; jenis_nama: string | null; status: StatusTrailer }[];
+  trailer: { id: string; kode_trailer: string; jenis_nama: string | null; status: StatusTrailerTampil }[];
 }
 
 export const trailerUntukUnit = (unitId: string) =>
@@ -89,6 +107,14 @@ export const listUnitTrailer = (f: UnitTrailerFilter) =>
     jenis_unit_trailer_id: f.jenisUnitTrailerId || undefined
   });
 
+// ── Detail (setara detail unit) ─────────────────────────────────────────────
+export const getUnitTrailer = (id: string) => api.get<UnitTrailer>(`/unit-trailer/${id}`);
+export const getUnitTrailerJobs = (id: string) => api.get<Job[]>(`/unit-trailer/${id}/jobs`);
+export const getUnitTrailerIncidents = (id: string) =>
+  api.get<Incident[]>(`/unit-trailer/${id}/incidents`);
+export const getUnitTrailerHistory = (id: string) =>
+  api.get<UnitStatusHistoryEntry[]>(`/unit-trailer/${id}/status-history`);
+
 export function createUnitTrailer(input: UnitTrailerInput): Promise<ActionResult<UnitTrailer>> {
   return mutate(api.post<UnitTrailer>("/unit-trailer", input));
 }
@@ -97,7 +123,13 @@ export function updateUnitTrailer(id: string, input: UnitTrailerInput): Promise<
   return mutate(api.patch(`/unit-trailer/${id}`, input));
 }
 
-/** Soft delete di server: UPDATE unit_trailer SET status = 2. */
+export const getUnitTrailerRiwayat = (id: string) => api.get<RiwayatAset>(`/unit-trailer/${id}/riwayat`);
+
+/** Hanya trailer tanpa riwayat — ditolak server bila sudah punya riwayat. */
 export function deleteUnitTrailer(id: string): Promise<ActionResult<unknown>> {
   return mutate(api.delete(`/unit-trailer/${id}`));
+}
+
+export function nonaktifkanUnitTrailer(id: string): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/unit-trailer/${id}/nonaktifkan`));
 }

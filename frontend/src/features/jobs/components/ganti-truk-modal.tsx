@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Field, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { useToast } from "@/components/ui/toast";
@@ -9,6 +9,8 @@ import { useUnits } from "@/features/units/queries";
 import { useDrivers } from "@/features/drivers/queries";
 import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
 import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
+import { unitLocation } from "@/features/tracking/api";
+import { isoToLocalInput, localInputToIso } from "@/lib/utils";
 import type { Job } from "@/types";
 import { gantiTruk } from "../api";
 
@@ -28,8 +30,9 @@ interface Props {
 
 /**
  * Truk rusak di tengah perjalanan → diganti truk Stand by lain. Driver
- * biasanya ikut diganti (opsional). Truk lama otomatis jadi Perbaikan, dan
- * pergantiannya tersimpan di riwayat job.
+ * biasanya ikut diganti (opsional). Truk lama sekaligus dicatat sebagai
+ * insiden kerusakan (status unit jadi Breakdown, lanjut lewat fitur Insiden),
+ * dan pergantiannya tersimpan di riwayat job.
  */
 export function GantiTrukModal({ job, unitKode, driverNama, onClose }: Props) {
   const toast = useToast();
@@ -39,9 +42,32 @@ export function GantiTrukModal({ job, unitKode, driverNama, onClose }: Props) {
   const [driverId, setDriverId] = useState(job.driver_id);
   const [trailerId, setTrailerId] = useState("");
   const [alasan, setAlasan] = useState("");
+  const [insidenTanggal, setInsidenTanggal] = useState(() => isoToLocalInput());
+  const [insidenLokasi, setInsidenLokasi] = useState("");
+  const [lokasiStatus, setLokasiStatus] = useState<"memuat" | "ada" | "tidak_ada">("memuat");
+  const [insidenDeskripsi, setInsidenDeskripsi] = useState(
+    `Truck mengalami kerusakan saat menyelesaikan job ${job.job_number}`
+  );
   const [error, setError] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const trailer = useTrailerUntukUnit(unitId);
+
+  // Lokasi insiden = posisi terakhir truk lama dari GPS; tetap bisa diubah.
+  useEffect(() => {
+    let batal = false;
+    unitLocation(job.unit_id)
+      .then((loc) => {
+        if (batal) return;
+        setInsidenLokasi((v) => v || loc.address || `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`);
+        setLokasiStatus("ada");
+      })
+      .catch(() => {
+        if (!batal) setLokasiStatus("tidak_ada");
+      });
+    return () => {
+      batal = true;
+    };
+  }, [job.unit_id]);
 
   const unitOptions = (units.data ?? [])
     .filter((u) => u.is_active && u.status === "standby" && u.id !== job.unit_id)
@@ -62,6 +88,8 @@ export function GantiTrukModal({ job, unitKode, driverNama, onClose }: Props) {
     if (!unitId) errs.unit = "Pilih truk pengganti";
     if (trailer.data?.wajib && !trailerId) errs.trailer = "Unit trailer wajib dipilih untuk truk ini";
     if (!alasan.trim()) errs.alasan = "Alasan wajib diisi";
+    if (!insidenTanggal) errs.insidenTanggal = "Tanggal & jam insiden wajib diisi";
+    if (!insidenDeskripsi.trim()) errs.insidenDeskripsi = "Deskripsi insiden wajib diisi";
     setError(errs);
     if (Object.keys(errs).length > 0) {
       toast.error("Data belum lengkap: " + Object.values(errs).join(", ") + ".");
@@ -72,14 +100,17 @@ export function GantiTrukModal({ job, unitKode, driverNama, onClose }: Props) {
       unit_id: unitId,
       alasan: alasan.trim(),
       driver_id: driverId && driverId !== job.driver_id ? driverId : null,
-      unit_trailer_id: trailer.data?.wajib ? trailerId : null
+      unit_trailer_id: trailer.data?.wajib ? trailerId : null,
+      insiden_tanggal: localInputToIso(insidenTanggal),
+      insiden_lokasi: insidenLokasi.trim() || null,
+      insiden_deskripsi: insidenDeskripsi.trim()
     });
     setBusy(null);
     if (!res.ok) {
       toast.error(res.error);
       return;
     }
-    toast.success("Truk berhasil diganti. Truk lama dipindah ke status Perbaikan.");
+    toast.success("Truk berhasil diganti. Insiden kerusakan truk lama tercatat (status Breakdown).");
     onClose();
   }
 
@@ -88,7 +119,7 @@ export function GantiTrukModal({ job, unitKode, driverNama, onClose }: Props) {
       open
       onClose={busy ? () => {} : onClose}
       title="Ganti truk"
-      description={`Truk saat ini: ${unitKode ?? "—"}. Setelah diganti, truk lama otomatis berstatus Perbaikan.`}
+      description={`Truk saat ini: ${unitKode ?? "—"}. Truk lama dicatat sebagai insiden kerusakan dan berstatus Breakdown.`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={busy !== null}>
@@ -140,6 +171,42 @@ export function GantiTrukModal({ job, unitKode, driverNama, onClose }: Props) {
             onChange={(e) => setAlasan(e.target.value)}
             placeholder="Mis. mesin mati di KM 120, ban pecah…"
             error={error.alasan}
+          />
+        </Field>
+        <div className="field-label" style={{ marginTop: 4 }}>
+          Insiden kerusakan truk lama{unitKode ? ` (${unitKode})` : ""}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Tanggal & jam" required>
+            <Input
+              type="datetime-local"
+              value={insidenTanggal}
+              onChange={(e) => setInsidenTanggal(e.target.value)}
+              error={error.insidenTanggal}
+            />
+          </Field>
+          <Field
+            label="Lokasi"
+            hint={
+              lokasiStatus === "memuat"
+                ? "Mengambil lokasi terakhir truk…"
+                : lokasiStatus === "ada"
+                  ? "Diisi dari lokasi GPS terakhir truk."
+                  : "Lokasi GPS truk tidak tersedia — isi manual."
+            }
+          >
+            <Input
+              value={insidenLokasi}
+              onChange={(e) => setInsidenLokasi(e.target.value)}
+              placeholder="Mis. KM 120 tol Cipali"
+            />
+          </Field>
+        </div>
+        <Field label="Deskripsi insiden" required>
+          <Textarea
+            value={insidenDeskripsi}
+            onChange={(e) => setInsidenDeskripsi(e.target.value)}
+            error={error.insidenDeskripsi}
           />
         </Field>
       </form>

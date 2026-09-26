@@ -1,5 +1,6 @@
 import { ApiError, api } from "@/lib/api/client";
 import { mutate, queryClient } from "@/lib/api/query";
+import { localInputToIso } from "@/lib/utils";
 import type { ConflictCheckResult } from "@/lib/job-conflicts";
 import type {
   ActionResult,
@@ -34,6 +35,7 @@ export interface JobInput {
   catatan?: string | null;
   /** Diisi bila job lahir dari penawaran yang sudah deal. */
   quotation_id?: string | null;
+  quotation_item_id?: string | null;
 }
 
 export interface MutationOptions {
@@ -68,7 +70,7 @@ export const checkJobConflicts = (input: {
   etd: string;
   eta?: string | null;
   exclude_job_id?: string;
-}) => api.post<ConflictCheckResult>("/jobs/check-conflicts", input);
+}) => api.post<ConflictCheckResult>("/jobs/check-conflicts", jadwalKeIso(input));
 
 /** Server membalas 409 + `conflicts` bila jadwal bentrok dan allowConflict false. */
 function toJobResult<T>(err: unknown): JobMutationResult<T> {
@@ -87,13 +89,22 @@ function toJobResult<T>(err: unknown): JobMutationResult<T> {
   return { ok: false, error: err instanceof Error ? err.message : "Terjadi kesalahan" };
 }
 
+/** ETD/ETA dari input datetime-local dikirim lengkap dengan zona waktunya. */
+function jadwalKeIso<T extends Partial<Pick<JobInput, "etd" | "eta">>>(input: T): T {
+  return {
+    ...input,
+    ...(input.etd ? { etd: localInputToIso(input.etd) } : {}),
+    ...(input.eta ? { eta: localInputToIso(input.eta) } : {})
+  };
+}
+
 export async function createJob(
   input: JobInput,
   opts?: MutationOptions
 ): Promise<JobMutationResult<{ id: string; job_number: string; share_token: string }>> {
   try {
     const data = await api.post<{ id: string; job_number: string; share_token: string }>("/jobs", {
-      ...input,
+      ...jadwalKeIso(input),
       allow_conflict: !!opts?.allowConflict
     });
     await queryClient.invalidateQueries();
@@ -109,7 +120,7 @@ export async function updateJob(
   opts?: MutationOptions
 ): Promise<JobMutationResult> {
   try {
-    await api.patch(`/jobs/${id}`, { ...input, allow_conflict: !!opts?.allowConflict });
+    await api.patch(`/jobs/${id}`, { ...jadwalKeIso(input), allow_conflict: !!opts?.allowConflict });
     await queryClient.invalidateQueries();
     return { ok: true, data: undefined };
   } catch (err) {
@@ -159,7 +170,15 @@ export const getRiwayatGantiTruk = (id: string) => api.get<GantiTrukEntry[]>(`/j
 /** Ganti truk di tengah perjalanan; driver opsional ikut diganti. */
 export function gantiTruk(
   id: string,
-  input: { unit_id: string; alasan: string; driver_id?: string | null; unit_trailer_id?: string | null }
+  input: {
+    unit_id: string;
+    alasan: string;
+    driver_id?: string | null;
+    unit_trailer_id?: string | null;
+    insiden_tanggal: string;
+    insiden_lokasi?: string | null;
+    insiden_deskripsi: string;
+  }
 ): Promise<ActionResult<unknown>> {
   return mutate(api.post(`/jobs/${id}/ganti-truk`, input));
 }

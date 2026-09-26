@@ -19,6 +19,7 @@ import {
   type ConflictCheckResult
 } from "@/lib/job-conflicts";
 import { minEtdValue, validateSchedule } from "@/lib/job-schedule";
+import { isoToLocalInput } from "@/lib/utils";
 import type { Customer, Driver, Job, Unit } from "@/types";
 import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
 import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
@@ -32,14 +33,6 @@ interface Props {
   /** True bila daftar job aktif gagal dimuat — peringatan bentrok tidak jalan. */
   conflictCheckError?: boolean;
   onRetryConflictCheck?: () => void;
-}
-
-function toLocalDateTime(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const offset = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 16);
 }
 
 export function EditJobView({
@@ -70,14 +63,14 @@ export function EditJobView({
     unit_id: job.unit_id,
     unit_trailer_id: job.unit_trailer_id ?? "",
     driver_id: job.driver_id,
-    etd: toLocalDateTime(job.etd),
-    eta: toLocalDateTime(job.eta),
+    etd: isoToLocalInput(job.etd ?? null),
+    eta: isoToLocalInput(job.eta ?? null),
     catatan: job.catatan ?? ""
   });
   const [error, setError] = useState<Record<string, string>>({});
   // ETD saat form dibuka. Job yang sudah berjalan wajar punya ETD di masa lalu,
   // jadi larangan back-date hanya berlaku bila admin benar-benar mengubahnya.
-  const [initialEtd] = useState(() => toLocalDateTime(job.etd));
+  const [initialEtd] = useState(() => isoToLocalInput(job.etd ?? null));
   const minEtd = useMemo(() => minEtdValue(), []);
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
@@ -318,6 +311,7 @@ export function EditJobView({
             }}
             error={error.unit_trailer_id}
             required={trailerWajib}
+            trailerJobIni={job.unit_trailer_id}
           />
           <Field label="Driver" required>
             <Combobox

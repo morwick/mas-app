@@ -43,7 +43,7 @@ describe("susunan menu", () => {
     expect(jenis.href.startsWith("/settings")).toBe(false);
   });
 
-  it("Monitoring berisi delapan submenu sesuai urutan", () => {
+  it("Monitoring berisi sembilan submenu sesuai urutan", () => {
     expect(group("monitoring").items.map((i) => i.label)).toEqual([
       "Penawaran",
       "Job",
@@ -52,11 +52,17 @@ describe("susunan menu", () => {
       "Service",
       "Tagihan",
       "Piutang",
-      "Penjualan Unit"
+      "Penjualan Unit & Unit Trailer",
+      "Penghapusan Unit & Unit Trailer"
     ]);
   });
 
-  it("Penjualan Unit hanya untuk superadmin", () => {
+  it("Penghapusan Unit & Unit Trailer hanya untuk superadmin", () => {
+    const item = group("monitoring").items.find((i) => i.href === "/penghapusan-aset");
+    expect(item?.roles).toEqual(["superadmin"]);
+  });
+
+  it("Penjualan Unit & Unit Trailer hanya untuk superadmin", () => {
     const item = group("monitoring").items.find((i) => i.href === "/penjualan-unit");
     expect(item?.roles).toEqual(["superadmin"]);
   });
@@ -167,7 +173,7 @@ describe("visibleNavTree", () => {
     ]);
   });
 
-  it("finance: Dashboard, Customer, Tagihan/Piutang, Laporan, Log Sistem, Notifikasi saja", () => {
+  it("finance: Dashboard, Customer, Penawaran (lihat saja), Tagihan/Piutang, Laporan, Log Sistem, Notifikasi saja", () => {
     const tree = visibleNavTree(navTree, "finance");
     expect(tree.map((e) => e.label)).toEqual([
       "Dashboard",
@@ -181,6 +187,7 @@ describe("visibleNavTree", () => {
     expect(master && isNavGroup(master) ? master.items.map((i) => i.label) : []).toEqual(["Customer"]);
     const monitoring = tree.find((e) => isNavGroup(e) && e.key === "monitoring");
     expect(monitoring && isNavGroup(monitoring) ? monitoring.items.map((i) => i.label) : []).toEqual([
+      "Penawaran",
       "Tagihan",
       "Piutang"
     ]);

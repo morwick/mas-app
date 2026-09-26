@@ -76,9 +76,16 @@ class UnitUpdate(BaseModel):
     pajak_berlaku_sampai: str | None = None
 
 
-class ChangeStatusRequest(BaseModel):
-    status: UnitStatus
-    reason: str | None = None
+class RiwayatAset(BaseModel):
+    """Jumlah riwayat unit / unit trailer — penentu boleh dihapus atau hanya dinonaktifkan."""
+
+    job: int = 0
+    insiden: int = 0
+    service: int = 0
+    penjualan: int = 0
+    penghapusan: int = 0
+    # True bila semua riwayat kosong → boleh dihapus; selain itu hanya nonaktifkan.
+    bisa_dihapus: bool = False
 
 
 class UnitStatusHistoryEntry(BaseModel):

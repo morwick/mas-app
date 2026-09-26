@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
-import { useAuth } from "@/lib/auth/AuthContext";
+import { useAuth, useCurrentUser } from "@/lib/auth/AuthContext";
 import { useCustomer } from "@/features/customers/queries";
 import { QuotationDetailView } from "../components/quotation-detail-view";
 import { useQuotation, useQuotationJobs } from "../queries";
@@ -8,6 +8,7 @@ import { useQuotation, useQuotationJobs } from "../queries";
 export function QuotationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { isSuperadmin } = useAuth();
+  const hanyaLihat = useCurrentUser().role === "finance";
   const quotation = useQuotation(id);
   // Nomor WA diambil dari master (bukan snapshot) — untuk mengirim ulang,
   // nomor terbaru justru yang dibutuhkan.
@@ -21,6 +22,7 @@ export function QuotationDetailPage() {
       picNoHp={customer.data?.pic_no_hp ?? null}
       jobs={jobs.data ?? []}
       canDelete={isSuperadmin}
+      hanyaLihat={hanyaLihat}
     />
   );
 }

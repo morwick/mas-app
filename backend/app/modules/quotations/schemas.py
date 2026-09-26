@@ -8,6 +8,7 @@ from app.modules.customers.schemas import Sapaan
 from app.modules.jobs.schemas import JobStatus
 
 QuotationStatus = Literal["draft", "terkirim", "deal", "ditolak", "kedaluwarsa"]
+KeputusanItem = Literal["menunggu", "deal", "ditolak"]
 
 
 class QuotationItem(BaseModel):
@@ -19,9 +20,20 @@ class QuotationItem(BaseModel):
     qty: int
     satuan: str
     nama_alat: str | None = None
+    # Harga awal penawaran — tidak pernah ditimpa oleh revisi.
     harga_satuan: float
     # Dihitung database (qty × harga_satuan).
     subtotal: float
+    keputusan: KeputusanItem = "menunggu"
+    # Harga satuan hasil negosiasi; None = pakai harga awal.
+    harga_revisi: float | None = None
+    # Harga yang berlaku (revisi bila ada) & qty × harga itu (dihitung database).
+    harga_final: float = 0
+    subtotal_final: float = 0
+    alasan_ditolak: str | None = None
+    diputuskan_at: str | None = None
+    # Job aktif (tidak dibatalkan) yang dibuat dari item ini.
+    jumlah_job: int = 0
 
 
 class QuotationBase(BaseModel):
@@ -60,6 +72,8 @@ class QuotationBase(BaseModel):
 
 class Quotation(QuotationBase):
     items: list[QuotationItem] = Field(default_factory=list)
+    # Jumlah subtotal_final item yang deal (sebelum PPN).
+    nilai_deal: float = 0
 
 
 class QuotationListRow(QuotationBase):
@@ -67,6 +81,8 @@ class QuotationListRow(QuotationBase):
     # Job dari penawaran ini, tidak termasuk yang dibatalkan.
     jumlah_job: int
     jumlah_job_selesai: int
+    # Item deal yang belum punya job aktif (tidak dibatalkan).
+    jumlah_item_deal_belum_job: int = 0
 
 
 class QuotationJobRef(BaseModel):
@@ -76,6 +92,7 @@ class QuotationJobRef(BaseModel):
     asal: str
     tujuan: str
     etd: str
+    quotation_item_id: str | None = None
 
 
 class QuotationItemInput(BaseModel):
@@ -108,6 +125,18 @@ class QuotationInput(BaseModel):
 class SetQuotationStatusRequest(BaseModel):
     status: QuotationStatus
     alasan: str | None = None
+
+
+class KeputusanItemInput(BaseModel):
+    item_id: str = Field(min_length=1)
+    keputusan: KeputusanItem
+    # Rupiah penuh; hanya untuk item deal. None = harga awal tetap berlaku.
+    harga_revisi: int | None = None
+    alasan: str | None = None
+
+
+class SimpanKeputusanRequest(BaseModel):
+    items: list[KeputusanItemInput] = Field(min_length=1)
 
 
 class QuotationCreated(BaseModel):

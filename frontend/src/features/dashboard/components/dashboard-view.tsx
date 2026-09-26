@@ -11,7 +11,13 @@ import {
 import { StatCard } from "@/features/dashboard/components/stat-card";
 import { UnitCard } from "@/features/dashboard/components/unit-card";
 import { Fab } from "@/components/layout/fab";
-import type { JobBelumKonfirmasi } from "@/features/dashboard/api";
+import { useAuth } from "@/lib/auth/AuthContext";
+import type { DokumenJatuhTempo, JobBelumKonfirmasi, MonitoringServis } from "@/features/dashboard/api";
+import {
+  PerluTindakanCard,
+  RincianDokumen,
+  type TindakanItem
+} from "@/features/dashboard/components/perlu-tindakan-card";
 import type { Unit } from "@/types";
 
 /** "tidak_siap" = Breakdown + Perbaikan (kartu stat keempat). */
@@ -39,6 +45,14 @@ interface Props {
   jobBelumKonfirmasi?: JobBelumKonfirmasi[];
   /** Job selesai & tervalidasi tapi belum masuk tagihan mana pun. */
   jobsBelumInvoice?: number;
+  /** Dokumen kendaraan & SIM yang habis / habis ≤ 30 hari lagi. */
+  dokumenJatuhTempo?: DokumenJatuhTempo[];
+  /** Unit yang service-nya lewat jadwal / mendekati jadwal. */
+  monitoringServis?: MonitoringServis;
+  /** Jumlah penawaran deal yang masih punya item deal belum dibuatkan job. */
+  penawaranDealTanpaJob?: number;
+  /** Jumlah penawaran terkirim yang habis masa berlakunya ≤ 7 hari lagi. */
+  penawaranAkanKedaluwarsa?: number;
 }
 
 export function DashboardView({
@@ -48,8 +62,13 @@ export function DashboardView({
   jobsMenungguValidasi = 0,
   uangJalanDiajukan = 0,
   jobBelumKonfirmasi = [],
-  jobsBelumInvoice = 0
+  jobsBelumInvoice = 0,
+  dokumenJatuhTempo = [],
+  monitoringServis,
+  penawaranDealTanpaJob = 0,
+  penawaranAkanKedaluwarsa = 0
 }: Props) {
+  const { canManageOperational } = useAuth();
   const [filter, setFilter] = useState<Filter>("semua");
   const tidakSiap = counts.breakdown + counts.perbaikan;
   const total = counts.standby + counts.bertugas + tidakSiap;
@@ -61,6 +80,120 @@ export function DashboardView({
     }
     return units.filter((u) => u.status === filter);
   }, [units, filter]);
+
+  // Hanya tindakan yang ada; urutan = yang paling menahan pekerjaan dulu.
+  const tindakan: TindakanItem[] = [
+    ...(uangJalanDiajukan > 0
+      ? [
+          {
+            key: "uang-jalan",
+            to: "/uang-jalan",
+            judul: `${uangJalanDiajukan} pengajuan uang jalan`,
+            keterangan: "Cairkan & unggah bukti transfer."
+          }
+        ]
+      : []),
+    ...(jobBelumKonfirmasi.length > 0
+      ? [
+          {
+            key: "belum-konfirmasi",
+            // Admin → daftar job tab "Ditugaskan"; operator (tanpa menu Job) → Pantau.
+            to: canManageOperational ? "/jobs?tab=ditugaskan" : "/tracking",
+            judul: `${jobBelumKonfirmasi.length} job belum dikonfirmasi`,
+            keterangan:
+              jobBelumKonfirmasi.length === 1
+                ? `Follow up ${jobBelumKonfirmasi[0].driver_nama}.`
+                : "Follow up drivernya."
+          }
+        ]
+      : []),
+    ...(counts.breakdown > 0
+      ? [
+          {
+            key: "breakdown",
+            to: "/units?status=breakdown",
+            judul: `${counts.breakdown} unit breakdown`,
+            keterangan: "Tangani insidennya."
+          }
+        ]
+      : []),
+    // Penawaran hanya dibuka admin / superadmin — operator tidak melihat baris
+    // ini. Cukup angkanya; daftarnya di halaman Penawaran (sudah terfilter).
+    ...(canManageOperational && penawaranDealTanpaJob > 0
+      ? [
+          {
+            key: "penawaran-deal",
+            to: "/quotations?filter=deal_pending",
+            judul: `${penawaranDealTanpaJob} penawaran deal belum ada job`,
+            keterangan: "Buatkan job-nya."
+          }
+        ]
+      : []),
+    ...(canManageOperational && penawaranAkanKedaluwarsa > 0
+      ? [
+          {
+            key: "penawaran-kedaluwarsa",
+            to: "/quotations?filter=akan_kedaluwarsa",
+            judul: `${penawaranAkanKedaluwarsa} penawaran akan kedaluwarsa`,
+            keterangan: "Expired ≤ 7 hari — follow up."
+          }
+        ]
+      : []),
+    // Service lewat jadwal / mendekati — dulu kartu "Monitoring service".
+    ...(monitoringServis && monitoringServis.lewat_jadwal.length > 0
+      ? [
+          {
+            key: "servis-lewat",
+            to: "/services?status=overdue",
+            judul: `${monitoringServis.lewat_jadwal.length} unit lewat jadwal service`,
+            keterangan: "Segera jadwalkan service."
+          }
+        ]
+      : []),
+    ...(monitoringServis && monitoringServis.mendekati.length > 0
+      ? [
+          {
+            key: "servis-mendekati",
+            to: "/services?status=mendekati",
+            judul: `${monitoringServis.mendekati.length} unit mendekati jadwal service`,
+            keterangan: "Siapkan jadwal service."
+          }
+        ]
+      : []),
+    // Validasi & penagihan bukan wewenang operator (dan job menunggu validasi
+    // tidak tampil di Pantau) — hanya admin / superadmin.
+    ...(canManageOperational && jobsMenungguValidasi > 0
+      ? [
+          {
+            key: "validasi",
+            to: "/jobs?tab=validasi",
+            judul: `${jobsMenungguValidasi} job menunggu validasi`,
+            keterangan: "Periksa foto & approve."
+          }
+        ]
+      : []),
+    ...(canManageOperational && jobsBelumInvoice > 0
+      ? [
+          {
+            key: "invoice",
+            to: "/invoices",
+            judul: `${jobsBelumInvoice} job belum ditagih`,
+            keterangan: "Buatkan tagihannya."
+          }
+        ]
+      : []),
+    ...(dokumenJatuhTempo.length > 0
+      ? [
+          {
+            key: "dokumen",
+            to: dokumenJatuhTempo[0].href,
+            judul: `${dokumenJatuhTempo.length} dokumen jatuh tempo`,
+            keterangan: "STNK / KIR / pajak / SIM ≤ 30 hari.",
+            rincian: <RincianDokumen dokumen={dokumenJatuhTempo} />
+          }
+        ]
+      : [])
+  ];
 
   const jobByUnit = useMemo(
     () => new Map(activeJobs.map((a) => [a.unitId, a.job])),
@@ -113,50 +246,7 @@ export function DashboardView({
         />
       </div>
 
-      {(jobsMenungguValidasi > 0 ||
-        uangJalanDiajukan > 0 ||
-        jobBelumKonfirmasi.length > 0 ||
-        jobsBelumInvoice > 0) && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {uangJalanDiajukan > 0 && (
-            <ActionPanel
-              to="/uang-jalan"
-              title={`${uangJalanDiajukan} pengajuan uang jalan`}
-              caption="Driver mengajukan uang jalan — cairkan & unggah bukti transfer."
-            />
-          )}
-          {/* Satu kartu saja (bukan satu per job). Umumnya cuma ada 1 job
-              dalam kondisi ini, jadi kartunya tertaut langsung ke job itu
-              (lewat Pantau, supaya tetap bisa dibuka operator yang cuma
-              lihat). Kalau kebetulan lebih dari satu, tetap 1 kartu tapi
-              tertaut ke yang pertama. */}
-          {jobBelumKonfirmasi.length > 0 && (
-            <ActionPanel
-              to={`/tracking/${jobBelumKonfirmasi[0].id}`}
-              title={`${jobBelumKonfirmasi.length} job belum dikonfirmasi oleh driver`}
-              caption={
-                jobBelumKonfirmasi.length === 1
-                  ? `Driver ${jobBelumKonfirmasi[0].driver_nama} (${jobBelumKonfirmasi[0].customer_nama}) belum menekan Terima Job — coba follow up.`
-                  : "Beberapa driver belum menekan Terima Job — coba follow up."
-              }
-            />
-          )}
-          {jobsMenungguValidasi > 0 && (
-            <ActionPanel
-              to="/jobs"
-              title={`${jobsMenungguValidasi} job menunggu validasi`}
-              caption="Driver sudah menyelesaikan orderan — periksa foto & approve."
-            />
-          )}
-          {jobsBelumInvoice > 0 && (
-            <ActionPanel
-              to="/invoices"
-              title={`${jobsBelumInvoice} job belum dibuat invoice`}
-              caption="Job sudah selesai & tervalidasi tapi belum masuk tagihan mana pun."
-            />
-          )}
-        </div>
-      )}
+      <PerluTindakanCard items={tindakan} />
 
       <div className="split-2">
         {/* Left — unit status */}
@@ -444,48 +534,3 @@ export function DashboardView({
   );
 }
 
-/** Panel merah "Perlu tindakan" — pekerjaan admin yang menahan driver. */
-function ActionPanel({
-  to,
-  title,
-  caption
-}: {
-  to: string;
-  title: string;
-  caption: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="card card-pad"
-      style={{
-        borderColor: "#e8a3a3",
-        background: "var(--status-cancelled-bg)",
-        color: "var(--status-cancelled-text)",
-        textDecoration: "none",
-        display: "flex",
-        gap: 12,
-        alignItems: "flex-start"
-      }}
-    >
-      <AlertTriangle
-        style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: "#c93030" }}
-      />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div
-          className="eyebrow"
-          style={{ color: "#c93030", fontWeight: 700 }}
-        >
-          Perlu tindakan
-        </div>
-        <div className="h2" style={{ marginTop: 4, color: "var(--status-cancelled-text)" }}>
-          {title}
-        </div>
-        <div className="caption" style={{ color: "var(--status-cancelled-text)", opacity: 0.85 }}>
-          {caption}
-        </div>
-      </div>
-      <ArrowRight style={{ width: 16, height: 16, flexShrink: 0, marginTop: 4 }} />
-    </Link>
-  );
-}

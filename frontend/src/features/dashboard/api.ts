@@ -21,6 +21,30 @@ export interface JobBelumKonfirmasi {
   driver_nama: string;
 }
 
+/** STNK / KIR / pajak / SIM yang sudah habis atau habis ≤ 30 hari lagi. */
+export interface DokumenJatuhTempo {
+  label: string;
+  subjek: string;
+  href: string;
+  tanggal: string;
+  /** Negatif = sudah lewat. */
+  sisa_hari: number;
+}
+
+/** Unit di kartu Monitoring servis. */
+export interface ServisUnit {
+  unit_id: string;
+  kode_unit: string;
+  href: string;
+  /** Lewat jadwal: km yang sudah dilewati. Mendekati: sisa km menuju servis. */
+  km: number;
+}
+
+export interface MonitoringServis {
+  lewat_jadwal: ServisUnit[];
+  mendekati: ServisUnit[];
+}
+
 export interface DashboardData {
   units: Unit[];
   counts: { standby: number; bertugas: number; breakdown: number; perbaikan: number };
@@ -29,6 +53,11 @@ export interface DashboardData {
   uang_jalan_diajukan: number;
   /** Job ditugaskan tapi drivernya belum menekan Terima Job. */
   job_belum_konfirmasi: JobBelumKonfirmasi[];
+  dokumen_jatuh_tempo: DokumenJatuhTempo[];
+  monitoring_servis: MonitoringServis;
+  /** Kartu "Perlu tindakan" — angka saja. */
+  penawaran_deal_tanpa_job?: number;
+  penawaran_akan_kedaluwarsa?: number;
   /** Job selesai & tervalidasi tapi belum masuk tagihan mana pun. */
   jobs_belum_invoice: number;
 }

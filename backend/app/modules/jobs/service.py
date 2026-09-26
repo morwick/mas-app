@@ -8,8 +8,9 @@ from supabase import AsyncClient
 
 from app.core.errors import AppError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, escape_like, ilike_any
-from app.core.pg import clean_text, first, num_or_none, rows, single
+from app.core.pg import clean_text, first, num, num_or_none, rows, single
 from app.core.push import push_to_driver
+from app.core.soft_delete import AKTIF
 from app.core.timeutil import iso_utc, parse_date, parse_iso, today_wib
 from app.core.transaksi import Transaksi
 from app.domain.job_conflicts import (
@@ -169,6 +170,47 @@ class JobService:
         )
         return [r["id"] for r in rows(res)]
 
+    async def _lampirkan_tagihan(self, jobs: list[Job], *, lengkap: bool = False) -> list[Job]:
+        """Isi info tagihan per job — satu query untuk semua job di halaman.
+        Admin: nomor & status bayar. `lengkap` (superadmin): ditambah status
+        tagihan & sisa nominal. Tagihan batal / terhapus tidak dihitung."""
+        from app.modules.invoices.service import derive_tampil, status_bayar
+
+        ids = [j.id for j in jobs]
+        if not ids:
+            return jobs
+        res = await (
+            self._db.table("invoice_items")
+            .select(
+                "job_id, invoice:invoices!inner(id, invoice_number, total, dibayar, status_tagihan, jatuh_tempo)"
+            )
+            .in_("job_id", ids)
+            .eq("status", AKTIF)
+            .eq("invoice.status", AKTIF)
+            .neq("invoice.status_tagihan", "batal")
+            .execute()
+        )
+        per_job: dict[str, dict[str, Any]] = {}
+        for r in rows(res):
+            inv = first(r.get("invoice"))
+            if r.get("job_id") and inv:
+                per_job[r["job_id"]] = inv
+        for j in jobs:
+            j.info_tagihan = True
+            inv = per_job.get(j.id)
+            if not inv:
+                continue
+            total, dibayar = num(inv.get("total")), num(inv.get("dibayar"))
+            j.invoice_id = inv["id"]
+            j.invoice_number = inv["invoice_number"]
+            j.invoice_status_bayar = status_bayar(total, dibayar)
+            if lengkap:
+                tampil, terlambat = derive_tampil(inv["status_tagihan"], inv.get("jatuh_tempo"))
+                j.invoice_status_tampil = tampil
+                j.invoice_hari_terlambat = terlambat
+                j.invoice_sisa = total - dibayar
+        return jobs
+
     async def list_page(
         self,
         *,
@@ -176,6 +218,8 @@ class JobService:
         status: JobListFilter = "all",
         customer_id: str | None = None,
         q: str | None = None,
+        dengan_tagihan: bool = False,
+        tagihan_lengkap: bool = False,
     ) -> Page[Job]:
         """Satu halaman job. Pencarian & filter dijalankan di database — kalau
         disaring di browser, yang tersaring hanya halaman yang sedang tampil."""
@@ -188,7 +232,10 @@ class JobService:
             quotation_ids=await self._quotation_ids_matching(q),
         )
         res = await apply_window(query.order("created_at", desc=True), params).execute()
-        return build_page([to_job(r) for r in rows(res)], res.count, params)
+        jobs = [to_job(r) for r in rows(res)]
+        if dengan_tagihan:
+            jobs = await self._lampirkan_tagihan(jobs, lengkap=tagihan_lengkap)
+        return build_page(jobs, res.count, params)
 
     async def list_all(self, *, status: JobListFilter = "all", customer_id: str | None = None) -> list[Job]:
         """Seluruh baris tanpa potongan — untuk deteksi bentrok jadwal dan
@@ -215,7 +262,7 @@ class JobService:
             out[tab] = res.count or 0
         return out
 
-    async def get(self, job_id: str) -> Job:
+    async def get(self, job_id: str, *, dengan_tagihan: bool = False, tagihan_lengkap: bool = False) -> Job:
         row = single(
             await active_children(self._db.table("jobs").select(JOB_SELECT), JOB_SELECT)
             .eq("id", job_id)
@@ -224,7 +271,10 @@ class JobService:
         )
         if row is None:
             raise NotFoundError("Job tidak ditemukan")
-        return to_job(row)
+        job = to_job(row)
+        if not dengan_tagihan:
+            return job
+        return (await self._lampirkan_tagihan([job], lengkap=tagihan_lengkap))[0]
 
     async def count_active(self) -> int:
         res = await (
@@ -254,9 +304,15 @@ class JobService:
         return [ActiveJobByUnit(unit_id=uid, job=job) for uid, job in by_unit.items()]
 
     async def list_by_unit(self, unit_id: str) -> list[Job]:
+        return await self._list_by("unit_id", unit_id)
+
+    async def list_by_unit_trailer(self, unit_trailer_id: str) -> list[Job]:
+        return await self._list_by("unit_trailer_id", unit_trailer_id)
+
+    async def _list_by(self, kolom: str, asset_id: str) -> list[Job]:
         res = await (
             active_children(self._db.table("jobs").select(JOB_SELECT), JOB_SELECT)
-            .eq("unit_id", unit_id)
+            .eq(kolom, asset_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -344,9 +400,56 @@ class JobService:
 
     # ── Tulis ───────────────────────────────────────────────────────────────
 
+    async def _item_penawaran(self, payload: JobCreate) -> tuple[str | None, str | None]:
+        """Job dari penawaran dibuat per item yang deal. Kembalikan
+        (quotation_id, quotation_item_id) yang sudah diperiksa."""
+        if not payload.quotation_id and not payload.quotation_item_id:
+            return None, None
+        if payload.quotation_item_id:
+            item = single(
+                await self._db.table("quotation_items")
+                .select("id, quotation_id, keputusan")
+                .eq("id", payload.quotation_item_id)
+                .maybe_single()
+                .execute()
+            )
+            if item is None:
+                raise NotFoundError("Item penawaran tidak ditemukan")
+            if payload.quotation_id and payload.quotation_id != item["quotation_id"]:
+                raise ValidationError("Item penawaran bukan milik penawaran yang dipilih.")
+            quotation_id = item["quotation_id"]
+            deal = [item] if item["keputusan"] == "deal" else []
+        else:
+            quotation_id = payload.quotation_id
+            deal = rows(
+                await self._db.table("quotation_items")
+                .select("id")
+                .eq("quotation_id", quotation_id)
+                .eq("keputusan", "deal")
+                .execute()
+            )
+            if len(deal) > 1:
+                raise ValidationError("Penawaran ini punya beberapa item deal — pilih item yang dibuatkan job.")
+        q = single(
+            await self._db.table("quotations")
+            .select("status_penawaran, quote_number")
+            .eq("id", quotation_id)
+            .maybe_single()
+            .execute()
+        )
+        if q is None:
+            raise NotFoundError("Penawaran tidak ditemukan")
+        if q["status_penawaran"] != "deal" or not deal:
+            raise ValidationError(
+                f"Job hanya bisa dibuat dari item penawaran {q['quote_number']} yang disetujui (deal)."
+            )
+        return quotation_id, deal[0]["id"]
+
     async def create(self, payload: JobCreate, *, created_by: str | None) -> JobCreated:
         _reject_back_dated_etd(payload.etd)
         _reject_eta_before_etd(payload.etd, payload.eta)
+
+        quotation_id, quotation_item_id = await self._item_penawaran(payload)
 
         if not payload.allow_conflict:
             await self._reject_if_conflicting(
@@ -385,7 +488,8 @@ class JobService:
             "eta_is_estimated": eta_is_estimated,
             "uang_jalan_pagu": payload.uang_jalan_pagu,
             "catatan": clean_text(payload.catatan),
-            "quotation_id": payload.quotation_id or None,
+            "quotation_id": quotation_id,
+            "quotation_item_id": quotation_item_id,
             "created_by": created_by,
         }
         res = await self._db.table("jobs").insert(data).execute()
@@ -550,8 +654,9 @@ class JobService:
     async def ganti_truk(self, job_id: str, payload: GantiTrukRequest) -> None:
         """Ganti truk (dan opsional driver) di tengah perjalanan.
 
-        Satu fungsi database = satu transaksi: riwayat, job, truk lama →
-        Perbaikan, truk baru → Bertugas. Gagal di tengah → semuanya rollback."""
+        Satu fungsi database = satu transaksi: riwayat, job, truk baru →
+        Bertugas, truk lama dicatat insiden kerusakan (→ Breakdown). Gagal di
+        tengah → semuanya rollback."""
         lama = single(
             await self._db.table("jobs")
             .select("driver_id, job_number, asal, tujuan")
@@ -569,6 +674,9 @@ class JobService:
                 "p_alasan": payload.alasan,
                 "p_driver_baru_id": payload.driver_id or None,
                 "p_unit_trailer_baru_id": payload.unit_trailer_id or None,
+                "p_insiden_tanggal": _to_iso(payload.insiden_tanggal),
+                "p_insiden_lokasi": clean_text(payload.insiden_lokasi),
+                "p_insiden_deskripsi": payload.insiden_deskripsi,
             },
         ).execute()
 

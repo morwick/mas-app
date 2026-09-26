@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -29,7 +28,10 @@ class CapturedPhoto {
 }
 
 /// Alur ambil foto satu slot (FR-PHOTO-03..06):
-/// kamera saja → GPS → periksa kualitas → peringatan bila perlu → stempel & kompres.
+/// kamera saja → periksa kualitas → peringatan bila perlu → stempel waktu & kompres.
+///
+/// Lokasi GPS sementara TIDAK diambil (menunggu GPS membuat driver lama
+/// menunggu di setiap foto) — foto hanya diberi cap tanggal & jam.
 /// Mengembalikan null bila driver membatalkan atau memilih ambil ulang.
 class PhotoCapture {
   PhotoCapture._();
@@ -37,9 +39,6 @@ class PhotoCapture {
   static final _picker = ImagePicker();
 
   static Future<CapturedPhoto?> capture(BuildContext context, {required PhotoSlot slot}) async {
-    // Mulai cari lokasi lebih awal supaya siap saat kamera ditutup.
-    final locationFuture = _currentPosition();
-
     final shot = await _picker.pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.rear,
@@ -49,17 +48,32 @@ class PhotoCapture {
     );
     if (shot == null) return null;
     final takenAt = DateTime.now();
-    final pos = await locationFuture;
-
-    final bytes = await shot.readAsBytes();
     if (!context.mounted) return null;
-    final output = await _process(
-      context,
-      bytes: bytes,
-      slot: slot,
-      takenAt: takenAt,
-      pos: pos,
-    );
+
+    // Loading langsung tampil begitu kamera ditutup.
+    final pesan = ValueNotifier<String>('Membaca foto…');
+    _tampilkanProgres(context, pesan);
+    ProcessPhotoOutput? output;
+    try {
+      final bytes = await shot.readAsBytes();
+      pesan.value = 'Memeriksa & menyiapkan foto…';
+      output = await compute(
+        processPhoto,
+        ProcessPhotoInput(
+          bytes: bytes,
+          document: slot.isDocument,
+          // Cap foto: tanggal & jam pengambilan, lalu nama fotonya.
+          stampLine1: formatStamp(takenAt),
+          stampLine2: slot.label,
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Foto gagal diproses: $e')));
+      }
+    } finally {
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+    }
     if (output == null) return null;
 
     if (!context.mounted) return null;
@@ -68,61 +82,46 @@ class PhotoCapture {
       if (keep != true) return null;
     }
 
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/mas_${slot.value}_${takenAt.millisecondsSinceEpoch}.jpg');
-    await file.writeAsBytes(output.jpeg, flush: true);
-
-    return CapturedPhoto(
-      file: file,
-      takenAt: takenAt,
-      report: output.report,
-      lat: pos?.latitude,
-      lng: pos?.longitude,
-    );
+    if (!context.mounted) return null;
+    pesan.value = 'Menyimpan foto…';
+    _tampilkanProgres(context, pesan);
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/mas_${slot.value}_${takenAt.millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(output.jpeg, flush: true);
+      return CapturedPhoto(
+        file: file,
+        takenAt: takenAt,
+        report: output.report,
+      );
+    } finally {
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+    }
   }
 
-  static Future<ProcessPhotoOutput?> _process(
-    BuildContext context, {
-    required Uint8List bytes,
-    required PhotoSlot slot,
-    required DateTime takenAt,
-    required Position? pos,
-  }) async {
-    // Dialog progres — pemrosesan berjalan di isolate terpisah.
+  /// Dialog progres (tidak bisa ditutup) dengan pesan yang berganti per tahap.
+  static void _tampilkanProgres(BuildContext context, ValueNotifier<String> pesan) {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const PopScope(
+      builder: (_) => PopScope(
         canPop: false,
         child: AlertDialog(
           content: Row(
             children: [
-              SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5)),
-              SizedBox(width: 16),
-              Expanded(child: Text('Memeriksa & menyiapkan foto…')),
+              const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ValueListenableBuilder<String>(
+                  valueListenable: pesan,
+                  builder: (_, teks, _) => Text(teks),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
-    try {
-      return await compute(
-        processPhoto,
-        ProcessPhotoInput(
-          bytes: bytes,
-          document: slot.isDocument,
-          stampLine1: '${formatStamp(takenAt)}  •  ${slot.label}',
-          stampLine2: 'GPS: ${formatCoord(pos?.latitude, pos?.longitude)}',
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Foto gagal diproses: $e')));
-      }
-      return null;
-    } finally {
-      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-    }
   }
 
   /// Peringatan kualitas — tidak memblokir (boleh dipaksa kirim, FR-PHOTO-04).
@@ -152,22 +151,4 @@ class PhotoCapture {
     );
   }
 
-  /// Posisi saat ini; null bila izin ditolak / GPS mati / lewat waktu.
-  static Future<Position?> _currentPosition() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) return null;
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
-      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return null;
-      return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)),
-      );
-    } catch (_) {
-      try {
-        return await Geolocator.getLastKnownPosition();
-      } catch (_) {
-        return null;
-      }
-    }
-  }
 }

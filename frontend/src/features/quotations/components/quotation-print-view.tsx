@@ -1,25 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PeringatanBatal, WatermarkBatal } from "@/components/surat/watermark-batal";
+import { rp, tanggalPanjang } from "@/lib/surat";
 import type { Quotation } from "@/types";
 
 interface Props {
   quotation: Quotation;
-}
-
-/** "4 Agustus 2026" — format tanggal surat resmi, bukan singkatan. */
-function tanggalPanjang(iso: string): string {
-  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric"
-  }).format(d);
-}
-
-/** "Rp. 5.000.000,-" — gaya penulisan yang dipakai di surat Word MAS. */
-function rp(n: number): string {
-  return `Rp. ${new Intl.NumberFormat("id-ID").format(n)},-`;
 }
 
 export function QuotationPrintView({ quotation: q }: Props) {
@@ -39,6 +26,8 @@ export function QuotationPrintView({ quotation: q }: Props) {
             <ArrowLeft className="w-4 h-4" />
             Kembali ke penawaran
           </button>
+          <PeringatanBatal aktif={q.status === "ditolak"} teks="Penawaran ini ditolak / dibatalkan" />
+          <PeringatanBatal aktif={q.status === "kedaluwarsa"} teks="Penawaran ini sudah kedaluwarsa" tanda="EXPIRED" />
           <div className="flex items-center gap-2">
             {/* Dialog cetak dimiliki browser dan tidak bisa dilewati dari kode,
                 jadi petunjuknya menyebut nama dropdown-nya secara spesifik —
@@ -58,7 +47,9 @@ export function QuotationPrintView({ quotation: q }: Props) {
       </div>
 
       {/* Surat */}
-      <div className="surat-page max-w-[820px] mx-auto my-6 bg-white border border-border print:border-0 print:my-0 print:max-w-none">
+      <div className="surat-page relative max-w-[820px] mx-auto my-6 bg-white border border-border print:border-0 print:my-0 print:max-w-none">
+        <WatermarkBatal aktif={q.status === "ditolak"} />
+        <WatermarkBatal aktif={q.status === "kedaluwarsa"} teks="EXPIRED" />
         <div className="px-8 sm:px-12 py-8 print:px-10 print:py-6">
           {/* Kop — logo yang sama dengan kop Word */}
           <header className="pb-3 border-b-2 border-brand">

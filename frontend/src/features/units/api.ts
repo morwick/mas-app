@@ -1,6 +1,8 @@
 import { api } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
+import { localInputToIso } from "@/lib/utils";
 import type {
+  RiwayatAset,
   ActionResult,
   DriverAssignment,
   Incident,
@@ -53,22 +55,23 @@ export function updateUnit(id: string, input: Partial<UnitInput>): Promise<Actio
   return mutate(api.patch(`/units/${id}`, input));
 }
 
-export function changeUnitStatus(
-  id: string,
-  status: UnitStatus,
-  reason?: string
-): Promise<ActionResult<unknown>> {
-  return mutate(api.post(`/units/${id}/status`, { status, reason: reason ?? null }));
-}
-
 export function deactivateUnit(id: string): Promise<ActionResult<unknown>> {
   return mutate(api.post(`/units/${id}/deactivate`));
+}
+
+export const getUnitRiwayat = (id: string) => api.get<RiwayatAset>(`/units/${id}/riwayat`);
+
+/** Hanya unit tanpa riwayat — ditolak server bila sudah punya riwayat. */
+export function deleteUnit(id: string): Promise<ActionResult<unknown>> {
+  return mutate(api.delete(`/units/${id}`));
 }
 
 // ── Insiden ─────────────────────────────────────────────────────────────────
 
 export interface IncidentInput {
-  unit_id: string;
+  /** Tepat satu terisi: insiden unit atau insiden unit trailer. */
+  unit_id?: string;
+  unit_trailer_id?: string;
   job_id?: string | null;
   tipe: IncidentType;
   tanggal: string;
@@ -79,14 +82,16 @@ export interface IncidentInput {
 }
 
 export function createIncident(input: IncidentInput): Promise<ActionResult<Incident>> {
-  return mutate(api.post<Incident>("/incidents", input));
+  return mutate(api.post<Incident>("/incidents", { ...input, tanggal: localInputToIso(input.tanggal) }));
 }
 
 export function updateIncident(
   id: string,
-  input: Partial<Omit<IncidentInput, "unit_id">>
+  input: Partial<Omit<IncidentInput, "unit_id" | "unit_trailer_id">>
 ): Promise<ActionResult<unknown>> {
-  return mutate(api.patch(`/incidents/${id}`, input));
+  return mutate(
+    api.patch(`/incidents/${id}`, input.tanggal ? { ...input, tanggal: localInputToIso(input.tanggal) } : input)
+  );
 }
 
 export function setIncidentStatus(

@@ -3,7 +3,6 @@
 from types import SimpleNamespace
 from typing import Any
 
-from app.modules.units.schemas import ChangeStatusRequest
 from app.modules.units.service import UnitService
 
 
@@ -33,11 +32,6 @@ class _Db:
 
     async def execute(self) -> SimpleNamespace:
         return SimpleNamespace(data=self.data, count=len(self.data))
-
-
-def test_status_terjual_dan_diafkirkan_diterima() -> None:
-    assert ChangeStatusRequest(status="terjual").status == "terjual"
-    assert ChangeStatusRequest(status="diafkirkan").status == "diafkirkan"
 
 
 async def test_hitungan_status_memuat_terjual() -> None:

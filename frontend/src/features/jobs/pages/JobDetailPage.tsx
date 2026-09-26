@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
+import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useDriver } from "@/features/drivers/queries";
 import { useUnit } from "@/features/units/queries";
 import { useJobUangJalan, useSumberDana } from "@/features/uang-jalan/queries";
@@ -17,6 +18,9 @@ const EMPTY_RINGKASAN = {
 
 export function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
+  // Finance (dari tagihan) & operator (dari Pantau): hanya melihat, tanpa tombol.
+  const role = useCurrentUser().role;
+  const hanyaLihat = role === "finance" || role === "operator";
   const job = useJob(id);
   const unit = useUnit(job.data?.unit_id);
   const driver = useDriver(job.data?.driver_id);
@@ -36,6 +40,7 @@ export function JobDetailPage() {
       uangJalan={uangJalan.data?.transaksi ?? []}
       uangJalanRingkasan={uangJalan.data?.ringkasan ?? EMPTY_RINGKASAN}
       uangJalanPengajuan={uangJalan.data?.pengajuan ?? []}
+      hanyaLihat={hanyaLihat}
     />
   );
 }

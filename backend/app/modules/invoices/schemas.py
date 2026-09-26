@@ -10,6 +10,19 @@ from app.modules.jobs.schemas import JobStatus
 InvoiceStatus = Literal["draft", "terkirim", "lunas", "batal"]
 # Status tampil: "jatuh_tempo" diturunkan dari tanggal saat dibaca, tidak disimpan.
 InvoiceTampilStatus = Literal["draft", "terkirim", "lunas", "batal", "jatuh_tempo"]
+# Status bayar: dihitung dari dibayar vs total (bukan kolom tersendiri).
+StatusBayar = Literal["unpaid", "partial_paid", "completed"]
+
+
+class UangJalanTransaksi(BaseModel):
+    """Satu transaksi uang jalan job — ditampilkan di form & detail tagihan."""
+
+    jenis: str  # pencairan / penambahan_pagu
+    tanggal: str
+    jumlah: float
+    keterangan: str | None = None
+    # URL bertanda tangan sementara (bucket privat) — None bila tanpa bukti.
+    bukti_url: str | None = None
 
 
 class InvoiceItem(BaseModel):
@@ -31,6 +44,12 @@ class InvoiceItem(BaseModel):
     uang_jalan_pagu: float | None = None
     uang_jalan_cair: float | None = None
     surat_jalan_urls: list[str] = []
+    # Surat jalan per tahap: saat loading & saat unloading.
+    surat_jalan_loading_urls: list[str] = []
+    surat_jalan_unloading_urls: list[str] = []
+    # Rincian uang jalan: pagu awal + tiap pencairan / penambahan (dengan bukti transfer).
+    uang_jalan_pagu_awal: float | None = None
+    uang_jalan_transaksi: list[UangJalanTransaksi] = []
 
 
 class InvoicePayment(BaseModel):
@@ -75,6 +94,7 @@ class InvoiceBase(BaseModel):
     sisa: float
     status: InvoiceStatus
     status_tampil: InvoiceTampilStatus
+    status_bayar: StatusBayar
     hari_terlambat: int | None = None
     ttd_nama: str | None = None
     ttd_jabatan: str | None = None
@@ -165,6 +185,12 @@ class JobBelumDitagihRow(BaseModel):
     uang_jalan_pagu: float
     uang_jalan_cair: float
     surat_jalan_urls: list[str] = []
+    # Surat jalan per tahap: saat loading & saat unloading.
+    surat_jalan_loading_urls: list[str] = []
+    surat_jalan_unloading_urls: list[str] = []
+    # Rincian uang jalan: pagu awal + tiap pencairan / penambahan (dengan bukti transfer).
+    uang_jalan_pagu_awal: float | None = None
+    uang_jalan_transaksi: list[UangJalanTransaksi] = []
 
 
 class FinanceDashboardSummary(BaseModel):

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/widgets/lonceng_notifikasi.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -85,11 +86,8 @@ class _JobsListScreenState extends ConsumerState<JobsListScreen> {
           IconButton(
             tooltip: 'Notifikasi',
             onPressed: () => context.push('/notifications'),
-            icon: Badge(
-              isLabelVisible: unread > 0,
-              label: Text('$unread'),
-              child: const Icon(Icons.notifications_outlined),
-            ),
+            // Bergoyang selama masih ada notifikasi belum dibaca.
+            icon: LoncengNotifikasi(belumDibaca: unread),
           ),
           IconButton(tooltip: 'Keluar', onPressed: _logout, icon: const Icon(Icons.logout)),
         ],

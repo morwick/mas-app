@@ -1,5 +1,5 @@
 /**
- * Prefill form job dari penawaran yang sudah deal.
+ * Prefill form job dari satu item penawaran yang sudah deal.
  *
  * Tabel jobs tidak punya kolom harga — angka resminya tinggal di penawaran dan
  * job menunjuk ke sana lewat quotation_id. Ringkasan komersial ikut ke kolom
@@ -8,26 +8,26 @@
  */
 
 import { formatRupiah } from "@/lib/utils";
-import type { Customer, Quotation } from "@/types";
+import type { Customer, Quotation, QuotationItem } from "@/types";
 import type { JobPrefill } from "./components/new-job-view";
 
-function buildCatatan(q: Quotation, customer: Customer | null): string {
+function buildCatatan(q: Quotation, item: QuotationItem, customer: Customer | null): string {
   const lines: string[] = [];
-  lines.push(`[Dari penawaran ${q.quote_number}]`);
+  const no = q.items.findIndex((x) => x.id === item.id) + 1;
+  lines.push(`[Dari penawaran ${q.quote_number} — item ${no}]`);
   if (q.objek) lines.push(`Objek: ${q.objek}`);
 
   lines.push("");
   lines.push("--- Harga ---");
-  q.items.forEach((it, i) => {
-    lines.push(
-      `${i + 1}. ${it.dari} → ${it.tujuan} · ${it.qty} ${it.satuan}` +
-        `${it.nama_alat ? ` ${it.nama_alat}` : ""} @ ${formatRupiah(it.harga_satuan)}` +
-        ` = ${formatRupiah(it.subtotal)}`
-    );
-  });
-  lines.push(`Subtotal: ${formatRupiah(q.subtotal)}`);
-  if (q.ppn_aktif) lines.push(`PPN ${Number(q.ppn_persen)}%: ${formatRupiah(q.ppn_nominal)}`);
-  lines.push(`TOTAL: ${formatRupiah(q.total)}`);
+  lines.push(
+    `${item.dari} → ${item.tujuan} · ${item.qty} ${item.satuan}` +
+      `${item.nama_alat ? ` ${item.nama_alat}` : ""} @ ${formatRupiah(item.harga_final)}` +
+      ` = ${formatRupiah(item.subtotal_final)}`
+  );
+  if (item.harga_revisi != null) {
+    lines.push(`(Harga revisi — harga awal ${formatRupiah(item.harga_satuan)} = ${formatRupiah(item.subtotal)})`);
+  }
+  if (q.ppn_aktif) lines.push(`+ PPN ${Number(q.ppn_persen)}%`);
 
   if (customer) {
     lines.push("");
@@ -44,22 +44,29 @@ function buildCatatan(q: Quotation, customer: Customer | null): string {
 }
 
 /**
- * Rute diambil dari baris pertama penawaran — satu job memodelkan satu
- * perjalanan A → B, sedangkan penawaran bisa memuat beberapa rute. Sisanya
- * diberitahukan ke admin lewat banner, bukan diam-diam dibuang.
+ * Item penawaran yang dibuatkan job: yang diminta (`itemId`) bila deal, atau
+ * satu-satunya item deal. Null = harus dipilih dulu dari halaman penawaran.
  */
-export function buildPrefill(q: Quotation, customer: Customer | null): JobPrefill {
-  const first = q.items[0];
+export function pilihItemDeal(q: Quotation, itemId?: string | null): QuotationItem | null {
+  const deal = q.items.filter((it) => it.keputusan === "deal");
+  if (itemId) return deal.find((it) => it.id === itemId) ?? null;
+  return deal.length === 1 ? deal[0] : null;
+}
+
+/** Satu job = satu item penawaran yang deal (rute, alat, dan harga final-nya). */
+export function buildPrefill(q: Quotation, item: QuotationItem, customer: Customer | null): JobPrefill {
+  const no = q.items.findIndex((x) => x.id === item.id) + 1;
   return {
     quotation_id: q.id,
+    quotation_item_id: item.id,
     quote_number: q.quote_number,
-    jumlah_rute: q.items.length,
+    item_label: `item ${no}: ${item.dari} → ${item.tujuan}`,
     customer_id: q.customer_id,
     pic_nama: q.pic_nama ?? customer?.pic_nama ?? "",
     pic_no_hp: customer?.pic_no_hp ?? "",
-    alat_diangkut: q.objek ?? first?.nama_alat ?? "",
-    asal: first?.dari ?? "",
-    tujuan: first?.tujuan ?? "",
-    catatan: buildCatatan(q, customer)
+    alat_diangkut: item.nama_alat ?? q.objek ?? "",
+    asal: item.dari,
+    tujuan: item.tujuan,
+    catatan: buildCatatan(q, item, customer)
   };
 }

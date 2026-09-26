@@ -1,8 +1,9 @@
 import { useDeferredValue, useState } from "react";
-import { Container, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronRight, Container, Plus, Search, X } from "lucide-react";
+import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Select } from "@/components/ui/input";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
@@ -19,8 +20,6 @@ import {
   STATUS_TRAILER_TAMPIL,
   createJenisUnitTrailer,
   createUnitTrailer,
-  deleteUnitTrailer,
-  updateUnitTrailer,
   type JenisUnitTrailer,
   type StatusTrailerTampil,
   type UnitTrailer,
@@ -30,17 +29,6 @@ import { useJenisUnitTrailer, useUnitTrailer } from "../queries";
 import { useJenisUnit } from "@/features/settings/queries";
 import { UnitTrailerFormModal } from "./unit-trailer-form-modal";
 
-const WARNA_STATUS: Record<StatusTrailerTampil, string> = {
-  standby: "badge-standby",
-  perbaikan: "badge-perbaikan",
-  terjual: "badge-terjual"
-};
-
-function StatusBadge({ status }: { status: StatusTrailerTampil }) {
-  const label = STATUS_TRAILER_TAMPIL.find((s) => s.value === status)?.label ?? status;
-  return <span className={`badge ${WARNA_STATUS[status]}`}>{label}</span>;
-}
-
 function formatKapasitas(ton: number | null) {
   if (ton == null) return "—";
   return `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(ton)} ton`;
@@ -49,6 +37,7 @@ function formatKapasitas(ton: number | null) {
 export function UnitTrailerView() {
   const toast = useToast();
   const { canManageOperational } = useAuth();
+  const navigate = useNavigate();
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -58,8 +47,7 @@ export function UnitTrailerView() {
   // Pencarian menunggu jeda ketik, tidak memanggil server tiap huruf.
   const qTunda = useDeferredValue(q);
 
-  const [form, setForm] = useState<{ trailer: UnitTrailer | null } | null>(null);
-  const [hapus, setHapus] = useState<UnitTrailer | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   // Pesan popup loading; null = tidak ada proses yang berjalan.
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -89,16 +77,15 @@ export function UnitTrailerView() {
   }
 
   async function simpan(input: UnitTrailerInput): Promise<boolean> {
-    const edit = form?.trailer;
-    setBusy(edit ? `Menyimpan perubahan ${edit.kode_trailer}…` : `Menambahkan ${input.kode_trailer}…`);
-    const res = edit ? await updateUnitTrailer(edit.id, input) : await createUnitTrailer(input);
+    setBusy(`Menambahkan ${input.kode_trailer}…`);
+    const res = await createUnitTrailer(input);
     setBusy(null);
     if (!res.ok) {
       toast.error(res.error);
       return false;
     }
-    toast.success(edit ? `Unit trailer ${input.kode_trailer} diperbarui` : `Unit trailer ${input.kode_trailer} ditambahkan`);
-    setForm(null);
+    toast.success(`Unit trailer ${input.kode_trailer} ditambahkan`);
+    setFormOpen(false);
     return true;
   }
 
@@ -113,20 +100,6 @@ export function UnitTrailerView() {
     setJenisTambahan((list) => [...list, res.data]);
     toast.success(`Jenis unit trailer ${res.data.nama} ditambahkan`);
     return res.data;
-  }
-
-  async function konfirmasiHapus() {
-    if (!hapus) return;
-    const t = hapus;
-    setHapus(null);
-    setBusy(`Menghapus ${t.kode_trailer}…`);
-    const res = await deleteUnitTrailer(t.id);
-    setBusy(null);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success(`Unit trailer ${t.kode_trailer} dihapus`);
   }
 
   const total = data.data?.total ?? 0;
@@ -144,35 +117,6 @@ export function UnitTrailerView() {
     setPageSize: ubah(setPageSize)
   };
 
-  function Aksi({ t }: { t: UnitTrailer }) {
-    // Trailer terjual dikelola lewat menu Penjualan Unit.
-    if (t.status === "terjual") return null;
-    return (
-      <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={() => setForm({ trailer: t })}
-          disabled={busy !== null}
-        >
-          <Pencil style={{ width: 13, height: 13 }} />
-          Edit
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm btn-icon"
-          title="Hapus"
-          aria-label={`Hapus ${t.kode_trailer}`}
-          style={{ color: "#791f1f" }}
-          onClick={() => setHapus(t)}
-          disabled={busy !== null}
-        >
-          <Trash2 style={{ width: 14, height: 14 }} />
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
       <div
@@ -182,10 +126,13 @@ export function UnitTrailerView() {
           <h1 className="h1" style={{ marginBottom: 4 }}>
             Unit Trailer
           </h1>
-          <p className="caption">Master data trailer: kode, jenis unit trailer, tahun, dan kapasitas muatan.</p>
+          <p className="caption">
+            Master data trailer: kode, jenis unit trailer, tahun, kapasitas muatan, dan dokumen. Klik baris untuk
+            melihat detail, riwayat, dan insiden.
+          </p>
         </div>
         {canManageOperational && (
-          <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />} onClick={() => setForm({ trailer: null })}>
+          <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />} onClick={() => setFormOpen(true)}>
             Tambah unit trailer
           </Button>
         )}
@@ -259,13 +206,28 @@ export function UnitTrailerView() {
                   <th style={{ width: 90 }}>Tahun</th>
                   <th style={{ width: 150 }}>Kapasitas muatan</th>
                   <th style={{ width: 120 }}>Status</th>
-                  {canManageOperational && <th style={{ width: 130 }}></th>}
+                  <th style={{ width: 50 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((t) => (
-                  <tr key={t.id}>
-                    <td style={{ fontWeight: 600 }}>{t.kode_trailer}</td>
+                  <tr
+                    key={t.id}
+                    className="row-link"
+                    tabIndex={0}
+                    onClick={() => navigate(`/unit-trailer/${t.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") navigate(`/unit-trailer/${t.id}`);
+                    }}
+                  >
+                    <td style={{ fontWeight: 600 }}>
+                      {t.kode_trailer}
+                      {!t.is_active && (
+                        <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                          Nonaktif
+                        </span>
+                      )}
+                    </td>
                     <td>{t.jenis_nama ?? "—"}</td>
                     <td>{t.jenis_unit_nama ?? "—"}</td>
                     <td>{t.tahun ?? "—"}</td>
@@ -273,11 +235,9 @@ export function UnitTrailerView() {
                     <td>
                       <StatusBadge status={t.status} />
                     </td>
-                    {canManageOperational && (
-                      <td>
-                        <Aksi t={t} />
-                      </td>
-                    )}
+                    <td>
+                      <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -288,17 +248,28 @@ export function UnitTrailerView() {
           {/* Mobile: kartu */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
             {items.map((t) => (
-              <div key={t.id} className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <Link
+                key={t.id}
+                to={`/unit-trailer/${t.id}`}
+                className="card card-pad"
+                style={{ display: "flex", flexDirection: "column", gap: 6, textDecoration: "none", color: "inherit" }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontWeight: 700 }}>{t.kode_trailer}</span>
+                  <span style={{ fontWeight: 700 }}>
+                    {t.kode_trailer}
+                    {!t.is_active && (
+                      <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                        Nonaktif
+                      </span>
+                    )}
+                  </span>
                   <StatusBadge status={t.status} />
                 </div>
                 <div className="caption">
                   {t.jenis_nama ?? "—"} ({t.jenis_unit_nama ?? "—"}) · {t.tahun ?? "—"} ·{" "}
                   {formatKapasitas(t.kapasitas_ton)}
                 </div>
-                {canManageOperational && <Aksi t={t} />}
-              </div>
+              </Link>
             ))}
             <Pagination state={pg} label="unit trailer" />
           </div>
@@ -306,27 +277,15 @@ export function UnitTrailerView() {
       )}
 
       <UnitTrailerFormModal
-        open={form !== null}
-        trailer={form?.trailer ?? null}
+        open={formOpen}
+        trailer={null}
         jenisList={jenisList}
         jenisUnitList={jenisUnit.data ?? []}
         busy={busy !== null}
-        onClose={() => setForm(null)}
+        onClose={() => setFormOpen(false)}
         onSave={simpan}
         onCreateJenis={tambahJenis}
       />
-
-      {hapus && (
-        <ConfirmDialog
-          open
-          onClose={() => setHapus(null)}
-          title={`Hapus unit trailer ${hapus.kode_trailer}?`}
-          body="Data tidak hilang dari database (ditandai terhapus) dan masih bisa dikembalikan bila salah hapus."
-          confirmText="Ya, hapus"
-          variant="danger"
-          onConfirm={konfirmasiHapus}
-        />
-      )}
 
       <LoadingOverlay message={busy} />
     </div>

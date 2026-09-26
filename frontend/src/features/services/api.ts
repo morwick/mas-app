@@ -1,3 +1,4 @@
+import { queryClient } from "@/lib/api/query";
 import { api } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
 import type { ActionResult, JenisService, ServiceRecord, UnitWithService } from "@/types";
@@ -56,6 +57,23 @@ export function calibrateOdometer(input: {
 
 /** Sinkron mileage semua unit — dipakai polling halaman Service. */
 export const syncAllMileage = () => api.get<MileageBatchResponse>("/maintenance/mileage");
+
+/** Sinkron odometer terakhir (menu Service / dashboard) — dibagi supaya tidak dobel. */
+let sinkronTerakhir = 0;
+const JEDA_SINKRON_MS = 5 * 60_000;
+
+/**
+ * Sinkron odometer GPS, paling sering sekali tiap 5 menit untuk seluruh
+ * aplikasi. Setelah sinkron, data dashboard disegarkan supaya angka service
+ * di "Perlu tindakan" sama dengan menu Service. null = dilewati (baru saja sinkron).
+ */
+export async function sinkronOdometer(paksa = false): Promise<MileageBatchResponse | null> {
+  if (!paksa && Date.now() - sinkronTerakhir < JEDA_SINKRON_MS) return null;
+  sinkronTerakhir = Date.now();
+  const hasil = await syncAllMileage();
+  void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  return hasil;
+}
 
 export const syncUnitMileage = (unitId: string) =>
   api.post<SyncMileageResponse>(`/maintenance/units/${unitId}/sync-mileage`);

@@ -107,6 +107,8 @@ class Job(BaseModel):
     eta_is_estimated: bool = False
     quotation_id: str | None = None
     quotation_number: str | None = None
+    # Item penawaran (yang deal) asal job ini.
+    quotation_item_id: str | None = None
     # Total uang jalan yang sudah dicairkan ke driver. Lebih dari nol berarti
     # job tidak bisa dibatalkan lagi.
     uang_jalan_cair: float = 0.0
@@ -116,6 +118,17 @@ class Job(BaseModel):
     uang_jalan_pending: bool = False
     uang_jalan_pending_nominal: float | None = None
     uang_jalan_pending_at: str | None = None
+    # Tagihan aktif (tidak batal) yang memuat job ini: nomor & status bayar
+    # untuk admin (supaya bisa mengingatkan finance); operator tidak menerimanya.
+    invoice_id: str | None = None
+    invoice_number: str | None = None
+    invoice_status_bayar: str | None = None
+    # Khusus superadmin & finance: status tagihan & sisa nominal.
+    invoice_status_tampil: str | None = None
+    invoice_hari_terlambat: int | None = None
+    invoice_sisa: float | None = None
+    # True = info tagihan di atas ikut dikirim (admin); False = tidak (operator).
+    info_tagihan: bool = False
     photos: list[JobPhoto] = Field(default_factory=list)
     # Diisi hanya oleh portal driver / halaman publik.
     unit_kode: str | None = None
@@ -142,6 +155,10 @@ class GantiTrukRequest(BaseModel):
     driver_id: str | None = None
     # Wajib bila jenis unit truk baru memakai trailer (dijaga database).
     unit_trailer_id: str | None = None
+    # Truk lama dicatat sebagai insiden kerusakan (tanggal, lokasi terakhir, deskripsi).
+    insiden_tanggal: str = Field(min_length=1)
+    insiden_lokasi: str | None = Field(default=None, max_length=500)
+    insiden_deskripsi: str = Field(min_length=1, max_length=2000)
 
     @field_validator("alasan")
     @classmethod
@@ -149,6 +166,14 @@ class GantiTrukRequest(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("Alasan ganti truk wajib diisi")
+        return v
+
+    @field_validator("insiden_deskripsi")
+    @classmethod
+    def _deskripsi(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Deskripsi insiden wajib diisi")
         return v
 
 
@@ -206,6 +231,8 @@ class JobCreate(_JobFields):
     uang_jalan_pagu: int = Field(gt=0, description="Pagu uang jalan (rupiah)")
     # Diisi bila job lahir dari penawaran yang sudah deal.
     quotation_id: str | None = None
+    # Wajib bila quotation_id diisi dan penawarannya punya lebih dari satu item deal.
+    quotation_item_id: str | None = None
     # True bila admin sudah mengonfirmasi tetap simpan meski ada bentrok.
     allow_conflict: bool = False
 

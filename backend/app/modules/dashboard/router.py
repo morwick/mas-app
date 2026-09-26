@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
 from postgrest.types import CountMethod
@@ -12,6 +13,9 @@ from supabase import AsyncClient
 from app.core.auth import superadmin_or_finance_client, user_client
 from app.core.pg import first, rows
 from app.core.soft_delete import AKTIF
+from app.core.timeutil import today_wib
+from app.modules.dashboard.dokumen import DokumenJatuhTempo, dokumen_jatuh_tempo
+from app.modules.dashboard.servis import MonitoringServis, monitoring_servis
 from app.modules.drivers.service import DriverService
 from app.modules.invoices.schemas import FinanceDashboardSummary
 from app.modules.invoices.service import InvoiceService
@@ -50,6 +54,10 @@ class JobBelumKonfirmasi(BaseModel):
     driver_nama: str
 
 
+# Penawaran terkirim yang masa berlakunya tinggal segini (hari) = "akan kedaluwarsa".
+PENAWARAN_AKAN_KEDALUWARSA_HARI = 7
+
+
 class DashboardResponse(BaseModel):
     units: list[Unit]
     counts: UnitStatusCounts
@@ -63,6 +71,14 @@ class DashboardResponse(BaseModel):
     # Job sudah selesai & tervalidasi tapi belum masuk tagihan mana pun
     # (sama seperti tab "Job siap ditagih" di menu Tagihan).
     jobs_belum_invoice: int = 0
+    # STNK / KIR / pajak / SIM yang sudah habis atau habis ≤ 30 hari lagi —
+    # dulu notifikasi, kini bagian kartu "Perlu tindakan".
+    dokumen_jatuh_tempo: list[DokumenJatuhTempo] = Field(default_factory=list)
+    # Kartu "Monitoring servis": lewat jadwal & mendekati — dulu notifikasi.
+    monitoring_servis: MonitoringServis = Field(default_factory=MonitoringServis)
+    # Kartu "Perlu tindakan" — cukup angkanya; daftarnya di halaman Penawaran.
+    penawaran_deal_tanpa_job: int = 0
+    penawaran_akan_kedaluwarsa: int = 0
 
 
 async def _jobs_belum_konfirmasi(client: AsyncClient) -> list[JobBelumKonfirmasi]:
@@ -84,9 +100,51 @@ async def _jobs_belum_konfirmasi(client: AsyncClient) -> list[JobBelumKonfirmasi
     ]
 
 
+async def penawaran_deal_tanpa_job(client: AsyncClient) -> int:
+    """Jumlah penawaran deal yang masih punya item deal belum dibuatkan job."""
+    res = await (
+        client.table("quotations")
+        .select("id, quotation_items(id, keputusan), jobs(quotation_item_id, status_job)")
+        .eq("status_penawaran", "deal")
+        .eq("quotation_items.status", AKTIF)
+        .eq("jobs.status", AKTIF)
+        .execute()
+    )
+    jumlah = 0
+    for q in rows(res):
+        punya_job = {
+            j["quotation_item_id"]
+            for j in (q.get("jobs") or [])
+            if j.get("quotation_item_id") and j.get("status_job") != "cancelled"
+        }
+        if any(it.get("keputusan") == "deal" and it["id"] not in punya_job for it in (q.get("quotation_items") or [])):
+            jumlah += 1
+    return jumlah
+
+
+async def penawaran_akan_kedaluwarsa(client: AsyncClient, hari_ini: date) -> int:
+    """Penawaran terkirim yang masih berlaku tapi habis dalam beberapa hari lagi."""
+    res = await (
+        client.table("quotations")
+        .select("id", count=CountMethod.exact, head=True)
+        .eq("status_penawaran", "terkirim")
+        .gte("berlaku_sampai", hari_ini.isoformat())
+        .lte("berlaku_sampai", (hari_ini + timedelta(days=PENAWARAN_AKAN_KEDALUWARSA_HARI)).isoformat())
+        .execute()
+    )
+    return res.count or 0
+
+
 async def _count_jobs_belum_invoice(client: AsyncClient) -> int:
     per_customer = await InvoiceService(client).jobs_belum_ditagih()
     return sum(len(v) for v in per_customer.values())
+
+
+async def _safe_servis(client: AsyncClient) -> MonitoringServis:
+    try:
+        return await monitoring_servis(client)
+    except Exception:  # noqa: BLE001 — dashboard tidak boleh gagal karena satu kartu
+        return MonitoringServis()
 
 
 async def _safe_list(coro: object) -> list:
@@ -136,7 +194,20 @@ async def layout_counts(client: AsyncClient = Depends(user_client)) -> LayoutCou
 @router.get("/dashboard", response_model=DashboardResponse)
 async def dashboard(client: AsyncClient = Depends(user_client)) -> DashboardResponse:
     unit_svc = UnitService(client)
-    units, counts, active_jobs, drivers, validasi, pengajuan, belum_konfirmasi, belum_invoice = await asyncio.gather(
+    (
+        units,
+        counts,
+        active_jobs,
+        drivers,
+        validasi,
+        pengajuan,
+        belum_konfirmasi,
+        belum_invoice,
+        dokumen,
+        servis,
+        penawaran_deal,
+        penawaran_habis,
+    ) = await asyncio.gather(
         unit_svc.list_all(),
         unit_svc.status_counts(),
         JobService(client).active_by_unit(),
@@ -145,6 +216,10 @@ async def dashboard(client: AsyncClient = Depends(user_client)) -> DashboardResp
         _safe_count(_count_pending_requests(client)),
         _safe_list(_jobs_belum_konfirmasi(client)),
         _safe_count(_count_jobs_belum_invoice(client)),
+        _safe_list(dokumen_jatuh_tempo(client, today_wib())),
+        _safe_servis(client),
+        _safe_count(penawaran_deal_tanpa_job(client)),
+        _safe_count(penawaran_akan_kedaluwarsa(client, today_wib())),
     )
     driver_names = {d.id: d.nama for d in drivers}
     return DashboardResponse(
@@ -168,6 +243,10 @@ async def dashboard(client: AsyncClient = Depends(user_client)) -> DashboardResp
         uang_jalan_diajukan=pengajuan,
         job_belum_konfirmasi=belum_konfirmasi,
         jobs_belum_invoice=belum_invoice,
+        dokumen_jatuh_tempo=dokumen,
+        monitoring_servis=servis,
+        penawaran_deal_tanpa_job=penawaran_deal,
+        penawaran_akan_kedaluwarsa=penawaran_habis,
     )
 
 
