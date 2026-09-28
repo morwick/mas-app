@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
 import { exportToXlsx } from "@/lib/export";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime, hariIniWIB } from "@/lib/utils";
 import type { Customer, Job } from "@/types";
 
 interface Props {
@@ -54,7 +54,7 @@ export function CustomerReportView({
         Tujuan: j.tujuan,
         Status: j.status
       })),
-      `riwayat-customer-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      `riwayat-customer-${hariIniWIB()}.xlsx`,
       "Riwayat Customer"
     );
     toast.success("File Excel berhasil di-download");

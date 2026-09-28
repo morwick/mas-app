@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -154,11 +155,11 @@ export function DriverForm({ mode, initial }: Props) {
           {/* Nomor SIM saja tidak memberi tahu apa pun soal layak jalan —
               yang menentukan adalah masa berlakunya. */}
           <Field label="SIM berlaku sampai" hint="Dipakai untuk pengingat">
-            <Input
-              type="date"
+            <DateInput
               value={form.sim_berlaku_sampai ?? ""}
-              onChange={(e) => set("sim_berlaku_sampai", e.target.value)}
+              onChange={(v) => set("sim_berlaku_sampai", v)}
               disabled={readOnly}
+              clearable
             />
           </Field>
           <Field label="Alamat" className="sm:col-span-2">

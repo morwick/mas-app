@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { hariIniWIB, tambahHari } from "@/lib/utils";
 import { Link, useSearchParams } from "react-router-dom";
 import { BarChart3, Users, ArrowRight, TrendingUp } from "lucide-react";
 import { PageError, PageLoading } from "@/components/ui/page-state";
@@ -84,18 +85,30 @@ export function ReportsIndexPage() {
 
 type Period = "month_now" | "month_prev" | "custom";
 
-function computeRange(period: Period, from?: string, to?: string): { start: Date; end: Date } {
-  const now = new Date();
+/** Pukul 00:00 WIB pada tanggal "YYYY-MM-DD". */
+function awalHariWIB(tanggal: string): Date {
+  return new Date(`${tanggal}T00:00:00+07:00`);
+}
+
+/**
+ * Rentang laporan utilisasi, semuanya dihitung dalam WIB. "Sampai tanggal"
+ * inklusif: batas akhirnya pukul 00:00 WIB keesokan harinya.
+ */
+export function computeRange(
+  period: Period,
+  from?: string,
+  to?: string,
+  now: Date = new Date()
+): { start: Date; end: Date } {
   if (period === "custom" && from && to) {
-    return { start: new Date(from), end: new Date(to) };
+    return { start: awalHariWIB(from), end: awalHariWIB(tambahHari(to, 1)) };
   }
+  const awalBulanIni = `${hariIniWIB(now).slice(0, 8)}01`;
   if (period === "month_prev") {
-    return {
-      start: new Date(now.getFullYear(), now.getMonth() - 1, 1),
-      end: new Date(now.getFullYear(), now.getMonth(), 1)
-    };
+    const awalBulanLalu = `${tambahHari(awalBulanIni, -1).slice(0, 8)}01`;
+    return { start: awalHariWIB(awalBulanLalu), end: awalHariWIB(awalBulanIni) };
   }
-  return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
+  return { start: awalHariWIB(awalBulanIni), end: now };
 }
 
 export function UtilisasiReportPage() {
@@ -122,9 +135,8 @@ export function UtilisasiReportPage() {
 
 /** Default: bulan berjalan. Rentang lain diatur lewat form di halaman. */
 function defaultRange(): { start: string; end: string } {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { start: start.toISOString().slice(0, 10), end: now.toISOString().slice(0, 10) };
+  const hariIni = hariIniWIB();
+  return { start: `${hariIni.slice(0, 8)}01`, end: hariIni };
 }
 
 export function LabaReportPage() {

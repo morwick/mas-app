@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import {
   ArrowLeft,
   Ban,
@@ -27,7 +28,7 @@ import {
   uploadFakturPajak
 } from "@/features/invoices/api";
 import type { Invoice, SumberDana } from "@/types";
-import { formatDate, formatRupiah } from "@/lib/utils";
+import { formatDate, formatRupiah, hariIniWIB } from "@/lib/utils";
 
 interface Props {
   invoice: Invoice;
@@ -53,7 +54,7 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
   const [hapusBayar, setHapusBayar] = useState<string | null>(null);
 
   const [bayar, setBayar] = useState({
-    tanggal: new Date().toISOString().slice(0, 10),
+    tanggal: hariIniWIB(),
     // Diisi sisa tagihan: pelunasan penuh adalah kasus yang paling sering,
     // dan mengetik ulang angka besar rawan salah ketik.
     jumlah: String(inv.sisa > 0 ? inv.sisa : ""),
@@ -478,11 +479,10 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
               }}
             >
               <Field label="Tanggal masuk" required>
-                <Input
-                  type="date"
+                <DateInput
                   value={bayar.tanggal}
-                  onChange={(e) =>
-                    setBayar((b) => ({ ...b, tanggal: e.target.value }))
+                  onChange={(v) =>
+                    setBayar((b) => ({ ...b, tanggal: v }))
                   }
                 />
               </Field>

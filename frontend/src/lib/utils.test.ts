@@ -20,14 +20,15 @@ describe("formatWaktuWIB", () => {
   });
 });
 
-describe("jam input datetime-local", () => {
-  it("dikirim dengan offset zona browser, tanggal & jam lokal tidak berubah", async () => {
+describe("jam isian tanggal-jam (WIB)", () => {
+  it("dikirim dengan offset WIB, tanggal & jam yang diisi tidak berubah", async () => {
     const { localInputToIso } = await import("@/lib/utils");
-    const iso = localInputToIso("2026-09-26T06:30");
-    expect(iso.startsWith("2026-09-26T06:30:00")).toBe(true);
-    expect(iso).toMatch(/[+-]\d{2}:\d{2}$/);
-    // Menunjuk momen yang sama dengan jam lokal yang diketik.
-    expect(new Date(iso).getTime()).toBe(new Date("2026-09-26T06:30").getTime());
+    expect(localInputToIso("2026-09-26T06:30")).toBe("2026-09-26T06:30:00+07:00");
+  });
+
+  it("ISO server ditampilkan dalam jam WIB, apa pun zona komputernya", async () => {
+    const { isoToLocalInput } = await import("@/lib/utils");
+    expect(isoToLocalInput("2026-09-25T23:30:00Z")).toBe("2026-09-26T06:30");
   });
 
   it("bolak-balik ISO server → input → ISO tetap momen yang sama", async () => {
@@ -48,5 +49,19 @@ describe("timeAgo", () => {
     const { timeAgo } = await import("@/lib/utils");
     expect(timeAgo(new Date(Date.now() + 5 * 3600_000))).toBe("Baru saja");
     expect(timeAgo(new Date(Date.now() - 2 * 3600_000))).toBe("2 jam lalu");
+  });
+});
+
+describe("hariIniWIB & tambahHari", () => {
+  it("sebelum 07.00 WIB tetap tanggal WIB, bukan tanggal UTC kemarin", async () => {
+    const { hariIniWIB } = await import("@/lib/utils");
+    // 1 Okt 2026 05:00 WIB = 30 Sep 22:00 UTC.
+    expect(hariIniWIB(new Date("2026-10-01T05:00:00+07:00"))).toBe("2026-10-01");
+  });
+
+  it("tambah/kurang hari melewati batas bulan & tahun", async () => {
+    const { tambahHari } = await import("@/lib/utils");
+    expect(tambahHari("2026-09-30", 1)).toBe("2026-10-01");
+    expect(tambahHari("2026-01-01", -1)).toBe("2025-12-31");
   });
 });

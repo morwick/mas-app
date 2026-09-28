@@ -46,3 +46,37 @@ def test_durasi_panjang_melewati_tengah_malam() -> None:
 def test_eta_selalu_iso_utc() -> None:
     eta, _ = _derive_eta(etd=ETD, eta=None, duration_min=90)
     assert eta.endswith("Z")
+
+
+def test_eta_kosong_dan_rute_tidak_terhitung_ditolak() -> None:
+    """Rute gagal dihitung + ETA dikosongkan → job ditolak dengan pesan yang jelas."""
+    import pytest
+
+    from app.core.errors import ValidationError
+    from app.modules.jobs.service import ETA_TIDAK_TERHITUNG_MESSAGE, _require_eta
+
+    eta, _ = _derive_eta(etd=ETD, eta="", duration_min=None)
+    with pytest.raises(ValidationError) as err:
+        _require_eta(eta)
+    assert err.value.message == ETA_TIDAK_TERHITUNG_MESSAGE
+
+
+def test_eta_terisi_atau_terhitung_diterima() -> None:
+    from app.modules.jobs.service import _require_eta
+
+    _require_eta(_derive_eta(etd=ETD, eta="2026-10-01T17:30", duration_min=None)[0])
+    _require_eta(_derive_eta(etd=ETD, eta=None, duration_min=90)[0])
+
+
+def test_bentrok_jadwal_selalu_ditolak_dengan_pesan_jelas() -> None:
+    """Tidak ada lagi opsi "tetap simpan": skema job tidak menerima allow_conflict."""
+    from app.domain.job_conflicts import ConflictCheckResult
+    from app.modules.jobs.schemas import JobCreate, JobUpdate
+    from app.modules.jobs.service import BENTROK_JADWAL_MESSAGE, JobConflictError
+
+    err = JobConflictError(ConflictCheckResult(unit=[], driver=[], has_any=True))
+    assert err.status_code == 409
+    assert err.message == "Gagal! Ada bentrok jadwal. Silakan dicek kembali."
+    assert err.message == BENTROK_JADWAL_MESSAGE
+    assert "allow_conflict" not in JobCreate.model_fields
+    assert "allow_conflict" not in JobUpdate.model_fields

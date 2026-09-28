@@ -28,6 +28,10 @@ interface Props {
     tracksolid_share_link: string | null;
   } | null;
   driver: { nama: string; no_hp: string } | null;
+  /** Unloading sudah tuntas → pengiriman selesai bagi customer. */
+  selesai?: boolean;
+  /** Batas link bisa dibuka (ISO), unloading tuntas + 24 jam. */
+  berlakuSampai?: string | null;
 }
 
 type StatusInfo = { title: string; body: string; color: string; bg: string };
@@ -86,7 +90,10 @@ function driverInitials(nama: string) {
     .toUpperCase();
 }
 
-export function CustomerTrackingView({ job, unit, driver }: Props) {
+export function CustomerTrackingView({ job: jobAsli, unit, driver, selesai = false, berlakuSampai }: Props) {
+  // Setelah unloading tuntas, status internal (pool / validasi) disembunyikan:
+  // customer melihat "Selesai", peta berhenti memantau posisi truk.
+  const job = selesai && jobAsli.status !== "cancelled" ? { ...jobAsli, status: "selesai" as const } : jobAsli;
   const step = customerStep(job.status) as keyof typeof STATUS_INFO;
   const si = STATUS_INFO[step] ?? STATUS_INFO.ditugaskan;
   const loadingPhotos = (job.photos ?? []).filter((p) => p.type === "loading");
@@ -162,7 +169,7 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
                 animation: "pulse 1.5s infinite"
               }}
             />
-            LIVE
+            {selesai ? "SELESAI" : "LIVE"}
           </div>
         </div>
       </div>
@@ -229,7 +236,12 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
           >
             {si.body}
           </div>
-          {job.eta && (
+          {selesai && berlakuSampai && (
+            <div className="caption" style={{ marginTop: 8, fontSize: 11.5 }}>
+              Link ini bisa dibuka sampai {formatDateTime(berlakuSampai)} WIB.
+            </div>
+          )}
+          {job.eta && !selesai && (
             <div
               style={{
                 marginTop: 14,
@@ -314,13 +326,13 @@ export function CustomerTrackingView({ job, unit, driver }: Props) {
             >
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
-                  Lokasi real-time
+                  {selesai ? "Rute pengiriman" : "Lokasi real-time"}
                 </div>
                 <div className="caption" style={{ fontSize: 10.5 }}>
-                  TrackSolid · update tiap 30 detik
+                  {selesai ? "Pengiriman selesai — posisi unit tidak lagi dipantau" : "TrackSolid · update tiap 30 detik"}
                 </div>
               </div>
-              {unit?.tracksolid_share_link && (
+              {unit?.tracksolid_share_link && !selesai && (
                 <a
                   href={unit.tracksolid_share_link}
                   target="_blank"

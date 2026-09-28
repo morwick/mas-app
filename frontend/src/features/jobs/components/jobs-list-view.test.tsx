@@ -1,8 +1,9 @@
 /**
  * Daftar job dibuka dari "Total job" di menu Customer: filter customer
- * terpasang dan tab "Semua" terpilih, jadi jumlahnya sama dengan angka itu.
+ * terpasang dan kelompok "Aktif" terpilih, jadi jumlahnya sama dengan angka
+ * itu. Kelompok "Semua" tetap memuat job yang dibatalkan.
  */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import type { Customer, Job } from "@/types";
@@ -52,24 +53,60 @@ function tampil(props: { initialCustomerId?: string }) {
 }
 
 describe("daftar job", () => {
-  it("dari Total job customer: tab Semua terpilih, semua job customer itu tampil", () => {
+  function tombolTab(label: string): HTMLButtonElement {
+    const b = screen
+      .getAllByText(label)
+      .map((el) => el.closest("button"))
+      .find((x): x is HTMLButtonElement => x !== null);
+    if (!b) throw new Error(`tab ${label} tidak ada`);
+    return b;
+  }
+
+  it("dari Total job customer: kelompok Aktif, job dibatalkan tidak tampil", () => {
     tampil({ initialCustomerId: "c1" });
     expect(screen.getAllByText("JOB-1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("JOB-2").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("JOB-3").length).toBeGreaterThan(0);
+    expect(screen.queryByText("JOB-3")).toBeNull();
     expect(screen.queryByText("JOB-4")).toBeNull();
-    // Angka tab "Semua" = total job customer itu.
-    const tabSemua = screen
-      .getAllByText("Semua")
-      .map((el) => el.closest("button"))
-      .find((b): b is HTMLButtonElement => b !== null);
-    expect(tabSemua?.textContent).toContain("3");
+    // Angka "Aktif" = Total job customer itu; "Semua" tetap menghitung yang batal.
+    expect(tombolTab("Aktif").textContent).toContain("2");
+    expect(tombolTab("Semua").textContent).toContain("3");
   });
 
-  it("dibuka biasa dari menu Job: default tetap tab Aktif", () => {
+  it("kelompok Semua tetap menampilkan job dibatalkan", () => {
+    tampil({ initialCustomerId: "c1" });
+    fireEvent.click(tombolTab("Semua"));
+    expect(screen.getAllByText("JOB-3").length).toBeGreaterThan(0);
+  });
+
+  it("dibuka biasa dari menu Job: default menampilkan semua job", () => {
     tampil({});
-    expect(screen.getAllByText("JOB-1").length).toBeGreaterThan(0);
-    expect(screen.queryByText("JOB-2")).toBeNull();
+    for (const id of ["JOB-1", "JOB-2", "JOB-3", "JOB-4"]) {
+      expect(screen.getAllByText(id).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("kelompok Semua: filter tahap tidak muncul", () => {
+    tampil({});
+    expect(screen.queryByText("Semua status")).toBeNull();
+    expect(screen.queryByText("Dalam proses")).toBeNull();
+  });
+
+  it("filter tahap di kelompok Aktif: Selesai hanya menampilkan job selesai", () => {
+    tampil({});
+    fireEvent.click(tombolTab("Aktif"));
+    fireEvent.click(tombolTab("Selesai"));
+    expect(screen.getAllByText("JOB-2").length).toBeGreaterThan(0);
+    expect(screen.queryByText("JOB-1")).toBeNull();
+    expect(screen.queryByText("JOB-3")).toBeNull();
+  });
+
+  it("kelompok Dibatalkan: filter tahap disembunyikan", () => {
+    tampil({});
+    fireEvent.click(tombolTab("Dibatalkan"));
+    expect(screen.getAllByText("JOB-3").length).toBeGreaterThan(0);
+    expect(screen.queryByText("JOB-1")).toBeNull();
+    expect(screen.queryByText("Menunggu validasi")).toBeNull();
   });
 });
 
@@ -86,7 +123,12 @@ describe("tab dari tautan", () => {
   });
 
   it("?tab=ditugaskan (job belum dikonfirmasi, dari dashboard) hanya menampilkan job ditugaskan", () => {
-    const jobs = [job("7", "c1", "ditugaskan"), job("8", "c1", "diterima"), job("9", "c1", "ditugaskan")];
+    const jobs = [
+      job("7", "c1", "ditugaskan"),
+      job("8", "c1", "diterima"),
+      job("9", "c1", "ditugaskan"),
+      job("10", "c1", "cancelled")
+    ];
     render(
       <MemoryRouter>
         <JobsListView jobs={jobs} customers={CUSTOMERS} unitMap={{}} driverMap={{}} initialTab="ditugaskan" />
@@ -95,5 +137,6 @@ describe("tab dari tautan", () => {
     expect(screen.getAllByText("JOB-7").length).toBeGreaterThan(0);
     expect(screen.getAllByText("JOB-9").length).toBeGreaterThan(0);
     expect(screen.queryByText("JOB-8")).toBeNull();
+    expect(screen.queryByText("JOB-10")).toBeNull();
   });
 });

@@ -26,10 +26,30 @@ import { UangJalanPendingBadge } from "./uang-jalan-pending-badge";
 import { TagihanJobInfo } from "./tagihan-job-info";
 import { PageHeader } from "@/components/ui/page-header";
 
-// "ditugaskan" = sudah ditugaskan tapi driver belum menekan Terima Job.
-export type TabKey = "semua" | "aktif" | "ditugaskan" | "validasi" | "selesai" | "cancelled";
-export const TAB_JOB: readonly TabKey[] = ["semua", "aktif", "ditugaskan", "validasi", "selesai", "cancelled"];
-const activeStatuses: JobStatus[] = ACTIVE_JOB_STATUSES;
+/**
+ * Filter dua tingkat:
+ * - Kelompok: Semua | Aktif (= semua kecuali dibatalkan) | Dibatalkan.
+ * - Tahap (hanya untuk Aktif): Ditugaskan (driver belum menekan Terima
+ *   Job) | Dalam proses | Menunggu validasi | Selesai.
+ */
+export type KelompokJob = "semua" | "aktif" | "cancelled";
+export type TahapJob = "semua" | "ditugaskan" | "proses" | "validasi" | "selesai";
+
+const TAHAP_STATUS: Record<Exclude<TahapJob, "semua">, JobStatus[]> = {
+  ditugaskan: ["menunggu_pickup", "ditugaskan"],
+  proses: ["diterima", "loading", "dalam_perjalanan", "unloading", "serah_terima_pool"],
+  validasi: ["menunggu_validasi"],
+  selesai: ["selesai"]
+};
+
+/** Nilai `?tab=` yang dikenali (dashboard memakai tab=ditugaskan / tab=validasi). */
+export const TAB_JOB = ["semua", "aktif", "cancelled", "ditugaskan", "proses", "validasi", "selesai"] as const;
+export type TabKey = (typeof TAB_JOB)[number];
+
+function filterDariTab(tab: TabKey): { kelompok: KelompokJob; tahap: TahapJob } {
+  if (tab === "semua" || tab === "aktif" || tab === "cancelled") return { kelompok: tab, tahap: "semua" };
+  return { kelompok: "aktif", tahap: tab };
+}
 
 interface Props {
   jobs: Job[];
@@ -38,7 +58,7 @@ interface Props {
   driverMap: Record<string, string>;
   /** Datang dari query string (mis. diklik dari kolom "Total job" di menu Customer). */
   initialCustomerId?: string;
-  /** Tab awal dari query string (?tab=semua|aktif|validasi|selesai|cancelled). */
+  /** Filter awal dari query string (?tab=semua|aktif|cancelled|ditugaskan|proses|validasi|selesai). */
   initialTab?: TabKey;
 }
 
@@ -101,10 +121,11 @@ export function JobsListView({
   initialCustomerId,
   initialTab
 }: Props) {
-  // Dari "Total job" di menu Customer → tampilkan semua job customer itu,
-  // supaya jumlahnya sama dengan angka yang diklik.
-  const tabAwal: TabKey = initialTab ?? (initialCustomerId ? "semua" : "aktif");
-  const [tab, setTab] = useState<TabKey>(tabAwal);
+  // Default: semua job. Dari "Total job" di menu Customer → kelompok Aktif (tanpa
+  // yang dibatalkan), supaya jumlahnya sama dengan angka yang diklik.
+  const tabAwal: TabKey = initialTab ?? (initialCustomerId ? "aktif" : "semua");
+  const [kelompok, setKelompok] = useState<KelompokJob>(() => filterDariTab(tabAwal).kelompok);
+  const [tahap, setTahap] = useState<TahapJob>(() => filterDariTab(tabAwal).tahap);
   const [q, setQ] = useState("");
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
 
@@ -112,19 +133,26 @@ export function JobsListView({
   // (mis. dari kolom "Total job" di menu Customer) tanpa remount komponen.
   useEffect(() => {
     setCustomerId(initialCustomerId ?? "");
-    setTab(tabAwal);
+    setKelompok(filterDariTab(tabAwal).kelompok);
+    setTahap(filterDariTab(tabAwal).tahap);
   }, [initialCustomerId, tabAwal]);
 
-  // Angka tab mengikuti customer yang dipilih — angka "Semua" = "Total job" di menu Customer.
+  // Angka mengikuti customer yang dipilih — angka "Aktif" = "Total job" di menu Customer.
+  // Angka tahap dihitung dari job Aktif (filter tahap hanya muncul di kelompok Aktif).
   const counts = useMemo(() => {
     const dasar = customerId ? jobs.filter((j) => j.customer_id === customerId) : jobs;
+    const perKelompok = dasar.filter((j) => j.status !== "cancelled");
+    const hitung = (t: Exclude<TahapJob, "semua">) =>
+      perKelompok.filter((j) => TAHAP_STATUS[t].includes(j.status)).length;
     return {
       semua: dasar.length,
-      aktif: dasar.filter((j) => activeStatuses.includes(j.status)).length,
-      ditugaskan: dasar.filter((j) => j.status === "ditugaskan").length,
-      validasi: dasar.filter((j) => j.status === "menunggu_validasi").length,
-      selesai: dasar.filter((j) => j.status === "selesai").length,
-      cancelled: dasar.filter((j) => j.status === "cancelled").length
+      aktif: dasar.filter((j) => j.status !== "cancelled").length,
+      cancelled: dasar.filter((j) => j.status === "cancelled").length,
+      tahapSemua: perKelompok.length,
+      ditugaskan: hitung("ditugaskan"),
+      proses: hitung("proses"),
+      validasi: hitung("validasi"),
+      selesai: hitung("selesai")
     };
   }, [jobs, customerId]);
 
@@ -142,11 +170,10 @@ export function JobsListView({
 
   const filtered = useMemo(() => {
     return jobs.filter((j) => {
-      if (tab === "aktif" && !activeStatuses.includes(j.status)) return false;
-      if (tab === "ditugaskan" && j.status !== "ditugaskan") return false;
-      if (tab === "validasi" && j.status !== "menunggu_validasi") return false;
-      if (tab === "selesai" && j.status !== "selesai") return false;
-      if (tab === "cancelled" && j.status !== "cancelled") return false;
+      if (kelompok === "aktif" && j.status === "cancelled") return false;
+      if (kelompok === "cancelled" && j.status !== "cancelled") return false;
+      if (kelompok === "aktif" && tahap !== "semua" && !TAHAP_STATUS[tahap].includes(j.status))
+        return false;
       if (customerId && j.customer_id !== customerId) return false;
       if (q) {
         const t = q.toLowerCase();
@@ -160,9 +187,9 @@ export function JobsListView({
       }
       return true;
     });
-  }, [jobs, tab, q, customerId]);
+  }, [jobs, kelompok, tahap, q, customerId]);
 
-  const pg = usePagination(filtered, { resetKey: `${tab}|${q}|${customerId}` });
+  const pg = usePagination(filtered, { resetKey: `${kelompok}|${tahap}|${q}|${customerId}` });
 
   return (
     <div className="flex flex-col gap-4">
@@ -180,20 +207,39 @@ export function JobsListView({
           flexWrap: "wrap"
         }}
       >
-        <div className="overflow-x-auto scrollbar-thin" style={{ maxWidth: "100%" }}>
-          <Tabs
-            variant="pill"
-            value={tab}
-            onChange={(k) => setTab(k as TabKey)}
-            items={[
-              { key: "semua", label: "Semua", count: counts.semua },
-              { key: "aktif", label: "Aktif", count: counts.aktif },
-              { key: "ditugaskan", label: "Ditugaskan", count: counts.ditugaskan },
-              { key: "validasi", label: "Menunggu validasi", count: counts.validasi },
-              { key: "selesai", label: "Selesai", count: counts.selesai },
-              { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
-            ]}
-          />
+        <div className="flex flex-col gap-2" style={{ maxWidth: "100%" }}>
+          <div className="overflow-x-auto scrollbar-thin" style={{ maxWidth: "100%" }}>
+            <Tabs
+              variant="pill"
+              value={kelompok}
+              onChange={(k) => {
+                setKelompok(k as KelompokJob);
+                // Filter tahap hanya milik kelompok Aktif — mulai lagi dari "Semua status".
+                setTahap("semua");
+              }}
+              items={[
+                { key: "semua", label: "Semua", count: counts.semua },
+                { key: "aktif", label: "Aktif", count: counts.aktif },
+                { key: "cancelled", label: "Dibatalkan", count: counts.cancelled }
+              ]}
+            />
+          </div>
+          {kelompok === "aktif" && (
+            <div className="overflow-x-auto scrollbar-thin" style={{ maxWidth: "100%" }}>
+              <Tabs
+                variant="pill"
+                value={tahap}
+                onChange={(k) => setTahap(k as TahapJob)}
+                items={[
+                  { key: "semua", label: "Semua status", count: counts.tahapSemua },
+                  { key: "ditugaskan", label: "Ditugaskan", count: counts.ditugaskan },
+                  { key: "proses", label: "Dalam proses", count: counts.proses },
+                  { key: "validasi", label: "Menunggu validasi", count: counts.validasi },
+                  { key: "selesai", label: "Selesai", count: counts.selesai }
+                ]}
+              />
+            </div>
+          )}
         </div>
         <div className="toolbar" style={{ flex: 1, justifyContent: "flex-end" }}>
           <div className="toolbar-search">
@@ -236,25 +282,27 @@ export function JobsListView({
           <EmptyState
             icon={PackageCheck}
             title={
-              tab === "semua"
-                ? "Belum ada job"
-                : tab === "aktif"
-                ? "Belum ada job aktif"
-                : tab === "ditugaskan"
+              kelompok === "cancelled"
+                ? "Belum ada job dibatalkan"
+                : tahap === "ditugaskan"
                 ? "Tidak ada job yang menunggu konfirmasi driver"
-                : tab === "validasi"
+                : tahap === "proses"
+                ? "Tidak ada job yang sedang berjalan"
+                : tahap === "validasi"
                 ? "Belum ada job menunggu validasi"
-                : tab === "selesai"
-                  ? "Belum ada job selesai"
-                  : "Belum ada job dibatalkan"
+                : tahap === "selesai"
+                ? "Belum ada job selesai"
+                : kelompok === "aktif"
+                ? "Belum ada job aktif"
+                : "Belum ada job"
             }
             description={
-              tab === "aktif"
+              kelompok !== "cancelled" && tahap === "semua"
                 ? "Buat job baru untuk mulai mencatat pengiriman."
                 : undefined
             }
             action={
-              tab === "aktif" ? (
+              kelompok !== "cancelled" && tahap === "semua" ? (
                 <Link to="/jobs/new">
                   <Button
                     leftIcon={<Plus style={{ width: 16, height: 16 }} />}
@@ -392,7 +440,7 @@ export function JobsListView({
                           ? driverNama.split(" ").slice(0, 2).join(" ")
                           : "—"}
                         {/* Job aktif yang belum dibuka driver di portal. */}
-                        {activeStatuses.includes(j.status) && !j.accepted_at && (
+                        {ACTIVE_JOB_STATUSES.includes(j.status) && !j.accepted_at && (
                           <span
                             title="Belum dikonfirmasi driver"
                             style={{ display: "inline-flex", color: "#B45309" }}

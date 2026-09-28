@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -256,20 +257,20 @@ export function UnitTrailerFormModal({
               <Input value={form.kirNomor} onChange={(e) => set("kirNomor", e.target.value)} />
             </Field>
             <Field label="KIR berlaku sampai">
-              <Input
-                type="date"
+              <DateInput
                 value={form.kirBerlaku}
-                onChange={(e) => set("kirBerlaku", e.target.value)}
+                onChange={(v) => set("kirBerlaku", v)}
+                clearable
               />
             </Field>
             <Field label="Nomor SRUT" hint="Surat Registrasi Uji Tipe">
               <Input value={form.srutNomor} onChange={(e) => set("srutNomor", e.target.value)} />
             </Field>
             <Field label="Tanggal SRUT">
-              <Input
-                type="date"
+              <DateInput
                 value={form.srutTanggal}
-                onChange={(e) => set("srutTanggal", e.target.value)}
+                onChange={(v) => set("srutTanggal", v)}
+                clearable
               />
             </Field>
           </div>

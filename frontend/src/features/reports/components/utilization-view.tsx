@@ -1,4 +1,5 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import {
   BarChart3,
   Calendar,
@@ -32,6 +33,8 @@ export function UtilizationView({
   const navigate = useNavigate();
   const [sp] = useSearchParams();
   const toast = useToast();
+  // rangeEnd eksklusif (00:00 WIB hari berikutnya) — tanggal terakhir yang tampil mundur 1 ms.
+  const akhirTampil = new Date(new Date(rangeEnd).getTime() - 1).toISOString();
 
   function updateParam(key: string, value: string) {
     const params = new URLSearchParams(sp.toString());
@@ -74,7 +77,7 @@ export function UtilizationView({
         "Hari Perbaikan": Number(r.hari_perbaikan),
         "% Utilisasi": Number(r.persentase_utilisasi)
       })),
-      `utilisasi-${formatDate(rangeStart)}-sd-${formatDate(rangeEnd)}.xlsx`,
+      `utilisasi-${formatDate(rangeStart)}-sd-${formatDate(akhirTampil)}.xlsx`,
       "Utilisasi Armada"
     );
     toast.success("File Excel berhasil di-download");
@@ -105,18 +108,16 @@ export function UtilizationView({
           </Field>
           {period === "custom" && (
             <>
-              <input
-                type="date"
-                defaultValue={from}
-                onBlur={(e) => updateParam("from", e.target.value)}
-                className="input"
+              <DateInput
+                value={from ?? ""}
+                onChange={(v) => updateParam("from", v)}
+                aria-label="Dari tanggal"
                 style={{ width: 160, height: 36 }}
               />
-              <input
-                type="date"
-                defaultValue={to}
-                onBlur={(e) => updateParam("to", e.target.value)}
-                className="input"
+              <DateInput
+                value={to ?? ""}
+                onChange={(v) => updateParam("to", v)}
+                aria-label="Sampai tanggal"
                 style={{ width: 160, height: 36 }}
               />
             </>
@@ -142,14 +143,10 @@ export function UtilizationView({
       >
         <KpiCard
           label="Periode"
-          value={`${formatDate(rangeStart)} - ${formatDate(rangeEnd)}`}
-          sub={`${
-            Math.round(
-              (new Date(rangeEnd).getTime() -
-                new Date(rangeStart).getTime()) /
-                86400000
-            ) + 1
-          } hari`}
+          value={`${formatDate(rangeStart)} - ${formatDate(akhirTampil)}`}
+          sub={`${Math.ceil(
+            (new Date(rangeEnd).getTime() - new Date(rangeStart).getTime()) / 86400000
+          )} hari`}
           icon={<Calendar style={{ width: 13, height: 13 }} />}
         />
         <KpiCard

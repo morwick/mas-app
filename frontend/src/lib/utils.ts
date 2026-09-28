@@ -5,33 +5,56 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Zona waktu aplikasi: semua isian & tampilan tanggal-jam memakai WIB (UTC+7). */
+export const TZ_WIB = "Asia/Jakarta";
+const OFFSET_WIB_MENIT = 7 * 60;
+
 /**
- * ISO (dari server, UTC) → nilai `<input type="datetime-local">`
- * ("YYYY-MM-DDTHH:mm") di jam lokal browser. Tanpa argumen: waktu sekarang.
+ * ISO dari server → nilai isian tanggal-jam ("YYYY-MM-DDTHH:mm") dalam jam WIB,
+ * tidak tergantung zona waktu komputer pengguna. Tanpa argumen: waktu sekarang.
  */
 export function isoToLocalInput(iso?: string | null): string {
   if (iso === null) return "";
   const d = iso ? new Date(iso) : new Date();
   if (Number.isNaN(d.getTime())) return "";
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  return new Date(d.getTime() + OFFSET_WIB_MENIT * 60000).toISOString().slice(0, 16);
 }
 
 /**
- * Nilai `<input type="datetime-local">` (jam lokal browser, tanpa zona) → ISO
- * dengan offset zona browser, mis. "2026-09-26T10:30:00+07:00".
+ * Nilai isian tanggal-jam (jam WIB, tanpa zona) → ISO dengan offset WIB,
+ * mis. "2026-09-26T10:30:00+07:00".
  *
  * Tanpa offset, server menganggap jamnya UTC sehingga tersimpan 7 jam
- * bergeser. Bagian tanggalnya sengaja tetap tanggal lokal karena server
+ * bergeser. Bagian tanggalnya sengaja tetap tanggal WIB karena server
  * memakainya untuk cek "tanggal sudah lewat".
  */
 export function localInputToIso(value: string): string {
   if (!value) return value;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  const menit = -d.getTimezoneOffset();
-  const tanda = menit >= 0 ? "+" : "-";
-  const pad = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
-  return `${value.slice(0, 16)}:00${tanda}${pad(menit / 60)}:${pad(menit % 60)}`;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value;
+  return `${value.slice(0, 16)}:00+07:00`;
+}
+
+/**
+ * Tanggal hari ini di WIB ("YYYY-MM-DD"). Jangan pakai
+ * `new Date().toISOString().slice(0, 10)` — itu tanggal UTC, sehingga sebelum
+ * pukul 07.00 WIB hasilnya masih tanggal kemarin.
+ */
+export function hariIniWIB(now: Date = new Date()): string {
+  return isoToLocalInput(now.toISOString()).slice(0, 10);
+}
+
+/** "YYYY-MM-DD" + n hari (boleh negatif) — aritmetika kalender murni, bebas zona waktu. */
+export function tambahHari(tanggal: string, n: number): string {
+  const d = new Date(`${tanggal.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Nilai isian tanggal-jam WIB ("YYYY-MM-DDTHH:mm") → Date; null bila tidak valid. */
+export function localInputToDate(value: string): Date | null {
+  if (!value) return null;
+  const d = new Date(localInputToIso(value));
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export function formatRupiah(value: number) {
@@ -50,6 +73,7 @@ export function formatDateTime(date: Date | string | undefined | null) {
   if (!date) return "-";
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("id-ID", {
+    timeZone: TZ_WIB,
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -59,7 +83,7 @@ export function formatDateTime(date: Date | string | undefined | null) {
 }
 
 const WIB_PARTS = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Jakarta",
+  timeZone: TZ_WIB,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -88,6 +112,7 @@ export function formatDate(date: Date | string | undefined | null) {
   if (!date) return "-";
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("id-ID", {
+    timeZone: TZ_WIB,
     day: "2-digit",
     month: "short",
     year: "numeric"
@@ -98,6 +123,7 @@ export function formatTime(date: Date | string | undefined | null) {
   if (!date) return "-";
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("id-ID", {
+    timeZone: TZ_WIB,
     hour: "2-digit",
     minute: "2-digit"
   }).format(d);

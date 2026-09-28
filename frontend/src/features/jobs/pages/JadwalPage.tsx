@@ -1,4 +1,5 @@
 import { useSearchParams } from "react-router-dom";
+import { hariIniWIB } from "@/lib/utils";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useUnits } from "@/features/units/queries";
 import { bukanArmada } from "@/lib/unit-status";
@@ -23,7 +24,7 @@ function tambahHari(iso: string, n: number): string {
 
 export function JadwalPage() {
   const [params] = useSearchParams();
-  const weekStart = seninDari(params.get("start") || new Date().toISOString().slice(0, 10));
+  const weekStart = seninDari(params.get("start") || hariIniWIB());
   const weekEnd = tambahHari(weekStart, 6);
 
   const units = useUnits();

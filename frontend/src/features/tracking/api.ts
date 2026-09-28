@@ -14,6 +14,13 @@ export interface PublicTracking {
     tracksolid_share_link: string | null;
   } | null;
   driver: { nama: string; no_hp: string } | null;
+  /**
+   * Bagi customer job selesai begitu driver menuntaskan unloading (4 foto sisi
+   * kendaraan + surat jalan) — status internal sesudahnya tidak ditampilkan.
+   */
+  selesai: boolean;
+  /** Batas link bisa dibuka (ISO): unloading tuntas + 24 jam. Null = belum selesai. */
+  berlaku_sampai: string | null;
 }
 
 /** Lokasi semua unit aktif ber-IMEI (admin). */

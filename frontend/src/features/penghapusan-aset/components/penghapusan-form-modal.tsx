@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { hariIniWIB } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -21,7 +23,7 @@ interface Props {
 }
 
 function hariIniWib(): string {
-  return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+  return hariIniWIB();
 }
 
 function labelStatus(status: string): string {
@@ -205,10 +207,9 @@ export function PenghapusanFormModal({ open, onClose, penghapusan, onSubmit, bus
         )}
 
         <Field label="Tanggal penghapusan" required>
-          <Input
-            type="date"
+          <DateInput
             value={form.tanggal}
-            onChange={(e) => set("tanggal", e.target.value)}
+            onChange={(v) => set("tanggal", v)}
             error={errors.tanggal}
           />
         </Field>

@@ -38,11 +38,6 @@ export interface JobInput {
   quotation_item_id?: string | null;
 }
 
-export interface MutationOptions {
-  /** True bila admin sudah konfirmasi tetap simpan meski ada bentrok. */
-  allowConflict?: boolean;
-}
-
 /** Hasil mutasi job — membawa `conflicts` saat server menolak karena bentrok (409). */
 export type JobMutationResult<T = void> =
   | { ok: true; data: T }
@@ -72,9 +67,14 @@ export const checkJobConflicts = (input: {
   exclude_job_id?: string;
 }) => api.post<ConflictCheckResult>("/jobs/check-conflicts", jadwalKeIso(input));
 
-/** Server membalas 409 + `conflicts` bila jadwal bentrok dan allowConflict false. */
+/**
+ * Server membalas 409 + `conflicts` bila jadwal bentrok — job tidak disimpan.
+ * Daftar job disegarkan supaya peringatan bentrok di form ikut muncul bila
+ * datanya tadi sudah basi.
+ */
 function toJobResult<T>(err: unknown): JobMutationResult<T> {
   if (err instanceof ApiError && err.status === 409 && err.body.conflicts) {
+    void queryClient.invalidateQueries({ queryKey: ["jobs"] });
     const raw = err.body.conflicts as {
       unit: ConflictCheckResult["unit"];
       driver: ConflictCheckResult["driver"];
@@ -99,28 +99,26 @@ function jadwalKeIso<T extends Partial<Pick<JobInput, "etd" | "eta">>>(input: T)
 }
 
 export async function createJob(
-  input: JobInput,
-  opts?: MutationOptions
+  input: JobInput
 ): Promise<JobMutationResult<{ id: string; job_number: string; share_token: string }>> {
   try {
-    const data = await api.post<{ id: string; job_number: string; share_token: string }>("/jobs", {
-      ...jadwalKeIso(input),
-      allow_conflict: !!opts?.allowConflict
-    });
-    await queryClient.invalidateQueries();
+    const data = await api.post<{ id: string; job_number: string; share_token: string }>(
+      "/jobs",
+      jadwalKeIso(input)
+    );
+    // Sengaja tidak di-await: form langsung pindah halaman. Bila ditunggu, daftar
+    // job aktif sudah memuat job yang baru tersimpan sementara form masih tampil,
+    // sehingga form mengira isiannya bentrok dengan job itu sendiri.
+    void queryClient.invalidateQueries();
     return { ok: true, data };
   } catch (err) {
     return toJobResult(err);
   }
 }
 
-export async function updateJob(
-  id: string,
-  input: Partial<JobInput>,
-  opts?: MutationOptions
-): Promise<JobMutationResult> {
+export async function updateJob(id: string, input: Partial<JobInput>): Promise<JobMutationResult> {
   try {
-    await api.patch(`/jobs/${id}`, { ...jadwalKeIso(input), allow_conflict: !!opts?.allowConflict });
+    await api.patch(`/jobs/${id}`, jadwalKeIso(input));
     await queryClient.invalidateQueries();
     return { ok: true, data: undefined };
   } catch (err) {
@@ -205,3 +203,28 @@ export function uploadJobPhoto(
 export function deleteJobPhoto(jobId: string, photoId: string): Promise<ActionResult<unknown>> {
   return mutate(api.delete(`/jobs/${jobId}/photos/${photoId}`));
 }
+
+export interface EstimasiRute {
+  distance_km: number;
+  duration_min: number;
+  /** False bila rute truk tidak ditemukan dan durasi dari profil mobil. */
+  truk: boolean;
+  /** Penyeberangan kapal ferry — sudah termasuk di jarak & durasi total. */
+  laut: SegmenLaut[];
+}
+
+export interface SegmenLaut {
+  /** Nama lintasan dari data peta, mis. "Surabaya - Banjarmasin"; bisa kosong. */
+  nama: string | null;
+  distance_km: number;
+  duration_min: number;
+}
+
+/** Jarak & durasi perjalanan truk antara dua titik (OpenRouteService). */
+export const estimasiRute = (asal: { lat: number; lng: number }, tujuan: { lat: number; lng: number }) =>
+  api.get<EstimasiRute>("/geo/estimasi-rute", {
+    asal_lat: asal.lat,
+    asal_lng: asal.lng,
+    tujuan_lat: tujuan.lat,
+    tujuan_lng: tujuan.lng
+  });

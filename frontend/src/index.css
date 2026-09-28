@@ -338,6 +338,12 @@ select {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 3px var(--brand-primary-ring);
 }
+.textarea:disabled {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+  cursor: not-allowed;
+}
 .textarea {
   height: auto;
   padding: 10px 12px;

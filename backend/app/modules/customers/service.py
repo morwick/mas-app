@@ -98,7 +98,8 @@ class CustomerService:
         return _to_customer(row)
 
     async def job_counts(self) -> dict[str, int]:
-        res = await self._db.table("jobs").select("customer_id").execute()
+        # Job yang dibatalkan tidak ikut dihitung.
+        res = await self._db.table("jobs").select("customer_id").neq("status_job", "cancelled").execute()
         return dict(Counter(r["customer_id"] for r in rows(res)))
 
     async def quotation_counts(self) -> dict[str, int]:

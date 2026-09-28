@@ -139,8 +139,8 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
               <tr>
                 <th>Nama perusahaan</th>
                 <th>Alamat</th>
-                <th style={{ width: 110 }}>Total job</th>
                 <th style={{ width: 130 }}>Jumlah penawaran</th>
+                <th style={{ width: 110 }}>Total job</th>
                 <th style={{ width: 100 }}>Status</th>
                 <th style={{ width: 50 }}></th>
               </tr>
@@ -210,13 +210,13 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
                     )}
                   </td>
                   <td>
-                    <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
-                  </td>
-                  <td>
                     <CountLink
                       to={`/quotations?customer_id=${c.id}`}
                       count={quotationCounts[c.id] ?? 0}
                     />
+                  </td>
+                  <td>
+                    <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
                   </td>
                   <td>
                     {c.is_active ? (
@@ -321,18 +321,18 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
                   <span style={{ display: "flex", gap: 12 }}>
                     <span>
                       <span style={{ color: "var(--text-tertiary)" }}>
-                        Job:{" "}
-                      </span>
-                      <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
-                    </span>
-                    <span>
-                      <span style={{ color: "var(--text-tertiary)" }}>
                         Penawaran:{" "}
                       </span>
                       <CountLink
                         to={`/quotations?customer_id=${c.id}`}
                         count={quotationCounts[c.id] ?? 0}
                       />
+                    </span>
+                    <span>
+                      <span style={{ color: "var(--text-tertiary)" }}>
+                        Job:{" "}
+                      </span>
+                      <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
                     </span>
                   </span>
                   <ChevronRight

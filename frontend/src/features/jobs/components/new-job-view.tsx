@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { Info, Plus, Sparkles, TriangleAlert, Truck } from "lucide-react";
 import { Input, Textarea, Field } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DateTimeInput } from "@/components/ui/datetime-input";
 import { useToast } from "@/components/ui/toast";
 import { NewCustomerInline } from "@/features/jobs/components/new-customer-inline";
 import {
@@ -14,6 +14,11 @@ import {
 } from "@/features/jobs/components/conflict-warning";
 import { JobStepper } from "@/features/jobs/components/job-stepper";
 import {
+  ETA_TIDAK_TERHITUNG_MESSAGE,
+  EstimasiRuteInfo,
+  useEstimasiRute
+} from "@/features/jobs/components/estimasi-rute";
+import {
   LocationPicker,
   type LocationPickerAvailableUnit
 } from "@/features/jobs/components/location-picker";
@@ -21,6 +26,7 @@ import { createJob } from "@/features/jobs/api";
 import { fleetLocations, unitLocation } from "@/features/tracking/api";
 import { createCustomer } from "@/features/customers/api";
 import {
+  BENTROK_JADWAL_MESSAGE,
   findJobConflicts,
   type ConflictCheckResult
 } from "@/lib/job-conflicts";
@@ -127,8 +133,8 @@ export function NewJobView({
     catatan: prefill?.catatan ?? ""
   });
   const [error, setError] = useState<Record<string, string>>({});
-  const [confirmConflict, setConfirmConflict] =
-    useState<ConflictCheckResult | null>(null);
+  // True begitu job berhasil disimpan, sampai halaman berpindah.
+  const tersimpanRef = useRef(false);
   const [unitLocations, setUnitLocations] = useState<
     Record<string, { lat: number; lng: number } | null>
   >({});
@@ -167,6 +173,11 @@ export function NewJobView({
     }
     return out;
   }, [standbyUnits, unitLocations]);
+
+  const estimasi = useEstimasiRute(
+    { lat: form.asal_lat, lng: form.asal_lng },
+    { lat: form.tujuan_lat, lng: form.tujuan_lng }
+  );
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -303,8 +314,9 @@ export function NewJobView({
     form.etd &&
     Number(form.uang_jalan_pagu) > 0;
 
-  async function doSubmit(allowConflict: boolean) {
+  async function doSubmit() {
     setLoading(true);
+    tersimpanRef.current = false;
     const res = await createJob(
       {
         ...form,
@@ -313,21 +325,16 @@ export function NewJobView({
         uang_jalan_pagu: Math.round(Number(form.uang_jalan_pagu)),
         quotation_id: prefill?.quotation_id ?? null,
         quotation_item_id: prefill?.quotation_item_id ?? null
-      },
-      { allowConflict }
+      }
     );
     setLoading(false);
     if (res.ok) {
+      tersimpanRef.current = true;
       toast.success("Job berhasil dibuat");
-      setConfirmConflict(null);
       navigate(`/jobs/${res.data.id}/confirmation`);
       return;
     }
-    if (res.conflicts) {
-      setConfirmConflict(res.conflicts);
-      return;
-    }
-    toast.error(res.error);
+    toast.error(res.conflicts ? BENTROK_JADWAL_MESSAGE : res.error);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -336,22 +343,33 @@ export function NewJobView({
     if (!form.customer_id) errs.customer_id = "Customer wajib dipilih";
     if (!form.pic_nama.trim()) errs.pic_nama = "PIC wajib diisi";
     if (!form.alat_diangkut.trim()) errs.alat_diangkut = "Alat wajib diisi";
-    if (!form.asal.trim()) errs.asal = "Lokasi asal wajib diisi";
-    if (!form.tujuan.trim()) errs.tujuan = "Lokasi tujuan wajib diisi";
+    // Lokasi wajib dipin di peta supaya koordinatnya ikut tersimpan; alamat di
+    // kotak teks tetap boleh dikoreksi setelah dipin.
+    if (form.asal_lat === null || form.asal_lng === null) errs.asal = "Pin lokasi asal di peta";
+    else if (!form.asal.trim()) errs.asal = "Alamat lokasi asal wajib diisi";
+    if (form.tujuan_lat === null || form.tujuan_lng === null) errs.tujuan = "Pin lokasi tujuan di peta";
+    else if (!form.tujuan.trim()) errs.tujuan = "Alamat lokasi tujuan wajib diisi";
     if (!form.unit_id) errs.unit_id = "Unit wajib dipilih";
     else if (trailer.isPending) errs.unit_trailer_id = "Tunggu, pilihan unit trailer sedang dimuat";
     else if (trailerWajib && !form.unit_trailer_id) errs.unit_trailer_id = "Unit trailer wajib dipilih";
     if (!form.driver_id) errs.driver_id = "Driver wajib dipilih";
     if (!form.etd) errs.etd = "ETD wajib diisi";
     Object.assign(errs, validateSchedule(form.etd, form.eta));
+    // ETA kosong hanya boleh bila sistem bisa menghitungnya dari rute.
+    if (!form.eta && estimasi.isError) errs.eta = ETA_TIDAK_TERHITUNG_MESSAGE;
     //if (!(Number(form.uang_jalan_pagu) > 0)) errs.uang_jalan_pagu = "Uang jalan wajib diisi";
     if (!form.pic_no_hp.trim()) errs.pic_no_hp = "No HP PIC wajib diisi";
     else if (!/^(08|\+628)\d{7,12}$/.test(form.pic_no_hp.trim()))
       errs.pic_no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
     setError(errs);
     if (Object.keys(errs).length > 0) return;
+    // Bentrok jadwal tidak bisa di-"tetap simpan" — server juga menolaknya.
+    if (conflicts.hasAny) {
+      toast.error(BENTROK_JADWAL_MESSAGE);
+      return;
+    }
 
-    await doSubmit(false);
+    await doSubmit();
   }
 
   return (
@@ -463,7 +481,8 @@ export function NewJobView({
                     asal_lng: v.lng
                   }))
                 }
-                placeholder="Alamat lengkap titik pickup"
+                placeholder="Lengkapi alamat titik pickup (nama gedung, nomor, dll.)"
+                wajibPin
                 error={error.asal}
                 availableUnits={mapUnits}
                 extra={{
@@ -493,11 +512,18 @@ export function NewJobView({
                     tujuan_lng: v.lng
                   }))
                 }
-                placeholder="Alamat lengkap titik drop"
+                placeholder="Lengkapi alamat titik drop (nama gedung, nomor, dll.)"
+                wajibPin
                 error={error.tujuan}
                 availableUnits={mapUnits}
               />
             </Field>
+            <EstimasiRuteInfo
+              asal={{ lat: form.asal_lat, lng: form.asal_lng }}
+              tujuan={{ lat: form.tujuan_lat, lng: form.tujuan_lng }}
+              etd={form.etd}
+              onPakaiEta={(eta) => set("eta", eta)}
+            />
           </div>
         </FormSection>
 
@@ -576,23 +602,22 @@ export function NewJobView({
               />
             </Field>
             <Field label="Tanggal & jam pickup (ETD)" required>
-              <Input
-                type="datetime-local"
+              <DateTimeInput
                 min={minEtd}
                 value={form.etd}
-                onChange={(e) => set("etd", e.target.value)}
+                onChange={(v) => set("etd", v)}
                 error={error.etd}
               />
             </Field>
             <Field
               label="Estimasi sampai (ETA)"
-              hint="Boleh dikosongkan — sistem menghitungnya dari durasi rute, asalkan lokasi asal & tujuan sudah dipin di peta."
+              hint="Boleh dikosongkan — sistem mengisinya dari ETD + estimasi durasi perjalanan truk."
             >
-              <Input
-                type="datetime-local"
+              <DateTimeInput
                 min={form.etd || minEtd}
                 value={form.eta}
-                onChange={(e) => set("eta", e.target.value)}
+                clearable
+                onChange={(v) => set("eta", v)}
                 error={error.eta}
               />
             </Field>
@@ -614,7 +639,9 @@ export function NewJobView({
               <ConflictCheckUnavailable onRetry={onRetryConflictCheck} />
             </div>
           ) : (
-            conflicts.hasAny && (
+            // Setelah tersimpan, job baru ikut masuk daftar job aktif dan akan
+            // "bentrok" dengan dirinya sendiri — peringatan tidak ditampilkan lagi.
+            conflicts.hasAny && !tersimpanRef.current && (
               <div style={{ marginTop: 12 }}>
                 <ConflictWarning conflicts={conflicts} />
               </div>
@@ -782,29 +809,6 @@ export function NewJobView({
         }}
       />
 
-      <ConfirmDialog
-        open={confirmConflict !== null}
-        onClose={() => setConfirmConflict(null)}
-        title="Tetap simpan meski ada bentrok jadwal?"
-        body={
-          confirmConflict && (
-            <div className="space-y-3 text-left">
-              <p>
-                Job ini bentrok dengan{" "}
-                {(confirmConflict.unit.length || 0) +
-                  (confirmConflict.driver.length || 0)}{" "}
-                job aktif lain. Pastikan Anda sudah mengkoordinasikan
-                penjadwalan secara manual sebelum simpan.
-              </p>
-              <ConflictWarning conflicts={confirmConflict} />
-            </div>
-          )
-        }
-        confirmText="Ya, tetap simpan"
-        variant="danger"
-        loading={loading}
-        onConfirm={() => doSubmit(true)}
-      />
 
       {/* Silence unused warnings */}
       <Info style={{ display: "none" }} />

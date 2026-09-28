@@ -27,7 +27,15 @@ export function CustomerTrackingPage() {
       return <Navigate to={`/track/${token}/expired`} replace />;
     return <PageError error={q.error} onRetry={q.refetch} />;
   }
-  return <CustomerTrackingView job={q.data.job} unit={q.data.unit} driver={q.data.driver} />;
+  return (
+    <CustomerTrackingView
+      job={q.data.job}
+      unit={q.data.unit}
+      driver={q.data.driver}
+      selesai={q.data.selesai}
+      berlakuSampai={q.data.berlaku_sampai}
+    />
+  );
 }
 
 export function TrackingExpiredPage() {
@@ -43,8 +51,8 @@ export function TrackingExpiredPage() {
           </div>
           <h1 className="text-[20px] font-medium text-text mt-4">Link tracking sudah berakhir</h1>
           <p className="mt-2 text-[13px] text-text-muted">
-            Pengiriman ini telah selesai lebih dari 24 jam yang lalu. Untuk info lebih lanjut,
-            silakan hubungi tim kami.
+            Link tracking hanya bisa dibuka sampai 24 jam setelah barang selesai diturunkan,
+            atau pengiriman ini dibatalkan. Untuk info lebih lanjut, silakan hubungi tim kami.
           </p>
           <div className="grid grid-cols-2 gap-2 mt-6">
             <a href="tel:+622112345678">

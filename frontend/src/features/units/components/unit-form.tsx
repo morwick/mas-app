@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import { Link } from "react-router-dom";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -239,10 +240,10 @@ export function UnitForm({
             />
           </Field>
           <Field label="STNK berlaku sampai">
-            <Input
-              type="date"
+            <DateInput
               value={form.stnk_berlaku_sampai}
-              onChange={(e) => set("stnk_berlaku_sampai", e.target.value)}
+              onChange={(v) => set("stnk_berlaku_sampai", v)}
+              clearable
             />
           </Field>
           <Field label="No KIR" hint="Uji berkala kendaraan">
@@ -253,17 +254,17 @@ export function UnitForm({
             />
           </Field>
           <Field label="KIR berlaku sampai">
-            <Input
-              type="date"
+            <DateInput
               value={form.kir_berlaku_sampai}
-              onChange={(e) => set("kir_berlaku_sampai", e.target.value)}
+              onChange={(v) => set("kir_berlaku_sampai", v)}
+              clearable
             />
           </Field>
           <Field label="Pajak jatuh tempo" className="sm:col-span-2">
-            <Input
-              type="date"
+            <DateInput
               value={form.pajak_berlaku_sampai}
-              onChange={(e) => set("pajak_berlaku_sampai", e.target.value)}
+              onChange={(v) => set("pajak_berlaku_sampai", v)}
+              clearable
             />
           </Field>
         </div>

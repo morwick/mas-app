@@ -3,6 +3,7 @@
 // defense-in-depth sebelum menyimpan.
 
 import { ACTIVE_JOB_STATUSES } from "@/lib/job-status";
+import { localInputToDate } from "@/lib/utils";
 import type { Job, JobStatus } from "@/types";
 
 export interface JobConflict {
@@ -22,6 +23,9 @@ export interface ConflictCheckResult {
   hasAny: boolean;
 }
 
+/** Pesan saat job ditolak karena bentrok jadwal (sama dengan pesan server). */
+export const BENTROK_JADWAL_MESSAGE = "Gagal! Ada bentrok jadwal. Silakan dicek kembali.";
+
 interface FindConflictsInput {
   unitId: string;
   driverId: string;
@@ -36,11 +40,17 @@ const ACTIVE_STATUSES: JobStatus[] = ACTIVE_JOB_STATUSES;
 /** ETA fallback 12 jam dari ETD bila eta tidak diisi. */
 const ETA_FALLBACK_HOURS = 12;
 
+/**
+ * Nilai form ("YYYY-MM-DDTHH:mm", jam WIB) atau ISO dari server → Date.
+ * Nilai form tidak membawa zona, jadi ditafsirkan sebagai WIB.
+ */
+function keDate(value: string): Date {
+  return (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) && localInputToDate(value)) || new Date(value);
+}
+
 function effectiveEnd(etd: string, eta: string | null | undefined): Date {
-  if (eta) return new Date(eta);
-  return new Date(
-    new Date(etd).getTime() + ETA_FALLBACK_HOURS * 60 * 60 * 1000
-  );
+  if (eta) return keDate(eta);
+  return new Date(keDate(etd).getTime() + ETA_FALLBACK_HOURS * 60 * 60 * 1000);
 }
 
 function rangesOverlap(
@@ -66,7 +76,7 @@ export function findJobConflicts(
     return { unit: [], driver: [], hasAny: false };
   }
 
-  const candidateStart = new Date(input.etd);
+  const candidateStart = keDate(input.etd);
   const candidateEnd = effectiveEnd(input.etd, input.eta ?? null);
 
   const unit: JobConflict[] = [];

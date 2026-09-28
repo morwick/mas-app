@@ -1,5 +1,6 @@
 import { useDeferredValue, useState } from "react";
 import { IdCard, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { FilterChips } from "@/components/ui/filter-chips";
@@ -314,11 +315,11 @@ export function KaryawanView() {
               />
             </Field>
             <Field label="Tanggal lahir">
-              <Input
-                type="date"
+              <DateInput
                 value={form.tanggalLahir}
                 max={hariIni()}
-                onChange={(e) => setForm((p) => (p ? { ...p, tanggalLahir: e.target.value } : p))}
+                onChange={(v) => setForm((p) => (p ? { ...p, tanggalLahir: v } : p))}
+                clearable
               />
             </Field>
             <Field label="Alamat">

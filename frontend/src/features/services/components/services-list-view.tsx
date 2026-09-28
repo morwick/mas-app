@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { TZ_WIB } from "@/lib/utils";
 import { ChevronRight, RefreshCw, Search, Truck, Wrench } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { ServiceStatusBadge } from "@/components/ui/badge";
@@ -513,7 +514,7 @@ function SyncIndicator({
       }}
       title={
         lastSyncAt
-          ? `Polling otomatis tiap 5 menit. Terakhir: ${lastSyncAt.toLocaleTimeString("id-ID")}`
+          ? `Polling otomatis tiap 5 menit. Terakhir: ${lastSyncAt.toLocaleTimeString("id-ID", { timeZone: TZ_WIB })} WIB`
           : "Polling otomatis tiap 5 menit"
       }
     >

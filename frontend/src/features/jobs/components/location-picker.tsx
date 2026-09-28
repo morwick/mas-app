@@ -41,6 +41,11 @@ interface Props {
   error?: string;
   extra?: LocationPickerExtra;
   availableUnits?: LocationPickerAvailableUnit[];
+  /**
+   * Kotak alamat terkunci sampai lokasi dipin di peta. Setelah dipin, alamat
+   * hasil pin boleh dilengkapi (nama gedung, nomor, dll.).
+   */
+  wajibPin?: boolean;
 }
 
 export function LocationPicker({
@@ -49,16 +54,24 @@ export function LocationPicker({
   placeholder,
   error,
   extra,
-  availableUnits
+  availableUnits,
+  wajibPin = false
 }: Props) {
   const [open, setOpen] = useState(false);
   const hasPin = value.lat !== null && value.lng !== null;
+  const terkunci = wajibPin && !hasPin;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <Textarea
         rows={2}
-        placeholder={placeholder ?? "Alamat lengkap"}
+        placeholder={
+          terkunci
+            ? "Pin lokasi di peta dulu — alamat terisi otomatis"
+            : placeholder ?? "Alamat lengkap"
+        }
+        disabled={terkunci}
+        title={terkunci ? "Pin lokasi di peta dulu" : undefined}
         value={value.address}
         onChange={(e) => onChange({ ...value, address: e.target.value })}
         error={error}

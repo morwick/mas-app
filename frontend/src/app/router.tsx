@@ -3,7 +3,7 @@
  * tautan yang sudah dibagikan (pelacakan pelanggan, portal driver) tetap hidup.
  */
 
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import { DriverLayout } from "./layouts/DriverLayout";
@@ -83,6 +83,12 @@ import {
   CustomerTrackingPage,
   TrackingExpiredPage
 } from "@/features/public-tracking/pages/TrackPages";
+
+/** `/jobs/:id/<apa pun>` lama → detail job. */
+export function KeDetailJob() {
+  const { id } = useParams();
+  return <Navigate to={`/jobs/${id}`} replace />;
+}
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/dashboard" replace /> },
@@ -179,7 +185,12 @@ export const router = createBrowserRouter([
             // Detail job: finance (dari tagihan) & operator (dari Pantau) hanya
             // melihat — semua tombol aksi disembunyikan.
             element: <RequireRole roles={["superadmin", "admin", "finance", "operator"]} />,
-            children: [{ path: "/jobs/:id", element: <JobDetailPage /> }]
+            children: [
+              { path: "/jobs/:id", element: <JobDetailPage /> },
+              // Tautan notifikasi lama "Job menunggu validasi" — panel validasi
+              // ada di detail job, jadi diarahkan ke sana (bukan 404).
+              { path: "/jobs/:id/validasi", element: <KeDetailJob /> }
+            ]
           },
 
           {

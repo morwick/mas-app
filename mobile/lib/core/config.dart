@@ -10,10 +10,15 @@ class AppConfig {
     defaultValue: 'http://10.0.2.2:8000',
   );
 
-  /// Ambang ketajaman (variance of Laplacian) di sisi aplikasi — hanya
-  /// peringatan (FR-PHOTO-04). Dikalibrasi ulang dengan foto lapangan.
-  static const double blurThresholdDefault = 60;
-  static const double blurThresholdSuratJalan = 120;
+  /// Deteksi buram (FR-PHOTO-04) — hanya peringatan, driver tetap boleh kirim.
+  /// Diukur sebagai lebar tepi (px) pada salinan selebar [blurAnalysisWidth];
+  /// foto dianggap buram bila lebar tepinya ≥ ambang. Kalibrasi awal dengan foto
+  /// truk/dokumen + goyangan buatan: goyangan sedang–berat terdeteksi semua,
+  /// ±6% foto tajam ikut ditandai. Surat jalan sedikit lebih ketat karena
+  /// tulisannya harus terbaca.
+  static const int blurAnalysisWidth = 1024;
+  static const double blurEdgeWidthDefault = 6.5;
+  static const double blurEdgeWidthSuratJalan = 6.0;
 
   /// Sisi pendek minimum foto (px).
   static const int minShortSidePx = 1280;

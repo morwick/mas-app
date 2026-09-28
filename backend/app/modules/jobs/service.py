@@ -11,7 +11,7 @@ from app.core.paging import Page, PageParams, apply_window, build_page, escape_l
 from app.core.pg import clean_text, first, num, num_or_none, rows, single
 from app.core.push import push_to_driver
 from app.core.soft_delete import AKTIF
-from app.core.timeutil import iso_utc, parse_date, parse_iso, today_wib
+from app.core.timeutil import add_days, iso_utc, parse_date, parse_iso, today_wib
 from app.core.transaksi import Transaksi
 from app.domain.job_conflicts import (
     ACTIVE_JOB_STATUSES,
@@ -69,13 +69,16 @@ def _to_ganti_truk(r: dict[str, Any]) -> GantiTrukEntry:
     )
 
 
+BENTROK_JADWAL_MESSAGE = "Gagal! Ada bentrok jadwal. Silakan dicek kembali."
+
+
 class JobConflictError(AppError):
-    """Bentrok jadwal — 409 dengan daftar job yang beririsan."""
+    """Bentrok jadwal — 409 dengan daftar job yang beririsan. Job tidak disimpan."""
 
     status_code = 409
 
     def __init__(self, conflicts: ConflictCheckResult) -> None:
-        super().__init__("Bentrok jadwal terdeteksi.", extra={"conflicts": conflicts.model_dump()})
+        super().__init__(BENTROK_JADWAL_MESSAGE, extra={"conflicts": conflicts.model_dump()})
         self.conflicts = conflicts
 
 
@@ -105,6 +108,22 @@ def _derive_eta(*, etd: str, eta: str | None, duration_min: float | None) -> tup
     if duration_min is None:
         return None, False
     return iso_utc(parse_iso(etd) + timedelta(minutes=duration_min)), True
+
+
+ETA_TIDAK_TERHITUNG_MESSAGE = (
+    "Gagal! Sistem tidak bisa menghitung ETA dari rute yang dipilih. Silakan isi ETA secara manual."
+)
+
+
+def _require_eta(eta_iso: str | None) -> None:
+    """ETA wajib ada: dari isian admin, atau dihitung dari durasi rute.
+
+    Bila rute tidak ditemukan (mis. beda pulau tanpa jalur ferry di data peta)
+    dan admin mengosongkan ETA, job ditolak — jadwal tanpa ETA membuat cek
+    bentrok unit/driver dan papan jadwal hanya menebak.
+    """
+    if not eta_iso:
+        raise ValidationError(ETA_TIDAK_TERHITUNG_MESSAGE)
 
 
 def _reject_eta_before_etd(etd: str, eta: str | None) -> None:
@@ -327,11 +346,13 @@ class JobService:
         res = await (
             active_children(self._db.table("jobs").select(JOB_SELECT), JOB_SELECT)
             .neq("status_job", "cancelled")
-            .lte("etd", f"{end}T23:59:59")
+            # Tanggal papan jadwal = tanggal WIB; tulis offset-nya supaya tidak
+            # bergantung pada zona waktu sesi database.
+            .lt("etd", f"{add_days(parse_date(end), 1).isoformat()}T00:00:00+07:00")
             .order("etd")
             .execute()
         )
-        start_dt = parse_iso(f"{start}T00:00:00")
+        start_dt = parse_iso(f"{start}T00:00:00+07:00")
         out: list[Job] = []
         for r in rows(res):
             job = to_job(r)
@@ -451,21 +472,22 @@ class JobService:
 
         quotation_id, quotation_item_id = await self._item_penawaran(payload)
 
-        if not payload.allow_conflict:
-            await self._reject_if_conflicting(
-                ConflictCheckRequest(
-                    unit_id=payload.unit_id,
-                    driver_id=payload.driver_id,
-                    etd=payload.etd,
-                    eta=payload.eta,
-                )
+        # Bentrok jadwal unit/driver selalu ditolak — tidak ada "tetap simpan".
+        await self._reject_if_conflicting(
+            ConflictCheckRequest(
+                unit_id=payload.unit_id,
+                driver_id=payload.driver_id,
+                etd=payload.etd,
+                eta=payload.eta,
             )
+        )
 
         route = await try_get_route(payload.asal_lat, payload.asal_lng, payload.tujuan_lat, payload.tujuan_lng)
         # FR-JOB-03: ETA kosong diisi dari durasi rute dan ditandai estimasi sistem.
         eta_iso, eta_is_estimated = _derive_eta(
             etd=payload.etd, eta=payload.eta, duration_min=route.duration_min if route else None
         )
+        _require_eta(eta_iso)
         data = {
             "customer_id": payload.customer_id,
             "pic_nama": clean_text(payload.pic_nama),
@@ -532,7 +554,7 @@ class JobService:
             # berjalan wajar punya ETD di masa lalu, dan form edit selalu mengirim
             # ulang ETD lama apa adanya.
 
-        if touches_schedule and not payload.allow_conflict and current is not None:
+        if touches_schedule and current is not None:
             await self._reject_if_conflicting(
                 ConflictCheckRequest(
                     unit_id=payload.unit_id or current["unit_id"],
@@ -595,6 +617,7 @@ class JobService:
             durasi = durasi_baru if durasi_baru is not None else num_or_none((current or {}).get("route_duration_min"))
             if etd_final:
                 data["eta"], data["eta_is_estimated"] = _derive_eta(etd=etd_final, eta=eta_input, duration_min=durasi)
+                _require_eta(data["eta"])
 
         if data:
             await self._db.table("jobs").update(data).eq("id", job_id).execute()

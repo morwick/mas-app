@@ -3,13 +3,16 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapPin, Loader2, Search, Locate } from "lucide-react";
 import { haversineKm } from "@/lib/routing/eta";
+import { api } from "@/lib/api/client";
+import { parseLokasiInput, type LokasiInput } from "../lokasi-input";
 
 /**
  * Inner map untuk LocationPicker modal. Di-isolasi supaya bisa lazy-load
  * via React.lazy (Leaflet butuh window, jadi jangan ikut bundle awal).
  *
  * Reverse geocode pakai Nominatim (gratis, no key, rate-limit 1 req/sec).
- * Untuk pencarian alamat → search forward Nominatim juga.
+ * Kotak cari menerima alamat (search forward Nominatim), titik koordinat,
+ * atau link Google Maps — link pendek di-resolve lewat backend.
  */
 
 export interface AvailableUnitPin {
@@ -175,6 +178,7 @@ export function LocationPickerMap({
   const [searchQ, setSearchQ] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Init map sekali
   useEffect(() => {
@@ -291,22 +295,54 @@ export function LocationPickerMap({
     );
   }
 
-  async function doSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!searchQ.trim()) return;
-    setSearching(true);
-    const data = await searchAddress(searchQ.trim());
-    setSearching(false);
-    setResults(data);
-  }
-
-  function pickResult(r: SearchResult) {
-    const lat = Number(r.lat);
-    const lng = Number(r.lon);
+  function pinKe(lat: number, lng: number) {
     setPin({ lat, lng });
     mapRef.current?.setView([lat, lng], 17);
     setResults([]);
     setSearchQ("");
+  }
+
+  async function cariAlamat(query: string) {
+    const data = await searchAddress(query);
+    setResults(data);
+    if (data.length === 0) setSearchError(`"${query}" tidak ditemukan. Coba kata kunci lain.`);
+  }
+
+  async function doSearch() {
+    const q = searchQ.trim();
+    if (!q) return;
+    setSearchError(null);
+    setResults([]);
+    setSearching(true);
+    try {
+      let input: LokasiInput = parseLokasiInput(q);
+      if (input.kind === "link-pendek") {
+        const { url } = await api.get<{ url: string }>("/geo/resolve-link", { url: input.url });
+        input = parseLokasiInput(url);
+        if (input.kind === "link-pendek" || input.kind === "teks") {
+          input = { kind: "link-tanpa-koordinat", query: null };
+        }
+      }
+      switch (input.kind) {
+        case "koordinat":
+          pinKe(input.lat, input.lng);
+          break;
+        case "link-tanpa-koordinat":
+          if (input.query) await cariAlamat(input.query);
+          else setSearchError("Link Google Maps tidak memuat titik lokasi. Pin manual di peta.");
+          break;
+        default:
+          await cariAlamat(input.query);
+      }
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : "Gagal membuka link Google Maps.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function pickResult(r: SearchResult) {
+    pinKe(Number(r.lat), Number(r.lon));
   }
 
   function confirm() {
@@ -336,7 +372,9 @@ export function LocationPickerMap({
           zIndex: 500
         }}
       >
-        <form onSubmit={doSearch} style={{ display: "flex", gap: 8 }}>
+        {/* Sengaja bukan <form>: modal ini dirender di dalam form job, dan form
+            bersarang membuat tombol Cari ikut men-submit form job. */}
+        <div style={{ display: "flex", gap: 8 }}>
           <div
             style={{
               flex: 1,
@@ -356,9 +394,19 @@ export function LocationPickerMap({
             />
             <input
               type="text"
-              placeholder="Cari alamat / tempat (mis. Pelabuhan Tanjung Priok)"
+              placeholder="Cari alamat, link Google Maps, atau koordinat (-6.2088, 106.8456)"
               value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
+              onChange={(e) => {
+                setSearchQ(e.target.value);
+                setSearchError(null);
+              }}
+              onKeyDown={(e) => {
+                // Enter di input dalam form job = submit form job; cegah dan cari saja.
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (!searching) void doSearch();
+                }
+              }}
               style={{
                 width: "100%",
                 padding: "8px 12px 8px 32px",
@@ -369,8 +417,9 @@ export function LocationPickerMap({
             />
           </div>
           <button
-            type="submit"
+            type="button"
             className="btn btn-secondary"
+            onClick={() => void doSearch()}
             disabled={searching || !searchQ.trim()}
           >
             {searching ? "..." : "Cari"}
@@ -383,7 +432,12 @@ export function LocationPickerMap({
           >
             <Locate style={{ width: 14, height: 14 }} />
           </button>
-        </form>
+        </div>
+        {searchError && (
+          <p className="field-error" style={{ marginTop: 6 }}>
+            {searchError}
+          </p>
+        )}
         {results.length > 0 && (
           <div
             style={{
@@ -524,7 +578,8 @@ export function LocationPickerMap({
               textAlign: "center"
             }}
           >
-            Klik di peta untuk pin lokasi, atau cari alamat di atas.
+            Klik di peta untuk pin lokasi, atau cari alamat / tempel link
+            Google Maps / koordinat di atas.
           </div>
         )}
         {availableUnits && availableUnits.length > 0 && (

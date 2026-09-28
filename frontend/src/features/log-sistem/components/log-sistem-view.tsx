@@ -1,5 +1,6 @@
 import { useDeferredValue, useState } from "react";
 import { ScrollText, Search, X } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { FilterChips } from "@/components/ui/filter-chips";
@@ -134,20 +135,20 @@ export function LogSistemView() {
           />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Input
-            type="date"
+          <DateInput
             value={dari}
             max={sampai || undefined}
-            onChange={(e) => ubah(setDari)(e.target.value)}
+            onChange={(v) => ubah(setDari)(v)}
             aria-label="Dari tanggal"
+            clearable
           />
           <span className="caption">s/d</span>
-          <Input
-            type="date"
+          <DateInput
             value={sampai}
             min={dari || undefined}
-            onChange={(e) => ubah(setSampai)(e.target.value)}
+            onChange={(v) => ubah(setSampai)(v)}
             aria-label="Sampai tanggal"
+            clearable
           />
         </div>
         {adaFilter && (
