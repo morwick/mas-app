@@ -107,6 +107,14 @@ describe("UnitTrailerDetailView", () => {
     expect(screen.getByText("1 insiden belum selesai")).toBeTruthy();
   });
 
+  it("dokumen yang sudah diunggah punya link Lihat dokumen", () => {
+    tampil({ ...TRAILER, kir_url: "https://x/kir.pdf", srut_url: null });
+    const link = screen.getAllByText("Lihat dokumen");
+    expect(link).toHaveLength(1); // SRUT belum diunggah → tanpa link
+    expect(link[0].closest("a")?.getAttribute("href")).toBe("https://x/kir.pdf");
+    expect(link[0].closest("a")?.getAttribute("target")).toBe("_blank");
+  });
+
   it("riwayat status tampil seperti di detail unit", () => {
     tampil();
     fireEvent.click(screen.getByText("Riwayat status"));

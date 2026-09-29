@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { DateTimeInput } from "@/components/ui/datetime-input";
 import { useToast } from "@/components/ui/toast";
 import { useUnits } from "@/features/units/queries";
 import { useDrivers } from "@/features/drivers/queries";
@@ -178,10 +179,9 @@ export function GantiTrukModal({ job, unitKode, driverNama, onClose }: Props) {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Tanggal & jam" required>
-            <Input
-              type="datetime-local"
+            <DateTimeInput
               value={insidenTanggal}
-              onChange={(e) => setInsidenTanggal(e.target.value)}
+              onChange={(v) => setInsidenTanggal(v)}
               error={error.insidenTanggal}
             />
           </Field>

@@ -3,7 +3,7 @@
  * tautan yang sudah dibagikan (pelacakan pelanggan, portal driver) tetap hidup.
  */
 
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import { DriverLayout } from "./layouts/DriverLayout";
@@ -27,6 +27,7 @@ import { UnitDetailPage } from "@/features/units/pages/UnitDetailPage";
 import { EditUnitPage, NewUnitPage } from "@/features/units/pages/UnitFormPage";
 import { DriversPage } from "@/features/drivers/pages/DriversPage";
 import { EditDriverPage, NewDriverPage } from "@/features/drivers/pages/DriverFormPage";
+import { DriverDetailPage } from "@/features/drivers/pages/DriverDetailPage";
 import { CustomersPage } from "@/features/customers/pages/CustomersPage";
 import { EditCustomerPage, NewCustomerPage } from "@/features/customers/pages/CustomerFormPage";
 import { JobsPage } from "@/features/jobs/pages/JobsPage";
@@ -83,6 +84,12 @@ import {
   CustomerTrackingPage,
   TrackingExpiredPage
 } from "@/features/public-tracking/pages/TrackPages";
+
+/** `/jobs/:id/<apa pun>` lama → detail job. */
+export function KeDetailJob() {
+  const { id } = useParams();
+  return <Navigate to={`/jobs/${id}`} replace />;
+}
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/dashboard" replace /> },
@@ -152,6 +159,7 @@ export const router = createBrowserRouter([
 
               { path: "/drivers", element: <DriversPage /> },
               { path: "/drivers/new", element: <NewDriverPage /> },
+              { path: "/drivers/:id", element: <DriverDetailPage /> },
               { path: "/drivers/:id/edit", element: <EditDriverPage /> },
 
               { path: "/tracking", element: <TrackingListPage /> },
@@ -179,7 +187,12 @@ export const router = createBrowserRouter([
             // Detail job: finance (dari tagihan) & operator (dari Pantau) hanya
             // melihat — semua tombol aksi disembunyikan.
             element: <RequireRole roles={["superadmin", "admin", "finance", "operator"]} />,
-            children: [{ path: "/jobs/:id", element: <JobDetailPage /> }]
+            children: [
+              { path: "/jobs/:id", element: <JobDetailPage /> },
+              // Tautan notifikasi lama "Job menunggu validasi" — panel validasi
+              // ada di detail job, jadi diarahkan ke sana (bukan 404).
+              { path: "/jobs/:id/validasi", element: <KeDetailJob /> }
+            ]
           },
 
           {

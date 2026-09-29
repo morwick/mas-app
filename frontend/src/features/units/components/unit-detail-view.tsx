@@ -249,8 +249,8 @@ export function UnitDetailView({
         <DokumenCard
           kosong="Belum dicatat — isi lewat Edit unit"
           items={[
-            { label: "STNK", tanggal: unit.stnk_berlaku_sampai, nomor: unit.stnk_nomor },
-            { label: "KIR", tanggal: unit.kir_berlaku_sampai, nomor: unit.kir_nomor },
+            { label: "STNK", tanggal: unit.stnk_berlaku_sampai, nomor: unit.stnk_nomor, url: unit.stnk_url },
+            { label: "KIR", tanggal: unit.kir_berlaku_sampai, nomor: unit.kir_nomor, url: unit.kir_url },
             { label: "Pajak", tanggal: unit.pajak_berlaku_sampai, nomor: null }
           ]}
         />

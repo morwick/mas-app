@@ -8,21 +8,25 @@
 - Status trailer sama dengan unit (migration 20260926000006) dan tidak diisi
   di form: Bertugas dari job, Breakdown / Perbaikan dari insiden, Terjual dari
   Penjualan Unit & Unit Trailer, Diafkirkan dari Penghapusan Unit & Unit Trailer.
+- Dokumen KIR & SRUT (scan/foto) opsional, ikut form tambah / ubah (multipart:
+  isian JSON di field `data`, file di `dokumen_kir` / `dokumen_srut`).
 - Hapus = soft delete: SQL-nya `UPDATE unit_trailer SET status = 2`.
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from postgrest.exceptions import APIError
 from postgrest.types import CountMethod
 from pydantic import BaseModel, Field, field_validator
 from supabase import AsyncClient
 
 from app.core.auth import superadmin_or_admin_client, user_client
+from app.core.dokumen import BerkasUnggah, PerubahanDokumen, baca_berkas, parse_form, signed_url_dokumen
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any, page_params
 from app.core.pg import first, rows, single
@@ -40,6 +44,7 @@ router = APIRouter(prefix="/unit-trailer", tags=["unit-trailer"])
 _SELECT = (
     "id, kode_trailer, tahun, jenis_unit_trailer_id, kapasitas_ton, status_trailer, "
     "kir_nomor, kir_berlaku_sampai, srut_nomor, srut_tanggal, is_active, "
+    "kir_path, kir_uploaded_at, srut_path, srut_uploaded_at, "
     "jenis:jenis_unit_trailer(nama, jenis_unit:jenis_unit(nama))"
 )
 _JENIS_SELECT = "id, nama, jenis_unit_id, jenis_unit:jenis_unit(nama)"
@@ -61,6 +66,11 @@ class UnitTrailer(BaseModel):
     kir_berlaku_sampai: str | None = None
     srut_nomor: str | None = None
     srut_tanggal: str | None = None
+    # Scan/foto dokumen (opsional). `*_url` = signed URL, hanya terisi di detail.
+    kir_uploaded_at: str | None = None
+    kir_url: str | None = None
+    srut_uploaded_at: str | None = None
+    srut_url: str | None = None
     # False = dinonaktifkan: tidak muncul di pilihan job, penjualan, penghapusan.
     is_active: bool = True
 
@@ -98,6 +108,9 @@ class UnitTrailerInput(BaseModel):
     kir_berlaku_sampai: str | None = None
     srut_nomor: str | None = Field(default=None, max_length=60)
     srut_tanggal: str | None = None
+    # True = dokumen yang tersimpan dilepas (diabaikan bila ada file baru).
+    hapus_dokumen_kir: bool = False
+    hapus_dokumen_srut: bool = False
 
     @field_validator("kir_nomor", "srut_nomor", mode="before")
     @classmethod
@@ -168,6 +181,8 @@ def _to_trailer(r: dict[str, Any]) -> UnitTrailer:
         kir_berlaku_sampai=r.get("kir_berlaku_sampai"),
         srut_nomor=r.get("srut_nomor"),
         srut_tanggal=r.get("srut_tanggal"),
+        kir_uploaded_at=r.get("kir_uploaded_at"),
+        srut_uploaded_at=r.get("srut_uploaded_at"),
         is_active=bool(r.get("is_active", True)),
     )
 
@@ -302,16 +317,49 @@ async def daftar_unit_trailer(
     return build_page([_to_trailer(r) for r in rows(res)], res.count, params)
 
 
+async def _siapkan_dokumen(
+    dokumen: PerubahanDokumen,
+    payload: UnitTrailerInput,
+    kir: BerkasUnggah | None,
+    srut: BerkasUnggah | None,
+    lama: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    lama = lama or {}
+    try:
+        return {
+            **await dokumen.siapkan("kir", kir, hapus=payload.hapus_dokumen_kir, lama=lama.get("kir_path")),
+            **await dokumen.siapkan("srut", srut, hapus=payload.hapus_dokumen_srut, lama=lama.get("srut_path")),
+        }
+    except Exception:
+        await dokumen.batalkan()
+        raise
+
+
 @router.post("", response_model=UnitTrailer, status_code=201)
 async def tambah_unit_trailer(
-    payload: UnitTrailerInput, client: AsyncClient = Depends(superadmin_or_admin_client)
+    data_form: str = Form(..., alias="data", description="Isian UnitTrailerInput (JSON)"),
+    dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR (opsional)"),
+    dokumen_srut: UploadFile | None = File(None, description="Scan/foto SRUT (opsional)"),
+    client: AsyncClient = Depends(superadmin_or_admin_client),
 ) -> UnitTrailer:
+    payload = parse_form(UnitTrailerInput, data_form)
     data = _data(payload)
     await _pastikan_kode_unik(client, data["kode_trailer"])
+    trailer_id = str(uuid.uuid4())
+    data["id"] = trailer_id
+    # File diunggah dulu; bila insert gagal, file dibuang lagi.
+    dokumen = PerubahanDokumen(client, "unit_trailer", trailer_id)
+    data.update(
+        await _siapkan_dokumen(dokumen, payload, await baca_berkas(dokumen_kir), await baca_berkas(dokumen_srut))
+    )
     try:
         res = await client.table("unit_trailer").insert(data).execute()
     except APIError as exc:
+        await dokumen.batalkan()
         _duplikat_dari_db(exc)
+        raise
+    except Exception:
+        await dokumen.batalkan()
         raise
     baru = rows(res)[0]
     row = single(await client.table("unit_trailer").select(_SELECT).eq("id", baru["id"]).maybe_single().execute())
@@ -320,24 +368,45 @@ async def tambah_unit_trailer(
 
 @router.patch("/{trailer_id}", response_model=OkResponse)
 async def ubah_unit_trailer(
-    trailer_id: str, payload: UnitTrailerInput, client: AsyncClient = Depends(superadmin_or_admin_client)
+    trailer_id: str,
+    data_form: str = Form(..., alias="data", description="Isian UnitTrailerInput (JSON)"),
+    dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR pengganti (opsional)"),
+    dokumen_srut: UploadFile | None = File(None, description="Scan/foto SRUT pengganti (opsional)"),
+    client: AsyncClient = Depends(superadmin_or_admin_client),
 ) -> OkResponse:
+    payload = parse_form(UnitTrailerInput, data_form)
     data = _data(payload)
     lama = single(
-        await client.table("unit_trailer").select("status_trailer").eq("id", trailer_id).maybe_single().execute()
+        await client.table("unit_trailer")
+        .select("status_trailer, kir_path, srut_path")
+        .eq("id", trailer_id)
+        .maybe_single()
+        .execute()
     )
-    if lama and lama.get("status_trailer") == "terjual":
+    if lama is None:
+        raise NotFoundError("Unit trailer tidak ditemukan atau sudah dihapus")
+    if lama.get("status_trailer") == "terjual":
         raise ValidationError(
             "Unit trailer sudah terjual. Batalkan penjualannya dulu lewat menu Penjualan Unit & Unit Trailer."
         )
     await _pastikan_kode_unik(client, data["kode_trailer"], kecuali_id=trailer_id)
+    dokumen = PerubahanDokumen(client, "unit_trailer", trailer_id)
+    data.update(
+        await _siapkan_dokumen(dokumen, payload, await baca_berkas(dokumen_kir), await baca_berkas(dokumen_srut), lama)
+    )
     try:
         res = await client.table("unit_trailer").update(data).eq("id", trailer_id).execute()
     except APIError as exc:
+        await dokumen.batalkan()
         _duplikat_dari_db(exc)
         raise
+    except Exception:
+        await dokumen.batalkan()
+        raise
     if not rows(res):
+        await dokumen.batalkan()
         raise NotFoundError("Unit trailer tidak ditemukan atau sudah dihapus")
+    await dokumen.selesaikan()
     return OkResponse()
 
 
@@ -366,7 +435,12 @@ async def _ambil(client: AsyncClient, trailer_id: str) -> UnitTrailer:
     row = single(await client.table("unit_trailer").select(_SELECT).eq("id", trailer_id).maybe_single().execute())
     if row is None:
         raise NotFoundError("Unit trailer tidak ditemukan")
-    return _to_trailer(row)
+    return _to_trailer(row).model_copy(
+        update={
+            "kir_url": await signed_url_dokumen(client, row.get("kir_path")),
+            "srut_url": await signed_url_dokumen(client, row.get("srut_path")),
+        }
+    )
 
 
 @router.get("/{trailer_id}", response_model=UnitTrailer)

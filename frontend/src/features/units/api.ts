@@ -1,4 +1,4 @@
-import { api } from "@/lib/api/client";
+import { api, formDenganDokumen } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
 import { localInputToIso } from "@/lib/utils";
 import type {
@@ -47,12 +47,24 @@ export const getUnitServices = (id: string) => api.get<ServiceRecord[]>(`/units/
 export const getDriverAssignments = () =>
   api.get<Record<string, DriverAssignment>>("/units/driver-assignments");
 
-export function createUnit(input: UnitInput): Promise<ActionResult<Unit>> {
-  return mutate(api.post<Unit>("/units", input));
+/** Scan/foto STNK & KIR (opsional) — ikut terkirim bersama isian unit. */
+export interface DokumenUnit {
+  stnk?: File | null;
+  kir?: File | null;
 }
 
-export function updateUnit(id: string, input: Partial<UnitInput>): Promise<ActionResult<unknown>> {
-  return mutate(api.patch(`/units/${id}`, input));
+const berkasUnit = (d: DokumenUnit) => ({ dokumen_stnk: d.stnk, dokumen_kir: d.kir });
+
+export function createUnit(input: UnitInput, dokumen: DokumenUnit = {}): Promise<ActionResult<Unit>> {
+  return mutate(api.upload<Unit>("/units", formDenganDokumen(input, berkasUnit(dokumen))));
+}
+
+export function updateUnit(
+  id: string,
+  input: Partial<UnitInput> & { hapus_dokumen_stnk?: boolean; hapus_dokumen_kir?: boolean },
+  dokumen: DokumenUnit = {}
+): Promise<ActionResult<unknown>> {
+  return mutate(api.patchForm(`/units/${id}`, formDenganDokumen(input, berkasUnit(dokumen))));
 }
 
 export function deactivateUnit(id: string): Promise<ActionResult<unknown>> {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import { Link } from "react-router-dom";
 import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import {
   type InvoiceInput
 } from "@/features/invoices/api";
 import type { Customer, Invoice, JobBelumDitagihRow } from "@/types";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, hariIniWIB, tambahHari } from "@/lib/utils";
 
 interface Props {
   customers: Customer[];
@@ -80,15 +81,6 @@ function displayRupiah(s: string): string {
   return n ? new Intl.NumberFormat("id-ID").format(n) : "";
 }
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function tambahHari(iso: string, hari: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + hari);
-  return d.toISOString().slice(0, 10);
-}
 
 export function InvoiceForm({
   customers,
@@ -112,7 +104,7 @@ export function InvoiceForm({
     pic_sapaan: invoice?.pic_sapaan ?? "Bapak",
     pic_nama: invoice?.pic_nama ?? "",
     kota_terbit: invoice?.kota_terbit ?? "Pekanbaru",
-    tanggal: invoice?.tanggal?.slice(0, 10) ?? todayISO(),
+    tanggal: invoice?.tanggal?.slice(0, 10) ?? hariIniWIB(),
     termin_hari: invoice?.termin_hari != null ? String(invoice.termin_hari) : "",
     jatuh_tempo: invoice?.jatuh_tempo?.slice(0, 10) ?? "",
     ppn_aktif: invoice?.ppn_aktif ?? true,
@@ -517,10 +509,9 @@ export function InvoiceForm({
             />
           </Field>
           <Field label="Tanggal tagihan" required>
-            <Input
-              type="date"
+            <DateInput
               value={form.tanggal}
-              onChange={(e) => set("tanggal", e.target.value)}
+              onChange={(v) => set("tanggal", v)}
             />
           </Field>
           <Field label="Termin (hari)" hint="Dari master customer">
@@ -540,12 +531,11 @@ export function InvoiceForm({
                 : "Otomatis dari tanggal + termin"
             }
           >
-            <Input
-              type="date"
+            <DateInput
               value={form.jatuh_tempo}
-              onChange={(e) => {
+              onChange={(v) => {
                 setJatuhTempoManual(true);
-                set("jatuh_tempo", e.target.value);
+                set("jatuh_tempo", v);
               }}
             />
           </Field>

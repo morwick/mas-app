@@ -16,6 +16,7 @@ from app.modules.customers.router import router as customers_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.driver_portal.router import router as driver_portal_router
 from app.modules.drivers.router import router as drivers_router
+from app.modules.geo.router import router as geo_router
 from app.modules.incidents.router import router as incidents_router
 from app.modules.invoices.router import router as invoices_router
 from app.modules.jenis_unit.router import router as jenis_unit_router
@@ -59,6 +60,7 @@ def build_api_router() -> APIRouter:
         invoices_router,
         reports_router,
         search_router,
+        geo_router,
         notifications_router,
         log_sistem_router,
         karyawan_router,

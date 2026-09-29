@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -10,7 +11,7 @@ import {
   createUangJalan,
   updateUangJalan
 } from "@/features/uang-jalan/api";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, hariIniWIB } from "@/lib/utils";
 import type { SumberDana, UangJalan, UangJalanRequest, UangJalanRingkasan } from "@/types";
 
 /**
@@ -34,7 +35,7 @@ interface Props {
 }
 
 function hariIni() {
-  return new Date().toISOString().slice(0, 10);
+  return hariIniWIB();
 }
 
 export function UangJalanModal({
@@ -183,10 +184,9 @@ export function UangJalanModal({
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="Tanggal" required>
-          <Input
-            type="date"
+          <DateInput
             value={tanggal}
-            onChange={(e) => setTanggal(e.target.value)}
+            onChange={(v) => setTanggal(v)}
           />
         </Field>
         <Field label="Jumlah" required>

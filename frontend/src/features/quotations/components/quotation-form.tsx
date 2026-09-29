@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import { Link } from "react-router-dom";
 import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import {
   type QuotationInput
 } from "@/features/quotations/api";
 import type { Customer, Quotation } from "@/types";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, hariIniWIB, tambahHari } from "@/lib/utils";
 
 interface Props {
   customers: Customer[];
@@ -58,15 +59,9 @@ function displayRupiah(s: string): string {
   return n ? new Intl.NumberFormat("id-ID").format(n) : "";
 }
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /** Tanggal + 1 hari — batas minimum "Berlaku sampai" di date picker. */
 function besok(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return tambahHari(iso, 1);
 }
 
 export function QuotationForm({
@@ -87,7 +82,7 @@ export function QuotationForm({
     pic_sapaan: quotation?.pic_sapaan ?? "Bapak",
     pic_nama: quotation?.pic_nama ?? "",
     kota_terbit: quotation?.kota_terbit ?? "Pekanbaru",
-    tanggal: quotation?.tanggal?.slice(0, 10) ?? todayISO(),
+    tanggal: quotation?.tanggal?.slice(0, 10) ?? hariIniWIB(),
     berlaku_sampai: quotation?.berlaku_sampai?.slice(0, 10) ?? "",
     perihal: quotation?.perihal ?? "Surat Penawaran Pengangkutan Alat",
     objek: quotation?.objek ?? "",
@@ -334,17 +329,15 @@ export function QuotationForm({
             />
           </Field>
           <Field label="Tanggal surat" required>
-            <Input
-              type="date"
+            <DateInput
               value={form.tanggal}
-              onChange={(e) => set("tanggal", e.target.value)}
+              onChange={(v) => set("tanggal", v)}
             />
           </Field>
           <Field label="Berlaku sampai" required hint="Harus setelah tanggal surat">
-            <Input
-              type="date"
+            <DateInput
               value={form.berlaku_sampai}
-              onChange={(e) => set("berlaku_sampai", e.target.value)}
+              onChange={(v) => set("berlaku_sampai", v)}
               min={form.tanggal ? besok(form.tanggal) : undefined}
             />
           </Field>

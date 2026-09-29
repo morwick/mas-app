@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronRight, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { JobProfitabilityRow } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
@@ -75,19 +76,17 @@ export function LabaView({ rows, start, end }: Props) {
           }}
         >
           <Field label="Dari tanggal">
-            <Input
-              type="date"
+            <DateInput
               value={range.start}
-              onChange={(e) =>
-                setRange((r) => ({ ...r, start: e.target.value }))
+              onChange={(v) =>
+                setRange((r) => ({ ...r, start: v }))
               }
             />
           </Field>
           <Field label="Sampai tanggal">
-            <Input
-              type="date"
+            <DateInput
               value={range.end}
-              onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))}
+              onChange={(v) => setRange((r) => ({ ...r, end: v }))}
             />
           </Field>
           <Button onClick={terapkan}>Terapkan</Button>

@@ -9,7 +9,7 @@ import { FilterChips } from "@/components/ui/filter-chips";
 import { Fab } from "@/components/layout/fab";
 import { QuotationStatusBadge } from "./quotation-status-badge";
 import type { Customer, QuotationListRow, QuotationStatus } from "@/types";
-import { formatDate, formatRupiah } from "@/lib/utils";
+import { formatDate, formatRupiah, hariIniWIB, tambahHari } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -32,10 +32,6 @@ type FilterKey = "all" | QuotationStatus | "deal_pending" | "akan_kedaluwarsa";
 /** Terkirim & masa berlakunya habis dalam sekian hari (sama dengan dashboard). */
 const AKAN_KEDALUWARSA_HARI = 7;
 
-function tanggalLokal(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 function akanKedaluwarsa(row: QuotationListRow, hariIni: string, batas: string): boolean {
   if (row.status !== "terkirim" || !row.berlaku_sampai) return false;
@@ -98,10 +94,8 @@ export function QuotationsListView({
     FILTER_URL.includes(initialFilter as FilterKey) ? (initialFilter as FilterKey) : "all"
   );
   const { hariIni, batasKedaluwarsa } = useMemo(() => {
-    const now = new Date();
-    const batas = new Date(now);
-    batas.setDate(batas.getDate() + AKAN_KEDALUWARSA_HARI);
-    return { hariIni: tanggalLokal(now), batasKedaluwarsa: tanggalLokal(batas) };
+    const hariIni = hariIniWIB();
+    return { hariIni, batasKedaluwarsa: tambahHari(hariIni, AKAN_KEDALUWARSA_HARI) };
   }, []);
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
 

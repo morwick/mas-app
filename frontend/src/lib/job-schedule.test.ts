@@ -9,13 +9,13 @@ import {
   validateSchedule
 } from "@/lib/job-schedule";
 
-// Jam 14:30 supaya jelas bahwa yang dibandingkan tanggal, bukan instan.
-const NOW = new Date(2026, 8, 23, 14, 30); // 23 Sep 2026, waktu lokal
+// Jam 14:30 WIB supaya jelas bahwa yang dibandingkan tanggal, bukan instan.
+const NOW = new Date("2026-09-23T14:30:00+07:00");
 
 describe("todayLocalDate & minEtdValue", () => {
-  it("memakai tanggal lokal, bukan UTC", () => {
-    // 1 Jan 2026 00:30 lokal — di UTC masih 31 Des 2025 untuk zona timur.
-    expect(todayLocalDate(new Date(2026, 0, 1, 0, 30))).toBe("2026-01-01");
+  it("memakai tanggal WIB, bukan UTC", () => {
+    // 1 Jan 2026 00:30 WIB — di UTC masih 31 Des 2025.
+    expect(todayLocalDate(new Date("2026-01-01T00:30:00+07:00"))).toBe("2026-01-01");
   });
 
   it("min ETD adalah awal hari ini", () => {

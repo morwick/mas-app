@@ -19,6 +19,9 @@ class Driver(BaseModel):
     no_sim: str | None = None
     # Tanggal habis berlaku SIM (YYYY-MM-DD). None = belum dicatat.
     sim_berlaku_sampai: str | None = None
+    # Dokumen SIM (opsional). `sim_url` = signed URL, hanya terisi di detail driver.
+    sim_uploaded_at: str | None = None
+    sim_url: str | None = None
     alamat: str | None = None
     catatan: str | None = None
     is_active: bool
@@ -56,6 +59,8 @@ class DriverUpdate(BaseModel):
     sim_berlaku_sampai: str | None = None
     alamat: str | None = None
     catatan: str | None = None
+    # True = dokumen SIM yang tersimpan dilepas (diabaikan bila ada file baru).
+    hapus_dokumen_sim: bool = False
 
     @field_validator("no_hp")
     @classmethod

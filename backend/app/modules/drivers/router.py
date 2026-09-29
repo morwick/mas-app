@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from supabase import AsyncClient
 
 from app.core.auth import user_client
+from app.core.dokumen import baca_berkas, parse_form
 from app.core.paging import Page, PageParams, page_params
 from app.modules.auth.schemas import OkResponse
 from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate, KaryawanDriverOption, SetPinRequest
 from app.modules.drivers.service import DriverService
+from app.modules.jobs.schemas import Job
+from app.modules.jobs.service import JobService
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
@@ -52,14 +55,29 @@ async def get_driver(driver_id: str, svc: DriverService = Depends(get_service)) 
     return await svc.get(driver_id)
 
 
+@router.get("/{driver_id}/jobs", response_model=list[Job])
+async def driver_jobs(driver_id: str, client: AsyncClient = Depends(user_client)) -> list[Job]:
+    """Semua job driver ini (terbaru dulu) — untuk halaman detail driver."""
+    return await JobService(client).list_by_driver(driver_id)
+
+
 @router.post("", response_model=Driver, status_code=201)
-async def create_driver(payload: DriverCreate, svc: DriverService = Depends(get_service)) -> Driver:
-    return await svc.create(payload)
+async def create_driver(
+    data: str = Form(..., description="Isian DriverCreate (JSON)"),
+    dokumen_sim: UploadFile | None = File(None, description="Scan/foto SIM (opsional)"),
+    svc: DriverService = Depends(get_service),
+) -> Driver:
+    return await svc.create(parse_form(DriverCreate, data), await baca_berkas(dokumen_sim))
 
 
 @router.patch("/{driver_id}", response_model=OkResponse)
-async def update_driver(driver_id: str, payload: DriverUpdate, svc: DriverService = Depends(get_service)) -> OkResponse:
-    await svc.update(driver_id, payload)
+async def update_driver(
+    driver_id: str,
+    data: str = Form(..., description="Isian DriverUpdate (JSON)"),
+    dokumen_sim: UploadFile | None = File(None, description="Scan/foto SIM pengganti (opsional)"),
+    svc: DriverService = Depends(get_service),
+) -> OkResponse:
+    await svc.update(driver_id, parse_form(DriverUpdate, data), await baca_berkas(dokumen_sim))
     return OkResponse()
 
 

@@ -233,8 +233,6 @@ class JobCreate(_JobFields):
     quotation_id: str | None = None
     # Wajib bila quotation_id diisi dan penawarannya punya lebih dari satu item deal.
     quotation_item_id: str | None = None
-    # True bila admin sudah mengonfirmasi tetap simpan meski ada bentrok.
-    allow_conflict: bool = False
 
     @field_validator("pic_nama", "pic_no_hp")
     @classmethod
@@ -255,7 +253,6 @@ class JobUpdate(_JobFields):
     unit_trailer_id: str | None = None
     driver_id: str | None = None
     etd: str | None = None
-    allow_conflict: bool = False
 
     @field_validator("pic_nama", "pic_no_hp")
     @classmethod
@@ -273,7 +270,7 @@ class JobCreated(BaseModel):
 
 
 class JobConflictResponse(BaseModel):
-    """Dikirim sebagai 409 saat bentrok terdeteksi dan `allow_conflict` false."""
+    """Dikirim sebagai 409 saat bentrok terdeteksi — job tidak disimpan."""
 
     detail: str
     conflicts: ConflictCheckResult

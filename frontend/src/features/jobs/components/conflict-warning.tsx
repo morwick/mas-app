@@ -26,8 +26,9 @@ export function ConflictWarning({ conflicts, className }: Props) {
           Bentrok jadwal terdeteksi
         </p>
         <p className="text-[12px] text-status-cancelled-fg/80 mt-0.5">
-          Window waktu yang Anda pilih overlap dengan job aktif berikut. Periksa
-          ulang atau konfirmasi tetap simpan.
+          Jadwal yang Anda pilih beririsan dengan job aktif berikut. Job tidak
+          bisa disimpan sebelum bentroknya diselesaikan — ganti unit, driver,
+          atau jadwalnya.
         </p>
 
         {conflicts.unit.length > 0 && (

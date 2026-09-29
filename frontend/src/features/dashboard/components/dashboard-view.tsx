@@ -14,8 +14,9 @@ import { Fab } from "@/components/layout/fab";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { DokumenJatuhTempo, JobBelumKonfirmasi, MonitoringServis } from "@/features/dashboard/api";
 import {
+  DokumenJatuhTempoModal,
   PerluTindakanCard,
-  RincianDokumen,
+  useModalDokumen,
   type TindakanItem
 } from "@/features/dashboard/components/perlu-tindakan-card";
 import type { Unit } from "@/types";
@@ -82,6 +83,7 @@ export function DashboardView({
   }, [units, filter]);
 
   // Hanya tindakan yang ada; urutan = yang paling menahan pekerjaan dulu.
+  const modalDokumen = useModalDokumen();
   const tindakan: TindakanItem[] = [
     ...(uangJalanDiajukan > 0
       ? [
@@ -186,10 +188,9 @@ export function DashboardView({
       ? [
           {
             key: "dokumen",
-            to: dokumenJatuhTempo[0].href,
+            onClick: modalDokumen.buka,
             judul: `${dokumenJatuhTempo.length} dokumen jatuh tempo`,
-            keterangan: "STNK / KIR / pajak / SIM ≤ 30 hari.",
-            rincian: <RincianDokumen dokumen={dokumenJatuhTempo} />
+            keterangan: "STNK / KIR / pajak / SIM ≤ 30 hari. Klik untuk rincian."
           }
         ]
       : [])
@@ -216,7 +217,7 @@ export function DashboardView({
           value={counts.standby}
           sublabel="Siap di-assign"
           icon={CircleDot}
-          tone="standby"
+          tone="unitStandby"
           active={filter === "standby"}
           onClick={() =>
             setFilter(filter === "standby" ? "semua" : "standby")
@@ -227,7 +228,7 @@ export function DashboardView({
           value={counts.bertugas}
           sublabel={`${activeJobs.length} job aktif`}
           icon={PackageCheck}
-          tone="bertugas"
+          tone="unitBertugas"
           active={filter === "bertugas"}
           onClick={() =>
             setFilter(filter === "bertugas" ? "semua" : "bertugas")
@@ -247,6 +248,11 @@ export function DashboardView({
       </div>
 
       <PerluTindakanCard items={tindakan} />
+      <DokumenJatuhTempoModal
+        open={modalDokumen.open}
+        onClose={modalDokumen.tutup}
+        dokumen={dokumenJatuhTempo}
+      />
 
       <div className="split-2">
         {/* Left — unit status */}

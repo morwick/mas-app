@@ -203,5 +203,19 @@ export const api = {
     request<T>(path, { method: "PATCH", body, auth }),
   delete: <T>(path: string, auth?: AuthMode) => request<T>(path, { method: "DELETE", auth }),
   upload: <T>(path: string, form: FormData, auth?: AuthMode) =>
-    request<T>(path, { method: "POST", form, auth })
+    request<T>(path, { method: "POST", form, auth }),
+  patchForm: <T>(path: string, form: FormData, auth?: AuthMode) =>
+    request<T>(path, { method: "PATCH", form, auth })
 };
+
+/**
+ * Form master yang membawa dokumen opsional (SIM, STNK, KIR, SRUT): isian
+ * dikirim sebagai JSON di field `data`, tiap file di field bernama sendiri.
+ * Data & file tersimpan dalam satu permintaan.
+ */
+export function formDenganDokumen(data: unknown, dokumen: Record<string, File | null | undefined> = {}): FormData {
+  const form = new FormData();
+  form.append("data", JSON.stringify(data));
+  for (const [nama, file] of Object.entries(dokumen)) if (file) form.append(nama, file);
+  return form;
+}

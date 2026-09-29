@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { hariIniWIB } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
@@ -51,7 +52,7 @@ export function JadwalView({ units, jobs, weekStart }: Props) {
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
     [weekStart]
   );
-  const hariIni = new Date().toISOString().slice(0, 10);
+  const hariIni = hariIniWIB();
 
   const perUnit = useMemo(() => {
     const map = new Map<string, Job[]>();

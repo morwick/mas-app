@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { hariIniWIB } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Combobox } from "@/components/ui/combobox";
@@ -47,7 +49,7 @@ const LABEL_STATUS: Record<string, string> = {
 };
 
 function hariIniWib(): string {
-  return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+  return hariIniWIB();
 }
 
 const KOSONG = {
@@ -287,10 +289,9 @@ export function PenjualanFormModal({ open, onClose, penjualan, onSubmit, busy }:
             />
           </Field>
           <Field label="Tanggal jual" required>
-            <Input
-              type="date"
+            <DateInput
               value={form.tanggal}
-              onChange={(e) => set("tanggal", e.target.value)}
+              onChange={(v) => set("tanggal", v)}
               error={errors.tanggal}
             />
           </Field>

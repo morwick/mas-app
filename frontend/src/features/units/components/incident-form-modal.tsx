@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Field } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { DateTimeInput } from "@/components/ui/datetime-input";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -227,10 +228,9 @@ export function IncidentFormModal({ open, onClose, aset, activeJobs, incident }:
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Tanggal & jam" required>
-            <Input
-              type="datetime-local"
+            <DateTimeInput
               value={form.tanggal}
-              onChange={(e) => set("tanggal", e.target.value)}
+              onChange={(v) => set("tanggal", v)}
               error={error.tanggal}
             />
           </Field>

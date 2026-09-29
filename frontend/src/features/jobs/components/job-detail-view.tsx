@@ -20,7 +20,7 @@ import {
   Trash2,
   Truck,
   X,
-  XCircle
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
@@ -51,7 +51,7 @@ import type {
   Unit
 } from "@/types";
 import { UangJalanCard } from "@/features/uang-jalan/components/uang-jalan-card";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, TZ_WIB } from "@/lib/utils";
 
 interface Props {
   job: Job;
@@ -270,17 +270,16 @@ export function JobDetailView({
               </button>
             )}
             {!closed && (
-              // Label "Cancel Job" karena itu alasan utama admin membuka modal
-              // ini secara manual — maju status normalnya otomatis lewat app
-              // driver. Modalnya sendiri (UpdateStatusModal) yang menyaring
-              // opsi "Batalkan job" begitu uang jalan sudah cair.
+              // Membuka UpdateStatusModal: ubah status manual, termasuk
+              // membatalkan job. Modalnya sendiri yang menyaring opsi
+              // "Batalkan job" begitu uang jalan sudah cair.
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={() => setStatusOpen(true)}
               >
-                <XCircle style={{ width: 14, height: 14 }} />
-                Cancel Job
+                <RefreshCw style={{ width: 14, height: 14 }} />
+                Update Status Job
               </button>
             )}
           </div>
@@ -690,6 +689,7 @@ export function JobDetailView({
                       <span>
                         Diterima driver{" "}
                         {new Date(job.accepted_at).toLocaleString("id-ID", {
+                          timeZone: TZ_WIB,
                           day: "numeric",
                           month: "short",
                           hour: "2-digit",

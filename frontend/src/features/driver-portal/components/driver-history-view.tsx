@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, CheckCircle, Clock, MapPin, ScrollText, Truck } from "lucide-react";
+import { TZ_WIB } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { DriverJob, Job } from "@/types";
 
@@ -22,6 +23,7 @@ const STATUS_CONFIG: Record<Job["status"], { label: string; color: string }> = {
 
 function formatEtd(etd: string): string {
   return new Date(etd).toLocaleString("id-ID", {
+    timeZone: TZ_WIB,
     day: "numeric",
     month: "short",
     hour: "2-digit",

@@ -40,7 +40,8 @@ _INTERNAL_COLUMNS = """,
 JOB_SELECT = f"{_BASE_COLUMNS}{_INTERNAL_COLUMNS},\n  photos:job_photos({_PHOTO_COLUMNS})"
 
 # Akses publik lewat share token: tanpa catatan (BR-08), uang jalan, validasi, penawaran.
-PUBLIC_JOB_SELECT = f"{_BASE_COLUMNS},\n  photos:job_photos({_PHOTO_COLUMNS})"
+# `unloading_selesai_at` = kapan job selesai bagi customer (masa berlaku link +24 jam).
+PUBLIC_JOB_SELECT = f"{_BASE_COLUMNS},\n  unloading_selesai_at,\n  photos:job_photos({_PHOTO_COLUMNS})"
 
 # Portal driver: seperti publik + catatan validasi (alasan job dikembalikan) + identitas unit.
 DRIVER_JOB_SELECT = (

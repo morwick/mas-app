@@ -1,20 +1,30 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Truck } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Field } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DateTimeInput } from "@/components/ui/datetime-input";
 import { useToast } from "@/components/ui/toast";
 import {
   ConflictCheckUnavailable,
   ConflictWarning
 } from "@/features/jobs/components/conflict-warning";
-import { LocationPicker } from "@/features/jobs/components/location-picker";
-import { updateJob } from "@/features/jobs/api";
 import {
+  LocationPicker,
+  type LocationPickerAvailableUnit
+} from "@/features/jobs/components/location-picker";
+import {
+  ETA_TIDAK_TERHITUNG_MESSAGE,
+  EstimasiRuteInfo,
+  useEstimasiRute
+} from "@/features/jobs/components/estimasi-rute";
+import { updateJob } from "@/features/jobs/api";
+import { fleetLocations, unitLocation } from "@/features/tracking/api";
+import {
+  BENTROK_JADWAL_MESSAGE,
   findJobConflicts,
   type ConflictCheckResult
 } from "@/lib/job-conflicts";
@@ -47,8 +57,6 @@ export function EditJobView({
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
-  const [confirmConflict, setConfirmConflict] =
-    useState<ConflictCheckResult | null>(null);
   const [form, setForm] = useState({
     customer_id: job.customer_id,
     pic_nama: job.pic_nama ?? "",
@@ -75,6 +83,66 @@ export function EditJobView({
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  const estimasi = useEstimasiRute(
+    { lat: form.asal_lat, lng: form.asal_lng },
+    { lat: form.tujuan_lat, lng: form.tujuan_lng }
+  );
+  // Rute tersimpan masih berlaku bila titik tidak diubah — server memakai durasinya.
+  const titikSama =
+    form.asal_lat === (job.asal_lat ?? null) &&
+    form.asal_lng === (job.asal_lng ?? null) &&
+    form.tujuan_lat === (job.tujuan_lat ?? null) &&
+    form.tujuan_lng === (job.tujuan_lng ?? null);
+  const adaDurasiTersimpan = titikSama && job.route_duration_min != null;
+
+  // Sama seperti form tambah: posisi GPS unit standby tampil sebagai marker di
+  // modal pin lokasi, supaya admin bisa lihat unit terdekat ke titik yang dipin.
+  const [unitLocations, setUnitLocations] = useState<
+    Record<string, { lat: number; lng: number } | null>
+  >({});
+  const [fetchingUnitLoc, setFetchingUnitLoc] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fleetLocations()
+      .then((data) => {
+        if (!cancelled) setUnitLocations(data.locations ?? {});
+      })
+      .catch(() => {
+        // diam — modal tetap berfungsi tanpa marker unit
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const mapUnits = useMemo<LocationPickerAvailableUnit[]>(() => {
+    const out: LocationPickerAvailableUnit[] = [];
+    for (const u of units) {
+      if (u.status !== "standby") continue;
+      const loc = unitLocations[u.id];
+      if (!loc) continue;
+      out.push({ id: u.id, kode_unit: u.kode_unit, jenis_unit_nama: u.jenis_unit_nama, lat: loc.lat, lng: loc.lng });
+    }
+    return out;
+  }, [units, unitLocations]);
+
+  async function useUnitLocationAsAsal() {
+    if (!form.unit_id) {
+      toast.error("Pilih unit dulu");
+      return;
+    }
+    setFetchingUnitLoc(true);
+    try {
+      const data = await unitLocation(form.unit_id);
+      setForm((f) => ({ ...f, asal: data.address ?? f.asal, asal_lat: data.lat, asal_lng: data.lng }));
+      toast.success("Lokasi asal di-set ke posisi unit sekarang");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal ambil lokasi unit");
+    } finally {
+      setFetchingUnitLoc(false);
+    }
   }
 
   /**
@@ -157,25 +225,19 @@ export function EditJobView({
   // PIC lapangan wajib — tombol simpan mati selama salah satunya kosong.
   const picFilled = !!form.pic_nama.trim() && !!form.pic_no_hp.trim();
 
-  async function doSubmit(allowConflict: boolean) {
+  async function doSubmit() {
     setLoading(true);
     const res = await updateJob(
       job.id,
-      { ...form, unit_trailer_id: trailerTampil ? form.unit_trailer_id || null : null },
-      { allowConflict }
+      { ...form, unit_trailer_id: trailerTampil ? form.unit_trailer_id || null : null }
     );
     setLoading(false);
     if (res.ok) {
       toast.success("Perubahan disimpan");
-      setConfirmConflict(null);
       navigate(`/jobs/${job.id}`);
       return;
     }
-    if (res.conflicts) {
-      setConfirmConflict(res.conflicts);
-      return;
-    }
-    toast.error(res.error);
+    toast.error(res.conflicts ? BENTROK_JADWAL_MESSAGE : res.error);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -187,7 +249,16 @@ export function EditJobView({
         checkBackDate: form.etd !== initialEtd
       })
     );
+    // ETA kosong hanya boleh bila sistem bisa menghitungnya dari rute.
+    if (!form.eta && estimasi.isError && !adaDurasiTersimpan) errs.eta = ETA_TIDAK_TERHITUNG_MESSAGE;
     if (!form.pic_nama.trim()) errs.pic_nama = "PIC wajib diisi";
+    if (!form.alat_diangkut.trim()) errs.alat_diangkut = "Alat wajib diisi";
+    // Sama seperti form tambah: lokasi wajib dipin di peta supaya koordinatnya
+    // tersimpan; alamat di kotak teks tetap boleh dilengkapi setelah dipin.
+    if (form.asal_lat === null || form.asal_lng === null) errs.asal = "Pin lokasi asal di peta";
+    else if (!form.asal.trim()) errs.asal = "Alamat lokasi asal wajib diisi";
+    if (form.tujuan_lat === null || form.tujuan_lng === null) errs.tujuan = "Pin lokasi tujuan di peta";
+    else if (!form.tujuan.trim()) errs.tujuan = "Alamat lokasi tujuan wajib diisi";
     if (trailer.isPending) errs.unit_trailer_id = "Tunggu, pilihan unit trailer sedang dimuat";
     else if (trailer.isError)
       errs.unit_trailer_id = "Pilihan unit trailer gagal dimuat — muat ulang halaman lalu coba lagi";
@@ -197,8 +268,13 @@ export function EditJobView({
       errs.pic_no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
     setError(errs);
     if (Object.keys(errs).length > 0) return;
+    // Bentrok jadwal tidak bisa di-"tetap simpan" — server juga menolaknya.
+    if (conflicts.hasAny) {
+      toast.error(BENTROK_JADWAL_MESSAGE);
+      return;
+    }
 
-    await doSubmit(false);
+    await doSubmit();
   }
 
   return (
@@ -240,9 +316,10 @@ export function EditJobView({
             <Input
               value={form.alat_diangkut}
               onChange={(e) => set("alat_diangkut", e.target.value)}
+              error={error.alat_diangkut}
             />
           </Field>
-          <Field label="Asal" required className="sm:col-span-2">
+          <Field label="Lokasi asal" required className="sm:col-span-2">
             <LocationPicker
               value={{
                 address: form.asal,
@@ -257,10 +334,23 @@ export function EditJobView({
                   asal_lng: v.lng
                 }))
               }
-              placeholder="Alamat lengkap titik pickup"
+              placeholder="Lengkapi alamat titik pickup (nama gedung, nomor, dll.)"
+              wajibPin
+              error={error.asal}
+              availableUnits={mapUnits}
+              extra={{
+                label: "Pakai lokasi unit",
+                icon: <Truck style={{ width: 12, height: 12 }} />,
+                onClick: useUnitLocationAsAsal,
+                loading: fetchingUnitLoc,
+                disabled: !form.unit_id,
+                hint: form.unit_id
+                  ? "Ambil posisi GPS terkini unit yang dipilih"
+                  : "Pilih unit dulu di bawah"
+              }}
             />
           </Field>
-          <Field label="Tujuan" required className="sm:col-span-2">
+          <Field label="Lokasi tujuan" required className="sm:col-span-2">
             <LocationPicker
               value={{
                 address: form.tujuan,
@@ -275,9 +365,23 @@ export function EditJobView({
                   tujuan_lng: v.lng
                 }))
               }
-              placeholder="Alamat lengkap titik drop"
+              placeholder="Lengkapi alamat titik drop (nama gedung, nomor, dll.)"
+              wajibPin
+              error={error.tujuan}
+              availableUnits={mapUnits}
             />
           </Field>
+          {/* Dibungkus kondisi supaya tidak ada baris grid kosong sebelum dipin. */}
+          {form.asal_lat !== null && form.tujuan_lat !== null && (
+            <div className="sm:col-span-2">
+              <EstimasiRuteInfo
+                asal={{ lat: form.asal_lat, lng: form.asal_lng }}
+                tujuan={{ lat: form.tujuan_lat, lng: form.tujuan_lng }}
+                etd={form.etd}
+                onPakaiEta={(eta) => set("eta", eta)}
+              />
+            </div>
+          )}
           <Field label="Unit" required>
             <Combobox
               value={form.unit_id}
@@ -324,25 +428,24 @@ export function EditJobView({
             />
           </Field>
           <Field label="ETD" required>
-            <Input
-              type="datetime-local"
+            <DateTimeInput
               // ETD lama yang sudah lewat tetap boleh tampil; batas hanya
               // berlaku saat admin memilih tanggal baru.
               min={initialEtd < minEtd ? undefined : minEtd}
               value={form.etd}
-              onChange={(e) => set("etd", e.target.value)}
+              onChange={(v) => set("etd", v)}
               error={error.etd}
             />
           </Field>
           <Field
             label="ETA"
-            hint="Boleh dikosongkan — sistem menghitungnya dari durasi rute, asalkan lokasi asal & tujuan sudah dipin di peta."
+            hint="Boleh dikosongkan — sistem mengisinya dari ETD + estimasi durasi perjalanan truk."
           >
-            <Input
-              type="datetime-local"
+            <DateTimeInput
               min={form.etd || undefined}
               value={form.eta}
-              onChange={(e) => set("eta", e.target.value)}
+              clearable
+              onChange={(v) => set("eta", v)}
               error={error.eta}
             />
           </Field>
@@ -377,27 +480,6 @@ export function EditJobView({
         </Button>
       </div>
 
-      <ConfirmDialog
-        open={confirmConflict !== null}
-        onClose={() => setConfirmConflict(null)}
-        title="Tetap simpan meski ada bentrok jadwal?"
-        body={
-          confirmConflict && (
-            <div className="space-y-3 text-left">
-              <p>
-                Perubahan ini menyebabkan bentrok dengan job aktif lain.
-                Pastikan Anda sudah mengkoordinasikan penjadwalan secara manual
-                sebelum simpan.
-              </p>
-              <ConflictWarning conflicts={confirmConflict} />
-            </div>
-          )
-        }
-        confirmText="Ya, tetap simpan"
-        variant="danger"
-        loading={loading}
-        onConfirm={() => doSubmit(true)}
-      />
     </form>
   );
 }

@@ -1,4 +1,4 @@
-import { api } from "@/lib/api/client";
+import { api, formDenganDokumen } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
 import type {
   ActionResult,
@@ -40,6 +40,11 @@ export interface UnitTrailer {
   kir_berlaku_sampai: string | null;
   srut_nomor: string | null;
   srut_tanggal: string | null;
+  /** Scan/foto dokumen (opsional). `*_url` = signed URL, hanya terisi di detail. */
+  kir_uploaded_at?: string | null;
+  kir_url?: string | null;
+  srut_uploaded_at?: string | null;
+  srut_url?: string | null;
   /** False = dinonaktifkan: tidak muncul di pilihan job, penjualan, penghapusan. */
   is_active: boolean;
 }
@@ -53,7 +58,18 @@ export interface UnitTrailerInput {
   kir_berlaku_sampai: string | null;
   srut_nomor: string | null;
   srut_tanggal: string | null;
+  /** True = dokumen tersimpan dilepas (diabaikan bila ada file baru). */
+  hapus_dokumen_kir?: boolean;
+  hapus_dokumen_srut?: boolean;
 }
+
+/** Scan/foto KIR & SRUT (opsional) — ikut terkirim bersama isian trailer. */
+export interface DokumenTrailer {
+  kir?: File | null;
+  srut?: File | null;
+}
+
+const berkasTrailer = (d: DokumenTrailer) => ({ dokumen_kir: d.kir, dokumen_srut: d.srut });
 
 export interface UnitTrailerPage {
   items: UnitTrailer[];
@@ -115,12 +131,19 @@ export const getUnitTrailerIncidents = (id: string) =>
 export const getUnitTrailerHistory = (id: string) =>
   api.get<UnitStatusHistoryEntry[]>(`/unit-trailer/${id}/status-history`);
 
-export function createUnitTrailer(input: UnitTrailerInput): Promise<ActionResult<UnitTrailer>> {
-  return mutate(api.post<UnitTrailer>("/unit-trailer", input));
+export function createUnitTrailer(
+  input: UnitTrailerInput,
+  dokumen: DokumenTrailer = {}
+): Promise<ActionResult<UnitTrailer>> {
+  return mutate(api.upload<UnitTrailer>("/unit-trailer", formDenganDokumen(input, berkasTrailer(dokumen))));
 }
 
-export function updateUnitTrailer(id: string, input: UnitTrailerInput): Promise<ActionResult<unknown>> {
-  return mutate(api.patch(`/unit-trailer/${id}`, input));
+export function updateUnitTrailer(
+  id: string,
+  input: UnitTrailerInput,
+  dokumen: DokumenTrailer = {}
+): Promise<ActionResult<unknown>> {
+  return mutate(api.patchForm(`/unit-trailer/${id}`, formDenganDokumen(input, berkasTrailer(dokumen))));
 }
 
 export const getUnitTrailerRiwayat = (id: string) => api.get<RiwayatAset>(`/unit-trailer/${id}/riwayat`);

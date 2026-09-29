@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Textarea, Field } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, TZ_WIB } from "@/lib/utils";
 import {
   JOB_STATUS_LABEL,
   NEXT_DRIVER_STATUS,
@@ -79,6 +79,7 @@ const AJUKAN_ALERT =
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("id-ID", {
+    timeZone: TZ_WIB,
     day: "numeric",
     month: "long",
     hour: "2-digit",

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'core/push.dart';
 import 'core/theme.dart';
 import 'core/widgets/banner_notifikasi.dart';
+import 'core/widgets/splash_animasi.dart';
+import 'core/widgets/wajib_update.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/jobs/job_detail_screen.dart';
@@ -68,7 +70,14 @@ class MasDriverApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       routerConfig: ref.watch(routerProvider),
-      builder: (context, child) => _ForegroundPushBanner(child: child!),
+      // Urutan lapisan: splash → kunci wajib update (dibuka setelah splash
+      // selesai) → banner push → halaman.
+      builder: (context, child) => SplashAnimasi(
+        child: WajibUpdate(
+          tundaAwal: SplashAnimasi.defaultDurasi,
+          child: _ForegroundPushBanner(child: child!),
+        ),
+      ),
     );
   }
 }

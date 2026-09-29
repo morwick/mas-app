@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from postgrest.exceptions import APIError
 from postgrest.types import CountMethod
 from supabase import AsyncClient
 
+from app.core.dokumen import BerkasUnggah, PerubahanDokumen, signed_url_dokumen
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
 from app.core.pg import clean_text, first, num, rows, single
@@ -56,6 +58,8 @@ def to_unit(row: dict[str, Any]) -> Unit:
         kir_nomor=row.get("kir_nomor"),
         kir_berlaku_sampai=row.get("kir_berlaku_sampai"),
         pajak_berlaku_sampai=row.get("pajak_berlaku_sampai"),
+        stnk_uploaded_at=row.get("stnk_uploaded_at"),
+        kir_uploaded_at=row.get("kir_uploaded_at"),
     )
 
 
@@ -124,7 +128,12 @@ class UnitService:
         row = single(await self._db.table("units").select(UNIT_SELECT).eq("id", unit_id).maybe_single().execute())
         if row is None:
             raise NotFoundError("Unit tidak ditemukan")
-        return to_unit(row)
+        return to_unit(row).model_copy(
+            update={
+                "stnk_url": await signed_url_dokumen(self._db, row.get("stnk_path")),
+                "kir_url": await signed_url_dokumen(self._db, row.get("kir_path")),
+            }
+        )
 
     async def count_active(self) -> int:
         res = await (
@@ -193,7 +202,12 @@ class UnitService:
                 f"Driver sudah jadi driver tetap unit {taken_by}. Lepas dari unit itu dulu sebelum di-assign ke sini."
             )
 
-    async def create(self, payload: UnitCreate) -> Unit:
+    async def create(
+        self,
+        payload: UnitCreate,
+        dokumen_stnk: BerkasUnggah | None = None,
+        dokumen_kir: BerkasUnggah | None = None,
+    ) -> Unit:
         if not payload.kode_unit.strip():
             raise ValidationError("Kode unit wajib diisi")
         if not payload.no_polisi.strip():
@@ -201,7 +215,9 @@ class UnitService:
         if payload.default_driver_id:
             await self._ensure_driver_free(payload.default_driver_id)
 
+        unit_id = str(uuid.uuid4())
         data: dict[str, Any] = {
+            "id": unit_id,
             "kode_unit": payload.kode_unit.strip().upper(),
             "jenis_unit_id": payload.jenis_unit_id,
             "no_polisi": payload.no_polisi.strip(),
@@ -214,17 +230,31 @@ class UnitService:
         for key in _DATE_FIELDS:
             data[key] = getattr(payload, key) or None
 
+        # File diunggah dulu; bila insert gagal, file dibuang lagi.
+        dokumen = PerubahanDokumen(self._db, "units", unit_id)
         try:
+            data.update(await dokumen.siapkan("stnk", dokumen_stnk))
+            data.update(await dokumen.siapkan("kir", dokumen_kir))
             res = await self._db.table("units").insert(data).execute()
         except APIError as exc:
+            await dokumen.batalkan()
             if exc.code == "23505":
                 if "units_default_driver_unique" in (exc.message or ""):
                     raise ConflictError("Driver sudah dipakai unit lain") from exc
                 raise ConflictError("Kode unit sudah dipakai") from exc
             raise
+        except Exception:
+            await dokumen.batalkan()
+            raise
         return await self.get(rows(res)[0]["id"])
 
-    async def update(self, unit_id: str, payload: UnitUpdate) -> None:
+    async def update(
+        self,
+        unit_id: str,
+        payload: UnitUpdate,
+        dokumen_stnk: BerkasUnggah | None = None,
+        dokumen_kir: BerkasUnggah | None = None,
+    ) -> None:
         fields = payload.model_dump(exclude_unset=True)
         if payload.default_driver_id:
             await self._ensure_driver_free(payload.default_driver_id, unit_id)
@@ -246,15 +276,42 @@ class UnitService:
         for key in _DATE_FIELDS:
             if key in fields:
                 data[key] = fields[key] or None
+
+        dokumen = PerubahanDokumen(self._db, "units", unit_id)
+        if dokumen_stnk or dokumen_kir or payload.hapus_dokumen_stnk or payload.hapus_dokumen_kir:
+            lama = single(
+                await self._db.table("units").select("stnk_path, kir_path").eq("id", unit_id).maybe_single().execute()
+            )
+            if lama is None:
+                raise NotFoundError("Unit tidak ditemukan")
+            try:
+                data.update(
+                    await dokumen.siapkan(
+                        "stnk", dokumen_stnk, hapus=payload.hapus_dokumen_stnk, lama=lama.get("stnk_path")
+                    )
+                )
+                data.update(
+                    await dokumen.siapkan(
+                        "kir", dokumen_kir, hapus=payload.hapus_dokumen_kir, lama=lama.get("kir_path")
+                    )
+                )
+            except Exception:
+                await dokumen.batalkan()
+                raise
         if not data:
             return
 
         try:
             await self._db.table("units").update(data).eq("id", unit_id).execute()
         except APIError as exc:
+            await dokumen.batalkan()
             if exc.code == "23505" and "units_default_driver_unique" in (exc.message or ""):
                 raise ConflictError("Driver sudah dipakai unit lain") from exc
             raise
+        except Exception:
+            await dokumen.batalkan()
+            raise
+        await dokumen.selesaikan()
 
     async def deactivate(self, unit_id: str) -> None:
         await self._db.table("units").update({"is_active": False}).eq("id", unit_id).execute()

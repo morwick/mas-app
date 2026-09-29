@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { DateInput } from "@/components/ui/date-input";
 import { Link } from "react-router-dom";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea, Field } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Combobox } from "@/components/ui/combobox";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { DOKUMEN_KOSONG, DokumenInput, type NilaiDokumen } from "@/components/ui/dokumen-input";
 import { createUnit, updateUnit } from "@/features/units/api";
 import { parseTrackingInput } from "@/lib/tracksolid-link";
 import type { Driver, JenisUnit, Unit, UnitStatus } from "@/types";
@@ -53,6 +56,8 @@ export function UnitForm({
     kir_berlaku_sampai: initial?.kir_berlaku_sampai ?? "",
     pajak_berlaku_sampai: initial?.pajak_berlaku_sampai ?? ""
   });
+  const [dokumenStnk, setDokumenStnk] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
+  const [dokumenKir, setDokumenKir] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
   const [error, setError] = useState<Record<string, string>>({});
 
   // Smart parse: user boleh ketik IMEI 15 digit langsung atau paste link.
@@ -93,10 +98,15 @@ export function UnitForm({
       pajak_berlaku_sampai: form.pajak_berlaku_sampai || null
     };
 
+    const dokumen = { stnk: dokumenStnk.file, kir: dokumenKir.file };
     const res =
       mode === "new"
-        ? await createUnit({ ...payload, status: form.status })
-        : await updateUnit(initial!.id, payload);
+        ? await createUnit({ ...payload, status: form.status }, dokumen)
+        : await updateUnit(
+            initial!.id,
+            { ...payload, hapus_dokumen_stnk: dokumenStnk.hapus, hapus_dokumen_kir: dokumenKir.hapus },
+            dokumen
+          );
     setLoading(false);
     if (res.ok) {
       toast.success(
@@ -239,11 +249,14 @@ export function UnitForm({
             />
           </Field>
           <Field label="STNK berlaku sampai">
-            <Input
-              type="date"
+            <DateInput
               value={form.stnk_berlaku_sampai}
-              onChange={(e) => set("stnk_berlaku_sampai", e.target.value)}
+              onChange={(v) => set("stnk_berlaku_sampai", v)}
+              clearable
             />
+          </Field>
+          <Field label="Dokumen STNK" className="sm:col-span-2" hint="Opsional. PDF / foto, maks. 10 MB.">
+            <DokumenInput nama="STNK" value={dokumenStnk} onChange={setDokumenStnk} url={initial?.stnk_url} />
           </Field>
           <Field label="No KIR" hint="Uji berkala kendaraan">
             <Input
@@ -253,17 +266,20 @@ export function UnitForm({
             />
           </Field>
           <Field label="KIR berlaku sampai">
-            <Input
-              type="date"
+            <DateInput
               value={form.kir_berlaku_sampai}
-              onChange={(e) => set("kir_berlaku_sampai", e.target.value)}
+              onChange={(v) => set("kir_berlaku_sampai", v)}
+              clearable
             />
           </Field>
+          <Field label="Dokumen KIR" className="sm:col-span-2" hint="Opsional. PDF / foto, maks. 10 MB.">
+            <DokumenInput nama="KIR" value={dokumenKir} onChange={setDokumenKir} url={initial?.kir_url} />
+          </Field>
           <Field label="Pajak jatuh tempo" className="sm:col-span-2">
-            <Input
-              type="date"
+            <DateInput
               value={form.pajak_berlaku_sampai}
-              onChange={(e) => set("pajak_berlaku_sampai", e.target.value)}
+              onChange={(v) => set("pajak_berlaku_sampai", v)}
+              clearable
             />
           </Field>
         </div>
@@ -278,6 +294,7 @@ export function UnitForm({
           {mode === "new" ? "Simpan unit" : "Simpan perubahan"}
         </Button>
       </div>
+      <LoadingOverlay message={loading ? "Menyimpan data unit…" : null} />
     </form>
   );
 }

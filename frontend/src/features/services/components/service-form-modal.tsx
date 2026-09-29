@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Field } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import {
   type JenisService
 } from "@/types";
 import { formatKm } from "@/lib/service";
-import { formatDate } from "@/lib/utils";
+import { formatDate, hariIniWIB } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -44,7 +45,7 @@ const INITIAL_LOOKUP: LookupState = {
 const jenisOptions: JenisService[] = ["rutin", "oli", "ban", "mesin", "lainnya"];
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return hariIniWIB();
 }
 
 export function ServiceFormModal({
@@ -262,13 +263,12 @@ export function ServiceFormModal({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Tanggal service" required>
-            <Input
-              type="date"
+            <DateInput
               value={form.tanggal}
               max={todayIso()}
-              onChange={(e) => {
+              onChange={(v) => {
                 manuallyEditedRef.current = false;
-                set("tanggal", e.target.value);
+                set("tanggal", v);
               }}
               error={error.tanggal}
             />

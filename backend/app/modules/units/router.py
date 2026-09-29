@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from supabase import AsyncClient
 
 from app.core.auth import user_client
+from app.core.dokumen import baca_berkas, parse_form
 from app.core.paging import Page, PageParams, page_params
 from app.modules.auth.schemas import OkResponse
 from app.modules.incidents.schemas import Incident
@@ -100,13 +101,28 @@ async def unit_services(unit_id: str, client: AsyncClient = Depends(user_client)
 
 
 @router.post("", response_model=Unit, status_code=201)
-async def create_unit(payload: UnitCreate, svc: UnitService = Depends(get_service)) -> Unit:
-    return await svc.create(payload)
+async def create_unit(
+    data: str = Form(..., description="Isian UnitCreate (JSON)"),
+    dokumen_stnk: UploadFile | None = File(None, description="Scan/foto STNK (opsional)"),
+    dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR (opsional)"),
+    svc: UnitService = Depends(get_service),
+) -> Unit:
+    return await svc.create(
+        parse_form(UnitCreate, data), await baca_berkas(dokumen_stnk), await baca_berkas(dokumen_kir)
+    )
 
 
 @router.patch("/{unit_id}", response_model=OkResponse)
-async def update_unit(unit_id: str, payload: UnitUpdate, svc: UnitService = Depends(get_service)) -> OkResponse:
-    await svc.update(unit_id, payload)
+async def update_unit(
+    unit_id: str,
+    data: str = Form(..., description="Isian UnitUpdate (JSON)"),
+    dokumen_stnk: UploadFile | None = File(None, description="Scan/foto STNK pengganti (opsional)"),
+    dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR pengganti (opsional)"),
+    svc: UnitService = Depends(get_service),
+) -> OkResponse:
+    await svc.update(
+        unit_id, parse_form(UnitUpdate, data), await baca_berkas(dokumen_stnk), await baca_berkas(dokumen_kir)
+    )
     return OkResponse()
 
 

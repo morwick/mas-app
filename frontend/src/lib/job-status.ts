@@ -93,7 +93,11 @@ export const CUSTOMER_STEPS: Array<{ key: JobStatus; label: string }> = [
   { key: "selesai", label: "Selesai" }
 ];
 
-/** Petakan status internal ke tahap pelanggan. */
+/**
+ * Petakan status internal ke tahap pelanggan. Bagi pelanggan job selesai begitu
+ * unloading tuntas (driver sudah mengunggah 4 foto sisi kendaraan + surat
+ * jalan) — serah terima di pool & validasi admin adalah proses internal.
+ */
 export function customerStep(status: JobStatus): JobStatus {
   switch (status) {
     case "menunggu_pickup":
@@ -101,7 +105,7 @@ export function customerStep(status: JobStatus): JobStatus {
       return "ditugaskan";
     case "serah_terima_pool":
     case "menunggu_validasi":
-      return "unloading";
+      return "selesai";
     default:
       return status;
   }

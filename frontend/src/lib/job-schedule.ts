@@ -1,5 +1,7 @@
-// Aturan jadwal job — fungsi murni atas nilai `<input type="datetime-local">`
-// ("YYYY-MM-DDTHH:mm", waktu lokal browser). Backend menjalankan aturan yang
+import { isoToLocalInput } from "@/lib/utils";
+
+// Aturan jadwal job — fungsi murni atas nilai isian tanggal-jam
+// ("YYYY-MM-DDTHH:mm", jam WIB). Backend menjalankan aturan yang
 // sama sebagai defense-in-depth sebelum menyimpan.
 
 export const ETD_BACKDATE_MESSAGE =
@@ -12,10 +14,9 @@ function datePart(value: string): string {
   return value.slice(0, 10);
 }
 
-/** Tanggal hari ini di zona browser, dalam format "YYYY-MM-DD". */
+/** Tanggal hari ini di WIB, dalam format "YYYY-MM-DD". */
 export function todayLocalDate(now: Date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return isoToLocalInput(now.toISOString()).slice(0, 10);
 }
 
 /**

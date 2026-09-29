@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -15,16 +16,19 @@ import {
   type LucideIcon
 } from "lucide-react";
 import type { DokumenJatuhTempo } from "@/features/dashboard/api";
+import { Modal } from "@/components/ui/modal";
+import { Tabs } from "@/components/ui/tabs";
 import { useTerlipat } from "@/lib/use-terlipat";
 import { formatDate } from "@/lib/utils";
 
 export interface TindakanItem {
   key: string;
-  to: string;
+  /** Tujuan saat kotak diklik. Diabaikan bila `onClick` diisi. */
+  to?: string;
+  /** Aksi saat kotak diklik (mis. membuka modal rincian) — pengganti `to`. */
+  onClick?: () => void;
   judul: string;
   keterangan: string;
-  /** Rincian tambahan di bawah baris (mis. daftar dokumen). */
-  rincian?: React.ReactNode;
 }
 
 /** Warna & ikon per jenis tindakan — supaya tiap kotak mudah dibedakan sekilas. */
@@ -140,43 +144,57 @@ export function PerluTindakanCard({ items }: { items: TindakanItem[] }) {
                   flexDirection: "column"
                 }}
               >
-                <Link
-                  to={it.to}
-                  style={{
+                {(() => {
+                  const gaya: React.CSSProperties = {
                     display: "flex",
                     gap: 10,
                     alignItems: "center",
                     padding: "10px 12px",
                     textDecoration: "none",
-                    color: "inherit"
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 30,
-                      height: 30,
-                      borderRadius: 99,
-                      background: nada.warna,
-                      color: "white",
-                      flexShrink: 0
-                    }}
-                  >
-                    <Ikon style={{ width: 15, height: 15 }} />
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3, color: nada.warna }}>{it.judul}</div>
-                    <div className="caption" style={{ color: "var(--text-secondary)", lineHeight: 1.3 }}>
-                      {it.keterangan}
-                    </div>
-                  </div>
-                  <ChevronRight style={{ width: 16, height: 16, flexShrink: 0, color: nada.warna }} />
-                </Link>
-                {it.rincian && (
-                  <div style={{ padding: "0 12px 10px 52px", color: "var(--text-secondary)" }}>{it.rincian}</div>
-                )}
+                    color: "inherit",
+                    width: "100%",
+                    background: "none",
+                    border: 0,
+                    textAlign: "left",
+                    cursor: "pointer",
+                    font: "inherit"
+                  };
+                  const isi = (
+                    <>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 30,
+                          height: 30,
+                          borderRadius: 99,
+                          background: nada.warna,
+                          color: "white",
+                          flexShrink: 0
+                        }}
+                      >
+                        <Ikon style={{ width: 15, height: 15 }} />
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3, color: nada.warna }}>{it.judul}</div>
+                        <div className="caption" style={{ color: "var(--text-secondary)", lineHeight: 1.3 }}>
+                          {it.keterangan}
+                        </div>
+                      </div>
+                      <ChevronRight style={{ width: 16, height: 16, flexShrink: 0, color: nada.warna }} />
+                    </>
+                  );
+                  return it.onClick ? (
+                    <button type="button" onClick={it.onClick} style={gaya}>
+                      {isi}
+                    </button>
+                  ) : (
+                    <Link to={it.to ?? "#"} style={gaya}>
+                      {isi}
+                    </Link>
+                  );
+                })()}
               </div>
             );
           })}
@@ -186,29 +204,110 @@ export function PerluTindakanCard({ items }: { items: TindakanItem[] }) {
   );
 }
 
-const MAKS_DOKUMEN = 5;
+function sisaHariTeks(d: DokumenJatuhTempo): string {
+  if (d.sisa_hari < 0) return `Sudah habis ${Math.abs(d.sisa_hari)} hari`;
+  if (d.sisa_hari === 0) return "Habis hari ini";
+  return `Habis ${d.sisa_hari} hari lagi`;
+}
 
-/** Rincian dokumen yang habis / segera habis — tiap baris tertaut ke unit / trailer / driver-nya. */
-export function RincianDokumen({ dokumen }: { dokumen: DokumenJatuhTempo[] }) {
-  const tampil = dokumen.slice(0, MAKS_DOKUMEN);
+/** Filter jenis dokumen di modal; nilainya = `label` dari server. */
+const FILTER_DOKUMEN = [
+  { key: "semua", label: "Semua" },
+  { key: "STNK", label: "STNK" },
+  { key: "SIM", label: "SIM" },
+  { key: "KIR", label: "KIR" },
+  { key: "Pajak kendaraan", label: "Pajak" }
+] as const;
+type FilterDokumen = (typeof FILTER_DOKUMEN)[number]["key"];
+
+/**
+ * Modal daftar dokumen yang habis / segera habis, bisa difilter per jenis
+ * dokumen dan urut dari yang paling mendesak. Tiap baris tertaut ke halaman
+ * detail unit / trailer / driver pemilik dokumennya.
+ */
+export function DokumenJatuhTempoModal({
+  open,
+  onClose,
+  dokumen
+}: {
+  open: boolean;
+  onClose: () => void;
+  dokumen: DokumenJatuhTempo[];
+}) {
+  const [filter, setFilter] = useState<FilterDokumen>("semua");
+  const urut = dokumen
+    .filter((d) => filter === "semua" || d.label === filter)
+    .sort((a, b) => a.sisa_hari - b.sisa_hari);
+  const jumlah = (key: FilterDokumen) =>
+    key === "semua" ? dokumen.length : dokumen.filter((d) => d.label === key).length;
   return (
-    <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: 12.5 }}>
-      {tampil.map((d) => (
-        <li key={`${d.label}-${d.href}`} style={{ padding: "2px 0" }}>
-          <Link to={d.href} style={{ color: "inherit" }}>
-            <strong>{d.label}</strong> {d.subjek}
-          </Link>{" "}
-          —{" "}
-          {d.sisa_hari < 0
-            ? `sudah habis ${Math.abs(d.sisa_hari)} hari (${formatDate(d.tanggal)})`
-            : d.sisa_hari === 0
-              ? "habis hari ini"
-              : `habis ${d.sisa_hari} hari lagi (${formatDate(d.tanggal)})`}
-        </li>
-      ))}
-      {dokumen.length > MAKS_DOKUMEN && (
-        <li style={{ padding: "2px 0", opacity: 0.8 }}>+{dokumen.length - MAKS_DOKUMEN} dokumen lainnya</li>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`${dokumen.length} dokumen jatuh tempo`}
+      description="STNK / KIR / pajak / SIM yang sudah habis atau habis ≤ 30 hari lagi. Klik untuk membuka detailnya."
+      maxWidth="max-w-[560px]"
+    >
+      <div className="overflow-x-auto scrollbar-thin" style={{ padding: "12px 20px 4px", flexShrink: 0 }}>
+        <Tabs
+          variant="pill"
+          value={filter}
+          onChange={(k) => setFilter(k as FilterDokumen)}
+          items={FILTER_DOKUMEN.map((f) => ({ key: f.key, label: f.label, count: jumlah(f.key) }))}
+        />
+      </div>
+      {urut.length === 0 && (
+        <p className="caption" style={{ padding: "16px 20px", textAlign: "center" }}>
+          Tidak ada dokumen {FILTER_DOKUMEN.find((f) => f.key === filter)?.label} yang jatuh tempo.
+        </p>
       )}
-    </ul>
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, overflowY: "auto" }}>
+        {urut.map((d) => {
+          const lewat = d.sisa_hari < 0;
+          return (
+            <li key={`${d.label}-${d.href}-${d.tanggal}`} style={{ borderBottom: "0.5px solid var(--border-default)" }}>
+              <Link
+                to={d.href}
+                onClick={onClose}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 20px",
+                  color: "inherit",
+                  textDecoration: "none"
+                }}
+              >
+                <span
+                  className="badge"
+                  style={{
+                    background: lewat ? "#FEE2E2" : "#FCE7F3",
+                    color: lewat ? "#B91C1C" : "#BE185D",
+                    fontWeight: 700,
+                    minWidth: 52,
+                    justifyContent: "center"
+                  }}
+                >
+                  {d.label}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{d.subjek}</div>
+                  <div className="caption" style={{ color: lewat ? "#B91C1C" : "var(--text-secondary)" }}>
+                    {sisaHariTeks(d)} · {formatDate(d.tanggal)}
+                  </div>
+                </div>
+                <ChevronRight style={{ width: 16, height: 16, flexShrink: 0, color: "var(--text-tertiary)" }} />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </Modal>
   );
+}
+
+/** State buka/tutup modal dokumen — dipakai kartu dashboard. */
+export function useModalDokumen() {
+  const [open, setOpen] = useState(false);
+  return { open, buka: () => setOpen(true), tutup: () => setOpen(false) };
 }
