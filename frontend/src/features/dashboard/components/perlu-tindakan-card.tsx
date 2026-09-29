@@ -216,7 +216,8 @@ const FILTER_DOKUMEN = [
   { key: "STNK", label: "STNK" },
   { key: "SIM", label: "SIM" },
   { key: "KIR", label: "KIR" },
-  { key: "Pajak kendaraan", label: "Pajak" }
+  { key: "Pajak kendaraan", label: "Pajak" },
+  { key: "Polis asuransi", label: "Asuransi" }
 ] as const;
 type FilterDokumen = (typeof FILTER_DOKUMEN)[number]["key"];
 
@@ -245,7 +246,7 @@ export function DokumenJatuhTempoModal({
       open={open}
       onClose={onClose}
       title={`${dokumen.length} dokumen jatuh tempo`}
-      description="STNK / KIR / pajak / SIM yang sudah habis atau habis ≤ 30 hari lagi. Klik untuk membuka detailnya."
+      description="STNK / KIR / pajak / SIM / polis asuransi yang sudah habis atau habis ≤ 30 hari lagi. Klik untuk membuka detailnya."
       maxWidth="max-w-[560px]"
     >
       <div className="overflow-x-auto scrollbar-thin" style={{ padding: "12px 20px 4px", flexShrink: 0 }}>

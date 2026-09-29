@@ -3,14 +3,16 @@ biaya perawatan per aset, dan rekap klaim asuransi."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from supabase import AsyncClient
 
-from app.core.auth import superadmin_or_finance_client
+from app.core.auth import AuthContext, require_role, superadmin_or_finance_client
 from app.core.pg import num, rows
+from app.core.supabase import SupabaseClientFactory, get_client_factory
 from app.modules.invoices.schemas import JobProfitabilityRow
 from app.modules.invoices.service import InvoiceService
 from app.modules.perintah_kerja.laporan import BiayaPerawatanRow, KlaimAsuransiRow, biaya_perawatan, rekap_klaim
@@ -58,11 +60,20 @@ async def profitability(
     return await InvoiceService(client).job_profitability(start=start, end=end)
 
 
+async def _laporan_perawatan_client(
+    auth: AuthContext = Depends(require_role("superadmin", "admin", "finance")),
+    factory: SupabaseClientFactory = Depends(get_client_factory),
+) -> AsyncIterator[AsyncClient]:
+    """Laporan perawatan: superadmin, admin (pengelola perbaikan), finance."""
+    async with factory.for_user(auth.token) as client:
+        yield client
+
+
 @router.get("/biaya-perawatan", response_model=list[BiayaPerawatanRow])
 async def laporan_biaya_perawatan(
     start: date = Query(..., description="YYYY-MM-DD"),
     end: date = Query(..., description="YYYY-MM-DD"),
-    client: AsyncClient = Depends(superadmin_or_finance_client),
+    client: AsyncClient = Depends(_laporan_perawatan_client),
 ) -> list[BiayaPerawatanRow]:
     """Biaya perbaikan per unit / unit trailer (perintah kerja dalam periode)."""
     return await biaya_perawatan(client, start, end)
@@ -72,7 +83,7 @@ async def laporan_biaya_perawatan(
 async def laporan_klaim_asuransi(
     start: date = Query(..., description="YYYY-MM-DD"),
     end: date = Query(..., description="YYYY-MM-DD"),
-    client: AsyncClient = Depends(superadmin_or_finance_client),
+    client: AsyncClient = Depends(_laporan_perawatan_client),
 ) -> list[KlaimAsuransiRow]:
     """Rekap klaim per perusahaan asuransi (perintah kerja dalam periode)."""
     return await rekap_klaim(client, start, end)

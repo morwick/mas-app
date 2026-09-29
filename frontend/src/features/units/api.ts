@@ -51,17 +51,28 @@ export const getDriverAssignments = () =>
 export interface DokumenUnit {
   stnk?: File | null;
   kir?: File | null;
+  polis?: File | null;
 }
 
-const berkasUnit = (d: DokumenUnit) => ({ dokumen_stnk: d.stnk, dokumen_kir: d.kir });
+/** Polis asuransi yang ikut tersimpan bersama unit (satu transaksi). */
+export interface AsuransiUnitInput {
+  polis?: import("@/features/asuransi/api").PolisInput | null;
+  polis_id?: string | null;
+  hapus_polis?: boolean;
+}
 
-export function createUnit(input: UnitInput, dokumen: DokumenUnit = {}): Promise<ActionResult<Unit>> {
+const berkasUnit = (d: DokumenUnit) => ({ dokumen_stnk: d.stnk, dokumen_kir: d.kir, dokumen_polis: d.polis });
+
+export function createUnit(
+  input: UnitInput & AsuransiUnitInput,
+  dokumen: DokumenUnit = {}
+): Promise<ActionResult<Unit>> {
   return mutate(api.upload<Unit>("/units", formDenganDokumen(input, berkasUnit(dokumen))));
 }
 
 export function updateUnit(
   id: string,
-  input: Partial<UnitInput> & { hapus_dokumen_stnk?: boolean; hapus_dokumen_kir?: boolean },
+  input: Partial<UnitInput> & AsuransiUnitInput & { hapus_dokumen_stnk?: boolean; hapus_dokumen_kir?: boolean },
   dokumen: DokumenUnit = {}
 ): Promise<ActionResult<unknown>> {
   return mutate(api.patchForm(`/units/${id}`, formDenganDokumen(input, berkasUnit(dokumen))));

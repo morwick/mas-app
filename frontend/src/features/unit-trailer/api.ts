@@ -45,6 +45,8 @@ export interface UnitTrailer {
   kir_url?: string | null;
   srut_uploaded_at?: string | null;
   srut_url?: string | null;
+  /** Polis asuransi terkini. Hanya di detail. */
+  polis_terkini?: import("@/features/asuransi/api").PolisAsuransi | null;
   /** False = dinonaktifkan: tidak muncul di pilihan job, penjualan, penghapusan. */
   is_active: boolean;
 }
@@ -61,15 +63,24 @@ export interface UnitTrailerInput {
   /** True = dokumen tersimpan dilepas (diabaikan bila ada file baru). */
   hapus_dokumen_kir?: boolean;
   hapus_dokumen_srut?: boolean;
+  /** Polis asuransi yang ikut tersimpan (satu transaksi). */
+  polis?: import("@/features/asuransi/api").PolisInput | null;
+  polis_id?: string | null;
+  hapus_polis?: boolean;
 }
 
 /** Scan/foto KIR & SRUT (opsional) — ikut terkirim bersama isian trailer. */
 export interface DokumenTrailer {
   kir?: File | null;
   srut?: File | null;
+  polis?: File | null;
 }
 
-const berkasTrailer = (d: DokumenTrailer) => ({ dokumen_kir: d.kir, dokumen_srut: d.srut });
+const berkasTrailer = (d: DokumenTrailer) => ({
+  dokumen_kir: d.kir,
+  dokumen_srut: d.srut,
+  dokumen_polis: d.polis
+});
 
 export interface UnitTrailerPage {
   items: UnitTrailer[];

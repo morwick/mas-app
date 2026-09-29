@@ -31,6 +31,8 @@ import {
 } from "../api";
 import { useJenisUnitTrailer } from "../queries";
 import { UnitTrailerFormModal } from "./unit-trailer-form-modal";
+import { KartuAsuransi } from "@/features/asuransi/components/polis-aset";
+import { TabPerbaikan } from "@/features/perintah-kerja/components/tab-perbaikan";
 
 interface Props {
   trailer: UnitTrailer;
@@ -39,7 +41,7 @@ interface Props {
   incidents: Incident[];
 }
 
-type TabKey = "aktif" | "riwayat" | "history" | "insiden";
+type TabKey = "aktif" | "riwayat" | "history" | "insiden" | "perbaikan";
 
 function formatKapasitas(ton: number | null) {
   if (ton == null) return "—";
@@ -57,7 +59,7 @@ export function UnitTrailerDetailView({ trailer, jobs, history, incidents }: Pro
 
   const initialTab: TabKey = ((): TabKey => {
     const qp = searchParams.get("tab");
-    if (qp === "insiden" || qp === "history" || qp === "riwayat" || qp === "aktif") return qp;
+    if (qp === "insiden" || qp === "history" || qp === "riwayat" || qp === "aktif" || qp === "perbaikan") return qp;
     return trailer.status === "bertugas" ? "aktif" : "riwayat";
   })();
   const [tab, setTab] = useState<TabKey>(initialTab);
@@ -182,13 +184,15 @@ export function UnitTrailerDetailView({ trailer, jobs, history, incidents }: Pro
               { key: "aktif", label: "Job aktif", count: activeJob ? 1 : 0 },
               { key: "riwayat", label: "Riwayat job", count: pastJobs.length },
               { key: "history", label: "Riwayat status", count: history.length },
-              { key: "insiden", label: "Insiden", count: hitungInsiden(incidents) }
+              { key: "insiden", label: "Insiden", count: hitungInsiden(incidents) },
+              { key: "perbaikan", label: "Perbaikan" }
             ]}
           />
           <div>
             {tab === "aktif" && <JobAktifTab activeJob={activeJob} labelAset="unit trailer" />}
             {tab === "riwayat" && <RiwayatJobTab pastJobs={pastJobs} labelAset="unit trailer" />}
             {tab === "history" && <RiwayatStatusTab history={history} />}
+            {tab === "perbaikan" && <TabPerbaikan aset={{ unit_trailer_id: trailer.id }} />}
             {tab === "insiden" && (
               <InsidenPanel
                 aset={{ unit_trailer_id: trailer.id }}
@@ -218,6 +222,7 @@ export function UnitTrailerDetailView({ trailer, jobs, history, incidents }: Pro
             }
           ]}
         />
+        <KartuAsuransi aset={{ unit_trailer_id: trailer.id }} polis={trailer.polis_terkini} />
         <UtilisasiCard utilisasi={utilisasi} />
         {canManageOperational && trailer.status !== "terjual" && (
           <div className="card card-pad">

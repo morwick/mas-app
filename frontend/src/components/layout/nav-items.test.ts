@@ -23,7 +23,7 @@ describe("susunan menu", () => {
     ).toEqual(["Dashboard", "Master", "Monitoring", "Laporan", "Log Sistem", "Notifikasi"]);
   });
 
-  it("Master urut: Karyawan, Pengguna, Jenis Unit, Unit, Unit Trailer, Driver, Customer", () => {
+  it("Master urut: Karyawan, Pengguna, Jenis Unit, Unit, Unit Trailer, Driver, Customer, Asuransi, Bengkel, Mekanik", () => {
     expect(group("master").items.map((i) => i.label)).toEqual([
       "Karyawan",
       "Pengguna",
@@ -31,7 +31,10 @@ describe("susunan menu", () => {
       "Unit",
       "Unit Trailer",
       "Driver",
-      "Customer"
+      "Customer",
+      "Asuransi",
+      "Bengkel",
+      "Mekanik"
     ]);
   });
 
@@ -142,7 +145,10 @@ describe("visibleNavTree", () => {
     expect(master && isNavGroup(master) ? master.items.map((i) => i.label) : []).toEqual([
       "Unit",
       "Unit Trailer",
-      "Driver"
+      "Driver",
+      "Asuransi",
+      "Bengkel",
+      "Mekanik"
     ]);
     const monitoring = tree.find((e) => isNavGroup(e) && e.key === "monitoring");
     expect(monitoring && isNavGroup(monitoring) ? monitoring.items.map((i) => i.label) : []).toEqual([
@@ -161,7 +167,10 @@ describe("visibleNavTree", () => {
       "Unit",
       "Unit Trailer",
       "Driver",
-      "Customer"
+      "Customer",
+      "Asuransi",
+      "Bengkel",
+      "Mekanik"
     ]);
     const monitoring = tree.find((e) => isNavGroup(e) && e.key === "monitoring");
     expect(monitoring && isNavGroup(monitoring) ? monitoring.items.map((i) => i.label) : []).toEqual([

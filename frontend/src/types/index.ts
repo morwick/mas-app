@@ -64,6 +64,8 @@ export interface Unit {
   stnk_url?: string | null;
   kir_uploaded_at?: string | null;
   kir_url?: string | null;
+  /** Polis asuransi terkini (berlaku hari ini, atau yang terakhir). Hanya di detail unit. */
+  polis_terkini?: import("@/features/asuransi/api").PolisAsuransi | null;
 }
 
 export interface Driver {
@@ -150,6 +152,8 @@ export interface RiwayatAset {
   service: number;
   penjualan: number;
   penghapusan: number;
+  /** Perintah kerja perbaikan. */
+  perbaikan?: number;
   /** True bila semua riwayat kosong → boleh dihapus; selain itu hanya dinonaktifkan. */
   bisa_dihapus: boolean;
 }

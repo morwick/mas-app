@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { hariIniWIB, tambahHari } from "@/lib/utils";
 import { Link, useSearchParams } from "react-router-dom";
-import { BarChart3, Users, ArrowRight, TrendingUp } from "lucide-react";
+import { BarChart3, Users, ArrowRight, TrendingUp, Wrench } from "lucide-react";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useCustomers } from "@/features/customers/queries";
@@ -42,6 +42,13 @@ const items: {
     title: "Riwayat per customer",
     description: "Daftar job per customer dengan detail alat, unit, driver, dan status akhir.",
     icon: Users,
+    roles: ["superadmin", "admin", "finance"]
+  },
+  {
+    href: "/reports/perawatan",
+    title: "Biaya perawatan & klaim asuransi",
+    description: "Biaya perbaikan per unit / unit trailer, porsi asuransi vs perusahaan, dan rekap klaim.",
+    icon: Wrench,
     roles: ["superadmin", "admin", "finance"]
   }
 ];

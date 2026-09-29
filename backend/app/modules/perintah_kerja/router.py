@@ -40,6 +40,7 @@ async def daftar_perintah_kerja(
     unit_id: str | None = None,
     unit_trailer_id: str | None = None,
     incident_id: str | None = None,
+    asuransi_id: str | None = None,
     client: AsyncClient = Depends(user_client),
 ) -> Page[PerintahKerjaRingkas]:
     return await PerintahKerjaService(client).list_page(
@@ -53,6 +54,7 @@ async def daftar_perintah_kerja(
         unit_id=unit_id,
         unit_trailer_id=unit_trailer_id,
         incident_id=incident_id,
+        asuransi_id=asuransi_id,
     )
 
 

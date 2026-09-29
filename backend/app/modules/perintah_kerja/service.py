@@ -153,6 +153,7 @@ class PerintahKerjaService:
         unit_id: str | None = None,
         unit_trailer_id: str | None = None,
         incident_id: str | None = None,
+        asuransi_id: str | None = None,
     ) -> Page[PerintahKerjaRingkas]:
         query = self._db.table("perintah_kerja").select(_SELECT, count=CountMethod.exact).eq("klaim.status", 1)
         if status_wo == "aktif":
@@ -175,6 +176,12 @@ class PerintahKerjaService:
             query = query.eq("unit_trailer_id", unit_trailer_id)
         if incident_id:
             query = query.eq("incident_id", incident_id)
+        if asuransi_id:
+            polis = await self._db.table("polis_asuransi").select("id").eq("asuransi_id", asuransi_id).execute()
+            ids = [r["id"] for r in rows(polis)]
+            if not ids:
+                return build_page([], 0, params)
+            query = query.in_("polis_id", ids)
         if q and q.strip():
             pola = f"*{escape_like(q.strip())}*"
             syarat = [f"nomor.ilike.{pola}", f"keluhan.ilike.{pola}"]
