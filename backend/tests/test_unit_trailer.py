@@ -144,6 +144,7 @@ def test_daftar_paging_limit_offset_dan_filter(client: TestClient, db: _FakeDb) 
         "kir_url": None,
         "srut_uploaded_at": None,
         "srut_url": None,
+        "polis_terkini": None,
         "is_active": True,
     }
 
@@ -182,10 +183,19 @@ def test_nonaktifkan_trailer(client: TestClient, db: _FakeDb) -> None:
 
 
 def test_ringkasan_riwayat_menentukan_boleh_hapus(client: TestClient, db: _FakeDb) -> None:
+    db.total = 0  # belum ada perintah kerja
     db.rpc_data = [{"job": 0, "insiden": 2, "service": 0, "penjualan": 0, "penghapusan": 0}]
     res = client.get("/api/unit-trailer/t1/riwayat")
     assert res.status_code == 200
-    assert res.json() == {"job": 0, "insiden": 2, "service": 0, "penjualan": 0, "penghapusan": 0, "bisa_dihapus": False}
+    assert res.json() == {
+        "job": 0,
+        "insiden": 2,
+        "service": 0,
+        "penjualan": 0,
+        "penghapusan": 0,
+        "perbaikan": 0,
+        "bisa_dihapus": False,
+    }
     db.rpc_data = [{"job": 0, "insiden": 0, "service": 0, "penjualan": 0, "penghapusan": 0}]
     assert client.get("/api/unit-trailer/t1/riwayat").json()["bisa_dihapus"] is True
 

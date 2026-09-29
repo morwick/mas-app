@@ -105,10 +105,14 @@ async def create_unit(
     data: str = Form(..., description="Isian UnitCreate (JSON)"),
     dokumen_stnk: UploadFile | None = File(None, description="Scan/foto STNK (opsional)"),
     dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR (opsional)"),
+    dokumen_polis: UploadFile | None = File(None, description="Scan/foto polis asuransi (opsional)"),
     svc: UnitService = Depends(get_service),
 ) -> Unit:
     return await svc.create(
-        parse_form(UnitCreate, data), await baca_berkas(dokumen_stnk), await baca_berkas(dokumen_kir)
+        parse_form(UnitCreate, data),
+        await baca_berkas(dokumen_stnk),
+        await baca_berkas(dokumen_kir),
+        await baca_berkas(dokumen_polis),
     )
 
 
@@ -118,10 +122,15 @@ async def update_unit(
     data: str = Form(..., description="Isian UnitUpdate (JSON)"),
     dokumen_stnk: UploadFile | None = File(None, description="Scan/foto STNK pengganti (opsional)"),
     dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR pengganti (opsional)"),
+    dokumen_polis: UploadFile | None = File(None, description="Scan/foto polis asuransi (opsional)"),
     svc: UnitService = Depends(get_service),
 ) -> OkResponse:
     await svc.update(
-        unit_id, parse_form(UnitUpdate, data), await baca_berkas(dokumen_stnk), await baca_berkas(dokumen_kir)
+        unit_id,
+        parse_form(UnitUpdate, data),
+        await baca_berkas(dokumen_stnk),
+        await baca_berkas(dokumen_kir),
+        await baca_berkas(dokumen_polis),
     )
     return OkResponse()
 

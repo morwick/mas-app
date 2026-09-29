@@ -11,6 +11,8 @@ from app.core.dokumen import BerkasUnggah, PerubahanDokumen, signed_url_dokumen
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
 from app.core.pg import clean_text, first, num, rows, single
+from app.core.transaksi import Transaksi
+from app.modules.asuransi.polis import PolisService
 from app.modules.units.schemas import (
     BUKAN_ARMADA,
     DriverAssignment,
@@ -132,6 +134,7 @@ class UnitService:
             update={
                 "stnk_url": await signed_url_dokumen(self._db, row.get("stnk_path")),
                 "kir_url": await signed_url_dokumen(self._db, row.get("kir_path")),
+                "polis_terkini": await PolisService(self._db).terkini("unit", unit_id),
             }
         )
 
@@ -207,6 +210,7 @@ class UnitService:
         payload: UnitCreate,
         dokumen_stnk: BerkasUnggah | None = None,
         dokumen_kir: BerkasUnggah | None = None,
+        dokumen_polis: BerkasUnggah | None = None,
     ) -> Unit:
         if not payload.kode_unit.strip():
             raise ValidationError("Kode unit wajib diisi")
@@ -232,12 +236,24 @@ class UnitService:
 
         # File diunggah dulu; bila insert gagal, file dibuang lagi.
         dokumen = PerubahanDokumen(self._db, "units", unit_id)
+        dokumen_polis_baru: PerubahanDokumen | None = None
         try:
             data.update(await dokumen.siapkan("stnk", dokumen_stnk))
             data.update(await dokumen.siapkan("kir", dokumen_kir))
-            res = await self._db.table("units").insert(data).execute()
+            if payload.polis:
+                # Unit + polis asuransi dalam satu transaksi.
+                tx = Transaksi(self._db)
+                tx.insert("units", data)
+                dokumen_polis_baru = await PolisService(self._db).siapkan(
+                    tx, jenis="unit", asset_id=unit_id, payload=payload.polis, dokumen=dokumen_polis
+                )
+                await tx.jalankan()
+            else:
+                await self._db.table("units").insert(data).execute()
         except APIError as exc:
             await dokumen.batalkan()
+            if dokumen_polis_baru:
+                await dokumen_polis_baru.batalkan()
             if exc.code == "23505":
                 if "units_default_driver_unique" in (exc.message or ""):
                     raise ConflictError("Driver sudah dipakai unit lain") from exc
@@ -245,8 +261,10 @@ class UnitService:
             raise
         except Exception:
             await dokumen.batalkan()
+            if dokumen_polis_baru:
+                await dokumen_polis_baru.batalkan()
             raise
-        return await self.get(rows(res)[0]["id"])
+        return await self.get(unit_id)
 
     async def update(
         self,
@@ -254,8 +272,9 @@ class UnitService:
         payload: UnitUpdate,
         dokumen_stnk: BerkasUnggah | None = None,
         dokumen_kir: BerkasUnggah | None = None,
+        dokumen_polis: BerkasUnggah | None = None,
     ) -> None:
-        fields = payload.model_dump(exclude_unset=True)
+        fields = payload.model_dump(exclude_unset=True, exclude={"polis", "polis_id", "hapus_polis"})
         if payload.default_driver_id:
             await self._ensure_driver_free(payload.default_driver_id, unit_id)
 
@@ -298,20 +317,46 @@ class UnitService:
             except Exception:
                 await dokumen.batalkan()
                 raise
-        if not data:
+        ubah_polis = payload.polis is not None or (payload.hapus_polis and payload.polis_id)
+        if not data and not ubah_polis:
             return
 
+        dokumen_polis_baru: PerubahanDokumen | None = None
         try:
-            await self._db.table("units").update(data).eq("id", unit_id).execute()
+            if ubah_polis:
+                # Unit + polis asuransi dalam satu transaksi.
+                tx = Transaksi(self._db)
+                if data:
+                    tx.update("units", data, {"id": unit_id})
+                if payload.polis is not None:
+                    dokumen_polis_baru = await PolisService(self._db).siapkan(
+                        tx,
+                        jenis="unit",
+                        asset_id=unit_id,
+                        payload=payload.polis,
+                        dokumen=dokumen_polis,
+                        polis_id=payload.polis_id,
+                    )
+                elif payload.polis_id:
+                    tx.hapus("polis_asuransi", {"id": payload.polis_id, "unit_id": unit_id}, wajib=True)
+                await tx.jalankan()
+            else:
+                await self._db.table("units").update(data).eq("id", unit_id).execute()
         except APIError as exc:
             await dokumen.batalkan()
+            if dokumen_polis_baru:
+                await dokumen_polis_baru.batalkan()
             if exc.code == "23505" and "units_default_driver_unique" in (exc.message or ""):
                 raise ConflictError("Driver sudah dipakai unit lain") from exc
             raise
         except Exception:
             await dokumen.batalkan()
+            if dokumen_polis_baru:
+                await dokumen_polis_baru.batalkan()
             raise
         await dokumen.selesaikan()
+        if dokumen_polis_baru:
+            await dokumen_polis_baru.selesaikan()
 
     async def deactivate(self, unit_id: str) -> None:
         await self._db.table("units").update({"is_active": False}).eq("id", unit_id).execute()

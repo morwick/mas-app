@@ -7,6 +7,7 @@ riwayat hanya bisa dinonaktifkan — fungsi DB menolaknya.
 
 from __future__ import annotations
 
+from postgrest.types import CountMethod
 from supabase import AsyncClient
 
 from app.core.pg import rows
@@ -20,6 +21,10 @@ async def ringkasan_riwayat(db: AsyncClient, jenis: JenisAset, asset_id: str) ->
     res = await db.rpc("ringkasan_riwayat_aset", {"p_jenis_aset": jenis, "p_asset_id": asset_id}).execute()
     data = (rows(res) or [{}])[0]
     jumlah = {k: int(data.get(k) or 0) for k in _JENIS_RIWAYAT}
+    # Perintah kerja perbaikan (migration 20260930000003) juga riwayat.
+    kolom = "unit_id" if jenis == "unit" else "unit_trailer_id"
+    wo = await db.table("perintah_kerja").select("id", count=CountMethod.exact, head=True).eq(kolom, asset_id).execute()
+    jumlah["perbaikan"] = int(getattr(wo, "count", 0) or 0)
     return RiwayatAset(**jumlah, bisa_dihapus=not any(jumlah.values()))
 
 

@@ -58,8 +58,17 @@ class MaintenanceService:
             .eq("status", AKTIF)  # catatan service yang dihapus tidak dihitung
             .execute()
         )
+        # Perintah kerja servis (berkala / rutin / oli) yang selesai juga acuan.
+        wo = await (
+            self._db.table("perintah_kerja")
+            .select("unit_id, odometer_km, sumber, jenis")
+            .in_("unit_id", unit_ids)
+            .eq("status_wo", "selesai")
+            .execute()
+        )
+        servis_wo = [r for r in rows(wo) if r.get("sumber") == "servis_berkala" or r.get("jenis") in ("rutin", "oli")]
         out: dict[str, float] = {}
-        for r in rows(res):
+        for r in [*rows(res), *servis_wo]:
             km = num(r.get("odometer_km"), default=float("nan"))
             if km != km:
                 continue
