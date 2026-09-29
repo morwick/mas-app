@@ -1,5 +1,6 @@
 """Master Unit Trailer: paging & filter di server, duplikat ditolak, hapus = soft delete."""
 
+import json
 from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
@@ -19,6 +20,11 @@ BARIS = {
     "status_trailer": "standby",
     "jenis": {"nama": "Lowbed 3 as", "jenis_unit": {"nama": "Lowbed"}},
 }
+
+
+def _form(isian: dict[str, Any]) -> dict[str, str]:
+    """Form tambah/ubah trailer dikirim multipart: isian JSON di field `data`."""
+    return {"data": json.dumps(isian)}
 
 
 class _Query:
@@ -59,6 +65,7 @@ class _FakeDb:
         self.terakhir: dict[str, Any] | None = None
         self.rpc_data: list[dict[str, Any]] = []
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
+        self.storage = _FakeStorage()
 
     def table(self, nama: str) -> _Query:
         return _Query(self, nama)
@@ -66,6 +73,24 @@ class _FakeDb:
     def rpc(self, nama: str, params: dict[str, Any]) -> "_Rpc":
         self.rpc_calls.append((nama, params))
         return _Rpc(self.rpc_data)
+
+
+class _FakeStorage:
+    """Bucket palsu: mencatat objek yang diunggah & dihapus."""
+
+    def __init__(self) -> None:
+        self.diunggah: list[str] = []
+        self.dihapus: list[str] = []
+
+    def from_(self, bucket: str) -> "_FakeStorage":
+        assert bucket == "dokumen-master"
+        return self
+
+    async def upload(self, path: str, data: bytes, opsi: dict[str, str]) -> None:
+        self.diunggah.append(path)
+
+    async def remove(self, paths: list[str]) -> None:
+        self.dihapus.extend(paths)
 
 
 class _Rpc:
@@ -115,12 +140,16 @@ def test_daftar_paging_limit_offset_dan_filter(client: TestClient, db: _FakeDb) 
         "kir_berlaku_sampai": None,
         "srut_nomor": None,
         "srut_tanggal": None,
+        "kir_uploaded_at": None,
+        "kir_url": None,
+        "srut_uploaded_at": None,
+        "srut_url": None,
         "is_active": True,
     }
 
 
 def test_tambah_kode_duplikat_ditolak(client: TestClient, db: _FakeDb) -> None:
-    res = client.post("/api/unit-trailer", json={"kode_trailer": " tr-01 ", "jenis_unit_trailer_id": "j1"})
+    res = client.post("/api/unit-trailer", data=_form({"kode_trailer": " tr-01 ", "jenis_unit_trailer_id": "j1"}))
     assert res.status_code == 409
     assert res.json()["detail"] == "Gagal! Unit Trailer dengan kode ini sudah ada"
 
@@ -129,7 +158,7 @@ def test_tambah_berhasil(client: TestClient, db: _FakeDb) -> None:
     db.baris = []  # belum ada kode yang sama
     res = client.post(
         "/api/unit-trailer",
-        json={"kode_trailer": "TR-02", "tahun": 2021, "jenis_unit_trailer_id": "j1", "kapasitas_ton": 35},
+        data=_form({"kode_trailer": "TR-02", "tahun": 2021, "jenis_unit_trailer_id": "j1", "kapasitas_ton": 35}),
     )
     assert res.status_code == 201
     insert = next(a for n, a in db.query[1] if n == "insert")
@@ -164,14 +193,14 @@ def test_ringkasan_riwayat_menentukan_boleh_hapus(client: TestClient, db: _FakeD
 def test_ubah_data_yang_sudah_dihapus_404(client: TestClient, db: _FakeDb) -> None:
     db.baris = []
     db.hasil_update = []
-    res = client.patch("/api/unit-trailer/t9", json={"kode_trailer": "TR-09", "jenis_unit_trailer_id": "j1"})
+    res = client.patch("/api/unit-trailer/t9", data=_form({"kode_trailer": "TR-09", "jenis_unit_trailer_id": "j1"}))
     assert res.status_code == 404
     assert res.json()["detail"].startswith("Gagal mengubah data.")
 
 
 def test_validasi_tahun_dan_kapasitas(client: TestClient, db: _FakeDb) -> None:
     res = client.post(
-        "/api/unit-trailer", json={"kode_trailer": "X", "jenis_unit_trailer_id": "j1", "kapasitas_ton": 0}
+        "/api/unit-trailer", data=_form({"kode_trailer": "X", "jenis_unit_trailer_id": "j1", "kapasitas_ton": 0})
     )
     assert res.status_code == 422
     assert res.json()["detail"].startswith("Gagal menambah data.")
@@ -216,7 +245,9 @@ def test_tahun_atau_kapasitas_tidak_valid_menggagalkan_tambah(
     client: TestClient, db: _FakeDb, isian: dict[str, object], pesan: str
 ) -> None:
     db.baris = []
-    res = client.post("/api/unit-trailer", json={"kode_trailer": "TR-05", "jenis_unit_trailer_id": "j1", **isian})
+    res = client.post(
+        "/api/unit-trailer", data=_form({"kode_trailer": "TR-05", "jenis_unit_trailer_id": "j1", **isian})
+    )
     assert res.status_code == 422
     assert res.json()["detail"].startswith(f"Gagal menambah data. {pesan}")
     assert not any(n == "insert" for q in db.query for n, _ in q), "tidak boleh ada data yang tersimpan"
@@ -226,7 +257,7 @@ def test_status_dari_form_diabaikan(client: TestClient, db: _FakeDb) -> None:
     # Status trailer hanya dari job / insiden / penjualan / ubah status, bukan form.
     db.baris = []
     res = client.post(
-        "/api/unit-trailer", json={"kode_trailer": "TR-06", "jenis_unit_trailer_id": "j1", "status": "perbaikan"}
+        "/api/unit-trailer", data=_form({"kode_trailer": "TR-06", "jenis_unit_trailer_id": "j1", "status": "perbaikan"})
     )
     assert res.status_code == 201
     insert = next(a for n, a in db.query[1] if n == "insert")
@@ -237,14 +268,16 @@ def test_dokumen_kir_dan_srut_opsional(client: TestClient, db: _FakeDb) -> None:
     db.baris = []
     res = client.post(
         "/api/unit-trailer",
-        json={
-            "kode_trailer": "TR-07",
-            "jenis_unit_trailer_id": "j1",
-            "kir_nomor": "  KIR  123 ",
-            "kir_berlaku_sampai": "2027-01-31",
-            "srut_nomor": "",
-            "srut_tanggal": "",
-        },
+        data=_form(
+            {
+                "kode_trailer": "TR-07",
+                "jenis_unit_trailer_id": "j1",
+                "kir_nomor": "  KIR  123 ",
+                "kir_berlaku_sampai": "2027-01-31",
+                "srut_nomor": "",
+                "srut_tanggal": "",
+            }
+        ),
     )
     assert res.status_code == 201
     insert = next(a for n, a in db.query[1] if n == "insert")
@@ -257,7 +290,7 @@ def test_tanggal_dokumen_tidak_valid_ditolak(client: TestClient, db: _FakeDb) ->
     db.baris = []
     res = client.post(
         "/api/unit-trailer",
-        json={"kode_trailer": "TR-08", "jenis_unit_trailer_id": "j1", "kir_berlaku_sampai": "31-01-2027"},
+        data=_form({"kode_trailer": "TR-08", "jenis_unit_trailer_id": "j1", "kir_berlaku_sampai": "31-01-2027"}),
     )
     assert res.status_code == 422
 
@@ -266,7 +299,7 @@ def test_tahun_dan_kapasitas_valid_diterima(client: TestClient, db: _FakeDb) -> 
     db.baris = []
     res = client.post(
         "/api/unit-trailer",
-        json={"kode_trailer": "TR-07", "jenis_unit_trailer_id": "j1", "tahun": 2020, "kapasitas_ton": 40.5},
+        data=_form({"kode_trailer": "TR-07", "jenis_unit_trailer_id": "j1", "tahun": 2020, "kapasitas_ton": 40.5}),
     )
     assert res.status_code == 201
 
@@ -299,3 +332,68 @@ def test_pilihan_trailer_unit_tanpa_relasi(client: TestClient, db: _FakeDb) -> N
     db.rpc_data = [{"wajib": False, "id": None, "kode_trailer": None, "jenis_nama": None, "status_trailer": None}]
     body = client.get("/api/unit-trailer/untuk-unit/u2").json()
     assert body == {"wajib": False, "trailer": []}
+
+
+def test_tambah_dengan_dokumen_kir(client: TestClient, db: _FakeDb) -> None:
+    db.baris = []
+    res = client.post(
+        "/api/unit-trailer",
+        data=_form({"kode_trailer": "TR-10", "jenis_unit_trailer_id": "j1"}),
+        files={"dokumen_kir": ("kir.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    assert res.status_code == 201
+    insert = next(a for n, a in db.query[1] if n == "insert")[0]
+    assert insert["kir_path"].startswith(f"unit_trailer/{insert['id']}/kir-")
+    assert insert["kir_uploaded_at"]
+    assert "srut_path" not in insert  # SRUT tidak diisi → tidak disentuh
+    assert db.storage.diunggah == [insert["kir_path"]]
+
+
+def test_dokumen_format_salah_ditolak_tanpa_menyimpan(client: TestClient, db: _FakeDb) -> None:
+    db.baris = []
+    res = client.post(
+        "/api/unit-trailer",
+        data=_form({"kode_trailer": "TR-11", "jenis_unit_trailer_id": "j1"}),
+        files={"dokumen_srut": ("srut.txt", b"halo", "text/plain")},
+    )
+    assert res.status_code == 422
+    assert not any(n == "insert" for q in db.query for n, _ in q)
+    assert db.storage.diunggah == []
+
+
+def test_ganti_dokumen_membuang_file_lama_setelah_tersimpan(client: TestClient, db: _FakeDb) -> None:
+    db.baris = []
+    db.terakhir = {**BARIS, "kir_path": "unit_trailer/t1/kir-lama.pdf"}
+    res = client.patch(
+        "/api/unit-trailer/t1",
+        data=_form({"kode_trailer": "TR-01", "jenis_unit_trailer_id": "j1"}),
+        files={"dokumen_kir": ("kir.png", b"png", "image/png")},
+    )
+    assert res.status_code == 200
+    assert len(db.storage.diunggah) == 1
+    assert db.storage.dihapus == ["unit_trailer/t1/kir-lama.pdf"]
+
+
+def test_gagal_simpan_membuang_file_baru(client: TestClient, db: _FakeDb) -> None:
+    db.baris = []
+    db.hasil_update = []  # baris sudah dihapus → 404
+    res = client.patch(
+        "/api/unit-trailer/t1",
+        data=_form({"kode_trailer": "TR-01", "jenis_unit_trailer_id": "j1", "hapus_dokumen_srut": True}),
+        files={"dokumen_kir": ("kir.pdf", b"%PDF", "application/pdf")},
+    )
+    assert res.status_code == 404
+    assert db.storage.dihapus == db.storage.diunggah  # hanya file baru yang dibuang
+
+
+def test_hapus_dokumen_tanpa_file_baru(client: TestClient, db: _FakeDb) -> None:
+    db.baris = []
+    db.terakhir = {**BARIS, "srut_path": "unit_trailer/t1/srut-lama.pdf"}
+    res = client.patch(
+        "/api/unit-trailer/t1",
+        data=_form({"kode_trailer": "TR-01", "jenis_unit_trailer_id": "j1", "hapus_dokumen_srut": True}),
+    )
+    assert res.status_code == 200
+    update = next(a for q in db.query for n, a in q if n == "update")[0]
+    assert update["srut_path"] is None and update["srut_uploaded_at"] is None
+    assert db.storage.dihapus == ["unit_trailer/t1/srut-lama.pdf"]

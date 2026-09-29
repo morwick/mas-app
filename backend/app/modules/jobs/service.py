@@ -328,6 +328,9 @@ class JobService:
     async def list_by_unit_trailer(self, unit_trailer_id: str) -> list[Job]:
         return await self._list_by("unit_trailer_id", unit_trailer_id)
 
+    async def list_by_driver(self, driver_id: str) -> list[Job]:
+        return await self._list_by("driver_id", driver_id)
+
     async def _list_by(self, kolom: str, asset_id: str) -> list[Job]:
         res = await (
             active_children(self._db.table("jobs").select(JOB_SELECT), JOB_SELECT)

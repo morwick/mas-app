@@ -27,6 +27,7 @@ import { UnitDetailPage } from "@/features/units/pages/UnitDetailPage";
 import { EditUnitPage, NewUnitPage } from "@/features/units/pages/UnitFormPage";
 import { DriversPage } from "@/features/drivers/pages/DriversPage";
 import { EditDriverPage, NewDriverPage } from "@/features/drivers/pages/DriverFormPage";
+import { DriverDetailPage } from "@/features/drivers/pages/DriverDetailPage";
 import { CustomersPage } from "@/features/customers/pages/CustomersPage";
 import { EditCustomerPage, NewCustomerPage } from "@/features/customers/pages/CustomerFormPage";
 import { JobsPage } from "@/features/jobs/pages/JobsPage";
@@ -158,6 +159,7 @@ export const router = createBrowserRouter([
 
               { path: "/drivers", element: <DriversPage /> },
               { path: "/drivers/new", element: <NewDriverPage /> },
+              { path: "/drivers/:id", element: <DriverDetailPage /> },
               { path: "/drivers/:id/edit", element: <EditDriverPage /> },
 
               { path: "/tracking", element: <TrackingListPage /> },

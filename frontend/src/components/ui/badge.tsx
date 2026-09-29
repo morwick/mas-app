@@ -16,16 +16,16 @@ type StatusKey =
   | JobStatus;
 
 const statusClass: Record<StatusKey, string> = {
-  standby: "badge-standby",
-  bertugas: "badge-bertugas",
+  standby: "badge-status-standby",
+  bertugas: "badge-status-bertugas",
   breakdown: "badge-breakdown",
   perbaikan: "badge-perbaikan",
   terjual: "badge-terjual",
   diafkirkan: "badge-diafkirkan",
   info: "badge-pickup",
   neutral: "",
-  stand_by: "badge-standby",
-  in_job: "badge-bertugas",
+  stand_by: "badge-status-standby",
+  in_job: "badge-status-bertugas",
   ...JOB_STATUS_BADGE
 };
 

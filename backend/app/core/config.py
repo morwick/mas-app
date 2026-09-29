@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     faktur_pajak_bucket: str = "faktur-pajak"
     bukti_penjualan_bucket: str = "bukti-penjualan"
     bukti_penghapusan_bucket: str = "bukti-penghapusan"
+    dokumen_master_bucket: str = "dokumen-master"
 
     environment: str = Field(default="development")
 

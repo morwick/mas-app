@@ -47,7 +47,7 @@ const STATUS_COLOR: Record<UnitStatus, { bg: string; fg: string; dot: string }> 
     fg: "var(--brand-primary-dark)",
     dot: "#1C9600"
   },
-  bertugas: { bg: "#fff4e0", fg: "#8a5a00", dot: "#E48F00" },
+  bertugas: { bg: "var(--status-unit-bertugas-bg)", fg: "var(--status-unit-bertugas-text)", dot: "#1f4fa8" },
   breakdown: { bg: "#fcebeb", fg: "#791f1f", dot: "#C13838" },
   perbaikan: { bg: "#f0f1f3", fg: "#374151", dot: "#6B7280" },
   terjual: { bg: "#eceef1", fg: "#4b5563", dot: "#9CA3AF" },

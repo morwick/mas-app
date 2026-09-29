@@ -10,19 +10,10 @@ import { Pagination, usePagination } from "@/components/ui/pagination";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { Driver } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { initialsDriver as initials } from "./driver-detail-view";
 
 interface Props {
   drivers: Driver[];
-}
-
-function initials(nama: string) {
-  return nama
-    .replace(/^(Pak|Bapak|Bu|Ibu)\s+/i, "")
-    .split(" ")
-    .slice(0, 2)
-    .map((s) => s[0])
-    .join("")
-    .toUpperCase();
 }
 
 export function DriversListView({ drivers }: Props) {
@@ -118,7 +109,7 @@ export function DriversListView({ drivers }: Props) {
           {pg.items.map((d) => (
             <Link
               key={d.id}
-              to={`/drivers/${d.id}/edit`}
+              to={`/drivers/${d.id}`}
               className="card card-pad"
               style={{
                 textDecoration: "none",
@@ -184,12 +175,12 @@ export function DriversListView({ drivers }: Props) {
                 </div>
                 {d.is_active ? (
                   d.status === "in_job" ? (
-                    <span className="badge badge-bertugas" title={d.active_job_number ?? undefined}>
+                    <span className="badge badge-status-bertugas" title={d.active_job_number ?? undefined}>
                       <span className="badge-dot" />
                       In Job{d.active_job_number ? ` · ${d.active_job_number}` : ""}
                     </span>
                   ) : (
-                    <span className="badge badge-standby">
+                    <span className="badge badge-status-standby">
                       <span className="badge-dot" />
                       Stand By
                     </span>

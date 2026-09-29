@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CalendarClock,
+  FileText,
   MapPin,
   PackageCheck,
   Plus,
@@ -627,6 +628,8 @@ export interface DokumenItem {
   nomor: string | null | undefined;
   /** False = tanggal terbit (tanpa masa berlaku), tidak diberi hitung mundur. */
   berlaku?: boolean;
+  /** Signed URL scan/foto dokumen yang sudah diunggah (opsional). */
+  url?: string | null;
 }
 
 export function DokumenCard({
@@ -639,7 +642,7 @@ export function DokumenCard({
   /** Teks saat belum ada dokumen yang dicatat. */
   kosong: string;
 }) {
-  const adaIsinya = items.some((i) => i.tanggal);
+  const adaIsinya = items.some((i) => i.tanggal || i.url);
   const adaMasaBerlaku = items.some((i) => i.tanggal && i.berlaku !== false);
 
   return (
@@ -684,6 +687,18 @@ export function DokumenCard({
                   <div className="caption mono" style={{ fontSize: 10.5 }}>
                     {item.nomor}
                   </div>
+                )}
+                {item.url && (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1"
+                    style={{ fontSize: 11, color: "var(--brand-primary-dark)", marginTop: 2 }}
+                  >
+                    <FileText style={{ width: 12, height: 12 }} />
+                    Lihat dokumen
+                  </a>
                 )}
               </div>
               <div style={{ textAlign: "right", color: warna }}>

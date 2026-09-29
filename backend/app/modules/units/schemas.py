@@ -37,6 +37,11 @@ class Unit(BaseModel):
     kir_nomor: str | None = None
     kir_berlaku_sampai: str | None = None
     pajak_berlaku_sampai: str | None = None
+    # Scan/foto dokumen (opsional). `*_url` = signed URL, hanya terisi di detail unit.
+    stnk_uploaded_at: str | None = None
+    stnk_url: str | None = None
+    kir_uploaded_at: str | None = None
+    kir_url: str | None = None
 
 
 class UnitWithService(Unit):
@@ -74,6 +79,9 @@ class UnitUpdate(BaseModel):
     kir_nomor: str | None = None
     kir_berlaku_sampai: str | None = None
     pajak_berlaku_sampai: str | None = None
+    # True = dokumen yang tersimpan dilepas (diabaikan bila ada file baru).
+    hapus_dokumen_stnk: bool = False
+    hapus_dokumen_kir: bool = False
 
 
 class RiwayatAset(BaseModel):

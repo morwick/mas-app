@@ -59,6 +59,11 @@ export interface Unit {
   kir_nomor?: string | null;
   kir_berlaku_sampai?: string | null;
   pajak_berlaku_sampai?: string | null;
+  /** Scan/foto dokumen (opsional). `*_url` = signed URL, hanya terisi di detail unit. */
+  stnk_uploaded_at?: string | null;
+  stnk_url?: string | null;
+  kir_uploaded_at?: string | null;
+  kir_url?: string | null;
 }
 
 export interface Driver {
@@ -70,6 +75,9 @@ export interface Driver {
   no_sim?: string | null;
   /** Tanggal habis berlaku SIM (YYYY-MM-DD). Null = belum dicatat. */
   sim_berlaku_sampai?: string | null;
+  /** Dokumen SIM (opsional). `sim_url` = signed URL, hanya terisi di detail driver. */
+  sim_uploaded_at?: string | null;
+  sim_url?: string | null;
   alamat?: string | null;
   catatan?: string | null;
   is_active: boolean;

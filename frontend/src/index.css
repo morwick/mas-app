@@ -39,6 +39,11 @@
   --status-standby-text: #5f5e5a;
   --status-bertugas-bg: #e8f7e0;
   --status-bertugas-text: #145b00;
+  /* Status unit / unit trailer / driver: Stand By hijau, Bertugas biru. */
+  --status-unit-standby-bg: #e8f7e0;
+  --status-unit-standby-text: #145b00;
+  --status-unit-bertugas-bg: #eaf2ff;
+  --status-unit-bertugas-text: #1f4fa8;
   --status-perbaikan-bg: #faeeda;
   --status-perbaikan-text: #854f0b;
   --status-cancelled-bg: #fcebeb;
@@ -411,6 +416,16 @@ select {
 .badge-bertugas {
   background: var(--status-bertugas-bg);
   color: var(--status-bertugas-text);
+}
+/* Status unit, unit trailer, & driver — seragam: Stand By hijau,
+   Bertugas / In Job biru. */
+.badge-status-standby {
+  background: var(--status-unit-standby-bg);
+  color: var(--status-unit-standby-text);
+}
+.badge-status-bertugas {
+  background: var(--status-unit-bertugas-bg);
+  color: var(--status-unit-bertugas-text);
 }
 .badge-perbaikan {
   background: var(--status-perbaikan-bg);

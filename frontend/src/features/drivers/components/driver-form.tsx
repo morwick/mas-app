@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Combobox } from "@/components/ui/combobox";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { DOKUMEN_KOSONG, DokumenInput, type NilaiDokumen } from "@/components/ui/dokumen-input";
 import { useKaryawanDriver } from "@/features/drivers/queries";
 import { DriverPinCard } from "./driver-pin-card";
 import { PowerOff } from "lucide-react";
@@ -44,6 +45,7 @@ export function DriverForm({ mode, initial }: Props) {
     alamat: initial?.alamat ?? "",
     catatan: initial?.catatan ?? ""
   });
+  const [dokumenSim, setDokumenSim] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
   const [error, setError] = useState<Record<string, string>>({});
 
   // Semua karyawan aktif bisa dipilih; yang sudah jadi driver lain diberi
@@ -83,14 +85,14 @@ export function DriverForm({ mode, initial }: Props) {
     setLoading(true);
     const res =
       mode === "new"
-        ? await createDriver(form)
-        : await updateDriver(initial!.id, form);
+        ? await createDriver(form, dokumenSim.file)
+        : await updateDriver(initial!.id, { ...form, hapus_dokumen_sim: dokumenSim.hapus }, dokumenSim.file);
     setLoading(false);
     if (res.ok) {
       toast.success(
         mode === "new" ? "Driver berhasil ditambahkan" : "Perubahan disimpan"
       );
-      navigate("/drivers");
+      navigate(mode === "edit" ? `/drivers/${initial!.id}` : "/drivers");
     } else toast.error(res.error);
   }
 
@@ -162,6 +164,19 @@ export function DriverForm({ mode, initial }: Props) {
               clearable
             />
           </Field>
+          <Field
+            label="Dokumen SIM"
+            className="sm:col-span-2"
+            hint="Opsional. Scan / foto SIM — PDF, JPG, PNG, atau WEBP, maks. 10 MB."
+          >
+            <DokumenInput
+              nama="SIM"
+              value={dokumenSim}
+              onChange={setDokumenSim}
+              url={initial?.sim_url}
+              disabled={readOnly}
+            />
+          </Field>
           <Field label="Alamat" className="sm:col-span-2">
             <Textarea
               placeholder="Alamat tempat tinggal (opsional)"
@@ -196,7 +211,7 @@ export function DriverForm({ mode, initial }: Props) {
           <span />
         )}
         <div className="flex items-center gap-2">
-          <Link to="/drivers">
+          <Link to={mode === "edit" && initial ? `/drivers/${initial.id}` : "/drivers"}>
             <Button variant="secondary" type="button">
               {readOnly ? "Kembali" : "Batal"}
             </Button>

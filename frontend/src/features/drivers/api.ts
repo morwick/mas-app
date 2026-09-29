@@ -1,6 +1,6 @@
-import { api } from "@/lib/api/client";
+import { api, formDenganDokumen } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
-import type { ActionResult, Driver } from "@/types";
+import type { ActionResult, Driver, Job } from "@/types";
 
 export interface DriverInput {
   /** Driver dipilih dari data karyawan; nama driver mengikuti karyawan. */
@@ -26,12 +26,20 @@ export const listKaryawanDriver = () => api.get<KaryawanDriverOption[]>("/driver
 
 export const getDriver = (id: string) => api.get<Driver>(`/drivers/${id}`);
 
-export function createDriver(input: DriverInput): Promise<ActionResult<Driver>> {
-  return mutate(api.post<Driver>("/drivers", input));
+/** Semua job driver (terbaru dulu) — untuk halaman detail driver. */
+export const getDriverJobs = (id: string) => api.get<Job[]>(`/drivers/${id}/jobs`);
+
+/** Dokumen SIM opsional ikut terkirim bersama isian dalam satu permintaan. */
+export function createDriver(input: DriverInput, dokumenSim?: File | null): Promise<ActionResult<Driver>> {
+  return mutate(api.upload<Driver>("/drivers", formDenganDokumen(input, { dokumen_sim: dokumenSim })));
 }
 
-export function updateDriver(id: string, input: Partial<DriverInput>): Promise<ActionResult<unknown>> {
-  return mutate(api.patch(`/drivers/${id}`, input));
+export function updateDriver(
+  id: string,
+  input: Partial<DriverInput> & { hapus_dokumen_sim?: boolean },
+  dokumenSim?: File | null
+): Promise<ActionResult<unknown>> {
+  return mutate(api.patchForm(`/drivers/${id}`, formDenganDokumen(input, { dokumen_sim: dokumenSim })));
 }
 
 export function deactivateDriver(id: string): Promise<ActionResult<unknown>> {

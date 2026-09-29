@@ -69,7 +69,9 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
       const method = init?.method ?? "GET";
-      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      // Tambah/ubah trailer dikirim multipart: isian JSON di field `data`.
+      const mentah = init?.body instanceof FormData ? init.body.get("data") : init?.body;
+      const body = mentah ? JSON.parse(String(mentah)) : undefined;
       panggilan.push({ method, url, body });
       const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
       if (url.pathname.endsWith("/unit-trailer/jenis") && method === "POST")

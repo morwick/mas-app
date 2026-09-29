@@ -23,6 +23,7 @@ import {
   type JenisUnitTrailer,
   type StatusTrailerTampil,
   type UnitTrailer,
+  type DokumenTrailer,
   type UnitTrailerInput
 } from "../api";
 import { useJenisUnitTrailer, useUnitTrailer } from "../queries";
@@ -76,9 +77,9 @@ export function UnitTrailerView() {
     setPage(1);
   }
 
-  async function simpan(input: UnitTrailerInput): Promise<boolean> {
+  async function simpan(input: UnitTrailerInput, dokumen: DokumenTrailer): Promise<boolean> {
     setBusy(`Menambahkan ${input.kode_trailer}…`);
-    const res = await createUnitTrailer(input);
+    const res = await createUnitTrailer(input, dokumen);
     setBusy(null);
     if (!res.ok) {
       toast.error(res.error);

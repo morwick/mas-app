@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from postgrest.types import CountMethod
 from supabase import AsyncClient
 
+from app.core.dokumen import BerkasUnggah, PerubahanDokumen, signed_url_dokumen
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
 from app.core.pg import clean_text, rows, single
@@ -20,6 +22,7 @@ def _to_driver(row: dict[str, Any]) -> Driver:
         no_hp=row["no_hp"],
         no_sim=row.get("no_sim"),
         sim_berlaku_sampai=row.get("sim_berlaku_sampai"),
+        sim_uploaded_at=row.get("sim_uploaded_at"),
         alamat=row.get("alamat"),
         catatan=row.get("catatan"),
         is_active=bool(row.get("is_active", True)),
@@ -92,7 +95,8 @@ class DriverService:
         if row is None:
             raise NotFoundError("Driver tidak ditemukan")
         active = await self._active_jobs_by_driver([driver_id])
-        return self._with_status(_to_driver(row), active.get(driver_id))
+        driver = _to_driver(row).model_copy(update={"sim_url": await signed_url_dokumen(self._db, row.get("sim_path"))})
+        return self._with_status(driver, active.get(driver_id))
 
     async def count_active(self) -> int:
         res = await (
@@ -116,31 +120,42 @@ class DriverService:
             raise ConflictError(f"{awal} karena data sudah terdaftar: {pilihan.nama} sudah menjadi driver.")
         return pilihan.nama
 
-    async def create(self, payload: DriverCreate) -> Driver:
+    async def create(self, payload: DriverCreate, dokumen_sim: BerkasUnggah | None = None) -> Driver:
         nama = await self._cek_karyawan(payload.karyawan_id, "Driver gagal ditambahkan")
-        res = await (
-            self._db.table("drivers")
-            .insert(
-                {
-                    "karyawan_id": payload.karyawan_id,
-                    "nama": nama,  # database tetap menyamakan dengan nama karyawan
-                    "no_hp": payload.no_hp.strip(),
-                    "no_sim": clean_text(payload.no_sim),
-                    "sim_berlaku_sampai": payload.sim_berlaku_sampai or None,
-                    "alamat": clean_text(payload.alamat),
-                    "catatan": clean_text(payload.catatan),
-                }
-            )
-            .execute()
-        )
+        driver_id = str(uuid.uuid4())
+        data: dict[str, Any] = {
+            "id": driver_id,
+            "karyawan_id": payload.karyawan_id,
+            "nama": nama,  # database tetap menyamakan dengan nama karyawan
+            "no_hp": payload.no_hp.strip(),
+            "no_sim": clean_text(payload.no_sim),
+            "sim_berlaku_sampai": payload.sim_berlaku_sampai or None,
+            "alamat": clean_text(payload.alamat),
+            "catatan": clean_text(payload.catatan),
+        }
+        dokumen = PerubahanDokumen(self._db, "drivers", driver_id)
+        data.update(await dokumen.siapkan("sim", dokumen_sim))
+        try:
+            res = await self._db.table("drivers").insert(data).execute()
+        except Exception:
+            await dokumen.batalkan()
+            raise
         return _to_driver(rows(res)[0])
 
-    async def update(self, driver_id: str, payload: DriverUpdate) -> None:
+    async def update(self, driver_id: str, payload: DriverUpdate, dokumen_sim: BerkasUnggah | None = None) -> None:
+        row = single(
+            await self._db.table("drivers")
+            .select("id, karyawan_id, sim_path")
+            .eq("id", driver_id)
+            .maybe_single()
+            .execute()
+        )
+        if row is None:
+            raise NotFoundError("Driver tidak ditemukan")
         data: dict[str, Any] = {}
         fields = payload.model_dump(exclude_unset=True)
         if "karyawan_id" in fields and payload.karyawan_id:
-            lama = await self.get(driver_id)
-            if payload.karyawan_id != lama.karyawan_id:
+            if payload.karyawan_id != row.get("karyawan_id"):
                 await self._cek_karyawan(
                     payload.karyawan_id, "Perubahan driver gagal disimpan", kecuali_driver=driver_id
                 )
@@ -152,8 +167,19 @@ class DriverService:
                 data[key] = clean_text(fields[key])
         if "sim_berlaku_sampai" in fields:
             data["sim_berlaku_sampai"] = fields["sim_berlaku_sampai"] or None
-        if data:
+
+        dokumen = PerubahanDokumen(self._db, "drivers", driver_id)
+        data.update(
+            await dokumen.siapkan("sim", dokumen_sim, hapus=payload.hapus_dokumen_sim, lama=row.get("sim_path"))
+        )
+        if not data:
+            return
+        try:
             await self._db.table("drivers").update(data).eq("id", driver_id).execute()
+        except Exception:
+            await dokumen.batalkan()
+            raise
+        await dokumen.selesaikan()
 
     async def deactivate(self, driver_id: str) -> None:
         await self._db.table("drivers").update({"is_active": False}).eq("id", driver_id).execute()

@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Field, Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { type JenisUnitTrailer, type UnitTrailer, type UnitTrailerInput } from "../api";
+import { DOKUMEN_KOSONG, DokumenInput, type NilaiDokumen } from "@/components/ui/dokumen-input";
+import {
+  type DokumenTrailer,
+  type JenisUnitTrailer,
+  type UnitTrailer,
+  type UnitTrailerInput
+} from "../api";
 
 interface Props {
   open: boolean;
@@ -18,7 +24,7 @@ interface Props {
   busy: boolean;
   onClose: () => void;
   /** Kembalikan true bila tersimpan — modal ditutup oleh pemanggil. */
-  onSave: (input: UnitTrailerInput) => Promise<boolean>;
+  onSave: (input: UnitTrailerInput, dokumen: DokumenTrailer) => Promise<boolean>;
   /** Tambah jenis baru; kembalikan jenis yang tersimpan atau null bila gagal. */
   onCreateJenis: (nama: string, jenisUnitId: string) => Promise<JenisUnitTrailer | null>;
 }
@@ -94,6 +100,8 @@ export function UnitTrailerFormModal({
   const toast = useToast();
   const [form, setForm] = useState<FormState>(awal(trailer));
   const [err, setErr] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [dokumenKir, setDokumenKir] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
+  const [dokumenSrut, setDokumenSrut] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
   const [jenisBaruOpen, setJenisBaruOpen] = useState(false);
   const [jenisBaru, setJenisBaru] = useState("");
   const [jenisBaruErr, setJenisBaruErr] = useState("");
@@ -105,6 +113,8 @@ export function UnitTrailerFormModal({
     if (open) {
       setForm(awal(trailer));
       setErr({});
+      setDokumenKir(DOKUMEN_KOSONG);
+      setDokumenSrut(DOKUMEN_KOSONG);
     }
   }, [open, trailer]);
 
@@ -140,16 +150,21 @@ export function UnitTrailerFormModal({
       return;
     }
 
-    await onSave({
-      kode_trailer: form.kode.trim(),
-      jenis_unit_trailer_id: form.jenisId,
-      tahun: tahun.nilai,
-      kapasitas_ton: kapasitas.nilai,
-      kir_nomor: form.kirNomor.trim() || null,
-      kir_berlaku_sampai: form.kirBerlaku || null,
-      srut_nomor: form.srutNomor.trim() || null,
-      srut_tanggal: form.srutTanggal || null
-    });
+    await onSave(
+      {
+        kode_trailer: form.kode.trim(),
+        jenis_unit_trailer_id: form.jenisId,
+        tahun: tahun.nilai,
+        kapasitas_ton: kapasitas.nilai,
+        kir_nomor: form.kirNomor.trim() || null,
+        kir_berlaku_sampai: form.kirBerlaku || null,
+        srut_nomor: form.srutNomor.trim() || null,
+        srut_tanggal: form.srutTanggal || null,
+        hapus_dokumen_kir: dokumenKir.hapus,
+        hapus_dokumen_srut: dokumenSrut.hapus
+      },
+      { kir: dokumenKir.file, srut: dokumenSrut.file }
+    );
   }
 
   async function simpanJenisBaru() {
@@ -263,6 +278,15 @@ export function UnitTrailerFormModal({
                 clearable
               />
             </Field>
+            <Field label="Dokumen KIR" className="sm:col-span-2" hint="PDF / foto, maks. 10 MB.">
+              <DokumenInput
+                nama="KIR"
+                value={dokumenKir}
+                onChange={setDokumenKir}
+                url={trailer?.kir_url}
+                disabled={busy}
+              />
+            </Field>
             <Field label="Nomor SRUT" hint="Surat Registrasi Uji Tipe">
               <Input value={form.srutNomor} onChange={(e) => set("srutNomor", e.target.value)} />
             </Field>
@@ -271,6 +295,15 @@ export function UnitTrailerFormModal({
                 value={form.srutTanggal}
                 onChange={(v) => set("srutTanggal", v)}
                 clearable
+              />
+            </Field>
+            <Field label="Dokumen SRUT" className="sm:col-span-2" hint="PDF / foto, maks. 10 MB.">
+              <DokumenInput
+                nama="SRUT"
+                value={dokumenSrut}
+                onChange={setDokumenSrut}
+                url={trailer?.srut_url}
+                disabled={busy}
               />
             </Field>
           </div>

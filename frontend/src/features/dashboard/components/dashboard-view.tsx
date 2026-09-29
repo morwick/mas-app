@@ -217,7 +217,7 @@ export function DashboardView({
           value={counts.standby}
           sublabel="Siap di-assign"
           icon={CircleDot}
-          tone="standby"
+          tone="unitStandby"
           active={filter === "standby"}
           onClick={() =>
             setFilter(filter === "standby" ? "semua" : "standby")
@@ -228,7 +228,7 @@ export function DashboardView({
           value={counts.bertugas}
           sublabel={`${activeJobs.length} job aktif`}
           icon={PackageCheck}
-          tone="bertugas"
+          tone="unitBertugas"
           active={filter === "bertugas"}
           onClick={() =>
             setFilter(filter === "bertugas" ? "semua" : "bertugas")

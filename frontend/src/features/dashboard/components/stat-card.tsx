@@ -6,7 +6,7 @@ interface StatCardProps {
   value: number | string;
   sublabel?: string;
   icon: LucideIcon;
-  tone?: "neutral" | "standby" | "bertugas" | "perbaikan";
+  tone?: "neutral" | "standby" | "bertugas" | "perbaikan" | "unitStandby" | "unitBertugas";
   active?: boolean;
   onClick?: () => void;
 }
@@ -27,7 +27,10 @@ const toneStyle: Record<
   perbaikan: {
     bg: "var(--status-perbaikan-bg)",
     col: "var(--status-perbaikan-text)"
-  }
+  },
+  // Status unit — sama dengan badge: Stand By hijau, Bertugas biru.
+  unitStandby: { bg: "var(--status-unit-standby-bg)", col: "var(--status-unit-standby-text)" },
+  unitBertugas: { bg: "var(--status-unit-bertugas-bg)", col: "var(--status-unit-bertugas-text)" }
 };
 
 export function StatCard({

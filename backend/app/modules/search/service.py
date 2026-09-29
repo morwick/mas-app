@@ -117,7 +117,7 @@ class SearchService:
                     id=r["id"],
                     label=r["nama"],
                     sublabel=_join(r.get("no_hp"), None if r.get("is_active", True) else "nonaktif"),
-                    href=f"/drivers/{r['id']}/edit",
+                    href=f"/drivers/{r['id']}",
                 )
             )
         for r in customers:

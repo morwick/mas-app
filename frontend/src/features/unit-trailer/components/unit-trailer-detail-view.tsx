@@ -26,6 +26,7 @@ import {
   updateUnitTrailer,
   type JenisUnitTrailer,
   type UnitTrailer,
+  type DokumenTrailer,
   type UnitTrailerInput
 } from "../api";
 import { useJenisUnitTrailer } from "../queries";
@@ -76,9 +77,9 @@ export function UnitTrailerDetailView({ trailer, jobs, history, incidents }: Pro
   const pastJobs = useMemo(() => jobs.filter((j) => !isJobAktif(j)), [jobs]);
   const utilisasi = useMemo(() => utilisasiSementara(jobs, trailer.status), [jobs, trailer.status]);
 
-  async function simpan(input: UnitTrailerInput): Promise<boolean> {
+  async function simpan(input: UnitTrailerInput, dokumen: DokumenTrailer): Promise<boolean> {
     setBusy(`Menyimpan perubahan ${trailer.kode_trailer}…`);
-    const res = await updateUnitTrailer(trailer.id, input);
+    const res = await updateUnitTrailer(trailer.id, input, dokumen);
     setBusy(null);
     if (!res.ok) {
       toast.error(res.error);
@@ -207,8 +208,14 @@ export function UnitTrailerDetailView({ trailer, jobs, history, incidents }: Pro
         <DokumenCard
           kosong="Belum dicatat — isi lewat Edit unit trailer"
           items={[
-            { label: "KIR", tanggal: trailer.kir_berlaku_sampai, nomor: trailer.kir_nomor },
-            { label: "SRUT", tanggal: trailer.srut_tanggal, nomor: trailer.srut_nomor, berlaku: false }
+            { label: "KIR", tanggal: trailer.kir_berlaku_sampai, nomor: trailer.kir_nomor, url: trailer.kir_url },
+            {
+              label: "SRUT",
+              tanggal: trailer.srut_tanggal,
+              nomor: trailer.srut_nomor,
+              berlaku: false,
+              url: trailer.srut_url
+            }
           ]}
         />
         <UtilisasiCard utilisasi={utilisasi} />

@@ -43,7 +43,7 @@ interface Props {
 
 const STATUS_COLOR: Record<UnitStatus, string> = {
   standby: "#1C9600",
-  bertugas: "#E48F00",
+  bertugas: "#1f4fa8",
   breakdown: "#C13838",
   perbaikan: "#6B7280",
   terjual: "#9CA3AF",
