@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/lonceng_notifikasi.dart';
+import '../../core/widgets/skeleton.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -123,7 +124,8 @@ class _JobsListScreenState extends ConsumerState<JobsListScreen> {
           ),
           Expanded(
             child: async.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              // Tab yang datanya belum ada: tampilkan kerangka kartu job.
+              loading: () => const DaftarSkeleton(),
               error: (e, _) => ErrorView(message: e.toString(), onRetry: _refresh),
               data: (daftar) => RefreshIndicator(
                 onRefresh: _refresh,
@@ -143,6 +145,12 @@ class _JobsListScreenState extends ConsumerState<JobsListScreen> {
                         onMuatLagi: () =>
                             ref.read(jobsPageProvider(_filter).notifier).muatLagi(),
                         itemBuilder: (_, job) => _JobTile(job: job),
+                        // Lazy scroll: halaman berikutnya → dua kartu kerangka.
+                        kakiMemuat: const Berdenyut(
+                          child: Column(
+                            children: [KartuJobSkeleton(), SizedBox(height: 10), KartuJobSkeleton()],
+                          ),
+                        ),
                       ),
               ),
             ),

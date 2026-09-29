@@ -16,6 +16,7 @@ class DaftarBergulirBertahap<T> extends StatelessWidget {
     required this.itemBuilder,
     this.padding = const EdgeInsets.fromLTRB(16, 8, 16, 24),
     this.separator,
+    this.kakiMemuat,
   });
 
   final DaftarBertahap<T> daftar;
@@ -23,6 +24,10 @@ class DaftarBergulirBertahap<T> extends StatelessWidget {
   final Widget Function(BuildContext, T) itemBuilder;
   final EdgeInsets padding;
   final Widget? separator;
+
+  /// Tampilan di kaki daftar selama halaman berikutnya diambil (mis. kartu
+  /// kerangka). Kosong = spinner kecil.
+  final Widget? kakiMemuat;
 
   static const _ambangPx = 400.0;
 
@@ -46,7 +51,7 @@ class DaftarBergulirBertahap<T> extends StatelessWidget {
         separatorBuilder: (_, _) => separator ?? const SizedBox(height: 10),
         itemBuilder: (context, i) {
           if (i < daftar.items.length) return itemBuilder(context, daftar.items[i]);
-          return const _KakiMemuat();
+          return kakiMemuat ?? const _KakiMemuat();
         },
       ),
     );

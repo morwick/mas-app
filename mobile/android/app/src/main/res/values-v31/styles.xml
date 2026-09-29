@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+: splash sistem menampilkan ikon launcher di atas latar hijau brand,
+    <!-- Android 12+: splash sistem menampilkan ikon launcher di atas latar hijau lembut,
          lalu disambung splash beranimasi di Flutter (lib/core/widgets/splash_animasi.dart). -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>

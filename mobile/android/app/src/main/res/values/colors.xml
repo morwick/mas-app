@@ -4,6 +4,6 @@
     <color name="notification_accent">#FF1C9600</color>
     <!-- Latar ikon launcher adaptive (mipmap-anydpi-v26). -->
     <color name="ic_launcher_background">#FFFFFFFF</color>
-    <!-- Latar splash native — sama dengan awal gradasi splash Flutter (MasColors.brand). -->
-    <color name="splash_background">#FF1C9600</color>
+    <!-- Latar splash native — soft green, sama dengan splash Flutter & badge "Stand By" di web. -->
+    <color name="splash_background">#FFE8F7E0</color>
 </resources>

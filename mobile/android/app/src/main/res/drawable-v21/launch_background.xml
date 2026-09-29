@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Splash native: hijau brand (juga di mode gelap) — sama dengan latar splash
+<!-- Splash native: hijau lembut (juga di mode gelap) — sama dengan latar splash
      beranimasi di Flutter (lib/core/widgets/splash_animasi.dart) supaya tidak berkedip. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />

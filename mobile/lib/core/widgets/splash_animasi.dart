@@ -6,7 +6,7 @@ import '../theme.dart';
 ///
 /// Ditumpuk di atas [child]: halaman pertama (login / daftar job) sudah
 /// disiapkan di belakangnya, lalu splash memudar dan dilepas dari pohon
-/// widget. Latar hijau brand sama dengan splash native Android/iOS sehingga
+/// widget. Latar hijau lembut sama dengan splash native Android/iOS sehingga
 /// peralihannya tidak berkedip.
 class SplashAnimasi extends StatefulWidget {
   const SplashAnimasi({super.key, required this.child, this.durasi = defaultDurasi});
@@ -67,17 +67,13 @@ class _SplashAnimasiState extends State<SplashAnimasi> with SingleTickerProvider
     );
   }
 
+
   Widget _isi() {
     const diameter = 176.0;
-    return DecoratedBox(
+    return ColoredBox(
       key: const Key('splash-animasi'),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [MasColors.brand, MasColors.brandDark],
-        ),
-      ),
+      // Soft green — sama dengan badge "Stand By" di web (#E8F7E0).
+      color: MasColors.brandLight,
       child: SafeArea(
         child: SizedBox.expand(
           child: Column(
@@ -97,7 +93,7 @@ class _SplashAnimasiState extends State<SplashAnimasi> with SingleTickerProvider
                         height: diameter * (1 + 0.6 * _cincin.value),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
+                          border: Border.all(color: MasColors.brand.withValues(alpha: 0.5), width: 3),
                         ),
                       ),
                     ),
@@ -115,8 +111,8 @@ class _SplashAnimasiState extends State<SplashAnimasi> with SingleTickerProvider
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                blurRadius: 24,
+                                color: MasColors.brandDark.withValues(alpha: 0.12),
+                                blurRadius: 28,
                                 offset: const Offset(0, 10),
                               ),
                             ],
@@ -144,14 +140,14 @@ class _SplashAnimasiState extends State<SplashAnimasi> with SingleTickerProvider
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: MasColors.brandDark,
                           letterSpacing: 0.4,
                         ),
                       ),
                       SizedBox(height: 4),
                       Text(
                         'Heavy Equipment & Truck',
-                        style: TextStyle(fontSize: 14, color: Color(0xE6FFFFFF), fontWeight: FontWeight.w500),
+                        style: TextStyle(fontSize: 14, color: MasColors.muted, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
@@ -167,8 +163,8 @@ class _SplashAnimasiState extends State<SplashAnimasi> with SingleTickerProvider
                     child: LinearProgressIndicator(
                       value: _progres.value,
                       minHeight: 5,
-                      color: Colors.white,
-                      backgroundColor: Colors.white.withValues(alpha: 0.25),
+                      color: MasColors.brand,
+                      backgroundColor: Colors.white.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
