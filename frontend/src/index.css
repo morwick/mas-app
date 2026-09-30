@@ -48,6 +48,8 @@
   --status-perbaikan-text: #854f0b;
   --status-cancelled-bg: #fcebeb;
   --status-cancelled-text: #791f1f;
+  /* Teks peringatan / galat (merah) — dipakai input dokumen, form unit, dll. */
+  --status-danger-text: var(--status-cancelled-text);
 
   /* Job statuses */
   --status-pickup-bg: #eaf2ff;
