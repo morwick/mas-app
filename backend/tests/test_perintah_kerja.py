@@ -337,3 +337,10 @@ def test_daftar_unit_dengan_polis_terkini(client: TestClient, db: _FakeDb) -> No
     assert body[1]["polis_terkini"] is None
     # Tanpa `dengan_polis` (dropdown form) polis tidak ikut diambil.
     assert client.get("/api/units").json()[0]["polis_terkini"] is None
+
+
+def test_selesaikan_insiden_tanpa_perbaikan_lewat_fungsi_db(client: TestClient, db: _FakeDb) -> None:
+    res = client.post("/api/incidents/i1/resolve-tanpa-perbaikan")
+    assert res.status_code == 200
+    # Satu panggilan fungsi DB = satu transaksi; status aset diatur trigger.
+    assert db.rpc_calls == [("selesaikan_insiden_tanpa_perbaikan", {"p_incident_id": "i1"})]

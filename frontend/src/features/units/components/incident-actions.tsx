@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, Pencil, Trash2, Wrench } from "lucide-react";
+import { CheckCircle2, CircleCheck, Pencil, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import {
   deleteIncident,
   resolveIncident,
+  resolveIncidentTanpaPerbaikan,
   setIncidentStatus
 } from "@/features/units/api";
 import type { Incident } from "@/types";
@@ -15,9 +16,14 @@ import type { Incident } from "@/types";
  * Alur insiden (status unit / unit trailer diubah trigger DB, migration
  * 20260925000006 & 20260926000006):
  *   Open (Breakdown) → Dalam penanganan (Perbaikan) → Selesai (Standby).
- * Hanya insiden Open yang boleh dihapus.
+ * Insiden Open juga bisa langsung Selesai tanpa perbaikan (migration
+ * 20260930000004). Hanya insiden Open yang boleh dihapus.
  */
-export type IncidentAction = "proses" | "selesai" | "hapus";
+export type IncidentAction = "proses" | "selesai" | "tanpa_perbaikan" | "hapus";
+
+/** Teks bantu tombol "Selesaikan Tanpa Perbaikan". */
+export const BANTU_TANPA_PERBAIKAN =
+  "Pakai bila insiden ternyata tidak perlu diperbaiki: insiden langsung ditutup Selesai dan status aset kembali Standby.";
 
 const COPY: Record<
   IncidentAction,
@@ -48,6 +54,15 @@ const COPY: Record<
     busy: "Menyelesaikan perbaikan…",
     success: "Perbaikan selesai"
   },
+  tanpa_perbaikan: {
+    title: "Selesaikan tanpa perbaikan?",
+    body: (aset) =>
+      `Insiden ditandai Selesai (tanpa perbaikan) tanpa melewati tahap penanganan, dan ${aset} kembali Standby (atau Bertugas bila masih ada job berjalan). Bila masih ada insiden lain yang belum selesai, statusnya mengikuti insiden itu. Catatan insiden tetap tersimpan sebagai riwayat.`,
+    confirmText: "Ya, selesaikan",
+    variant: "primary",
+    busy: "Menyelesaikan insiden tanpa perbaikan…",
+    success: "Insiden selesai tanpa perbaikan"
+  },
   hapus: {
     title: "Hapus catatan insiden?",
     body: () =>
@@ -62,6 +77,7 @@ const COPY: Record<
 function runAction(action: IncidentAction, id: string) {
   if (action === "proses") return setIncidentStatus(id, "in_progress");
   if (action === "selesai") return resolveIncident(id);
+  if (action === "tanpa_perbaikan") return resolveIncidentTanpaPerbaikan(id);
   return deleteIncident(id);
 }
 
@@ -128,42 +144,55 @@ export function IncidentActionButtons({ incident, onAction, onEdit }: ButtonsPro
   if (incident.status === "resolved") return null;
   const isOpen = incident.status === "open";
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-      <Button
-        size="sm"
-        variant="secondary"
-        leftIcon={<Pencil className="w-3.5 h-3.5" />}
-        onClick={onEdit}
-      >
-        Edit
-      </Button>
-      {isOpen && (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         <Button
           size="sm"
-          variant="ghost"
-          leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-          onClick={() => onAction("hapus")}
+          variant="secondary"
+          leftIcon={<Pencil className="w-3.5 h-3.5" />}
+          onClick={onEdit}
         >
-          Hapus
+          Edit
         </Button>
-      )}
-      {isOpen ? (
-        <Button
-          size="sm"
-          leftIcon={<Wrench className="w-3.5 h-3.5" />}
-          onClick={() => onAction("proses")}
-        >
-          Tandai dalam penanganan
-        </Button>
-      ) : (
-        <Button
-          size="sm"
-          leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-          onClick={() => onAction("selesai")}
-        >
-          Selesaikan perbaikan
-        </Button>
-      )}
+        {isOpen && (
+          <Button
+            size="sm"
+            variant="ghost"
+            leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+            onClick={() => onAction("hapus")}
+          >
+            Hapus
+          </Button>
+        )}
+        {isOpen ? (
+          <>
+            <Button
+              size="sm"
+              leftIcon={<Wrench className="w-3.5 h-3.5" />}
+              onClick={() => onAction("proses")}
+            >
+              Tandai dalam penanganan
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={<CircleCheck className="w-3.5 h-3.5" />}
+              onClick={() => onAction("tanpa_perbaikan")}
+            >
+              Selesaikan Tanpa Perbaikan
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="sm"
+            leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+            onClick={() => onAction("selesai")}
+          >
+            Selesaikan perbaikan
+          </Button>
+        )}
+      </div>
+      {isOpen && <p className="caption">{BANTU_TANPA_PERBAIKAN}</p>}
     </div>
   );
 }

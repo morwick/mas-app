@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field, model_validator
 
 IncidentType = Literal["kecelakaan", "kerusakan", "breakdown", "lainnya"]
 IncidentStatus = Literal["open", "in_progress", "resolved"]
-# Alasan insiden ditutup otomatis (Selesai) oleh sistem.
-DitutupKarena = Literal["diafkirkan", "terjual"]
+# Alasan insiden ditutup (Selesai) di luar alur biasa: otomatis oleh sistem
+# (aset diafkirkan / terjual) atau diselesaikan tanpa perbaikan.
+DitutupKarena = Literal["diafkirkan", "terjual", "tanpa_perbaikan"]
 
 
 class IncidentPhoto(BaseModel):

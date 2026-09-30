@@ -162,6 +162,12 @@ class IncidentService:
     async def resolve(self, incident_id: str) -> None:
         await self.set_status(incident_id, "resolved")
 
+    async def resolve_tanpa_perbaikan(self, incident_id: str) -> None:
+        # Open → Selesai langsung; aset kembali Standby lewat trigger yang sama
+        # (migration 20260930000004). Ditolak DB bila insiden bukan Open atau
+        # sudah punya perintah kerja yang belum selesai.
+        await self._db.rpc("selesaikan_insiden_tanpa_perbaikan", {"p_incident_id": incident_id}).execute()
+
     async def delete(self, incident_id: str) -> None:
         # Soft delete — foto insiden ikut ditandai terhapus oleh DB (dulu ON DELETE CASCADE).
         # Insiden yang sudah dalam penanganan ditolak DB.
