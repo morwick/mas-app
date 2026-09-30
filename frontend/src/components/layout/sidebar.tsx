@@ -24,6 +24,8 @@ interface SidebarProps {
     jobsActive?: number;
     driversAvailable?: number;
   };
+  /** Dilipat lewat tombol di top bar (desktop): hanya ikon yang tampil. */
+  mini?: boolean;
 }
 
 const COUNT_KEY: Record<string, keyof NonNullable<SidebarProps["counts"]>> = {
@@ -34,7 +36,10 @@ const COUNT_KEY: Record<string, keyof NonNullable<SidebarProps["counts"]>> = {
 
 const BADGE_KEYS = new Set(["/jobs"]);
 
-export function Sidebar({ user, counts }: SidebarProps) {
+/** Lebar menu terlipat (hanya ikon). */
+const LEBAR_MINI = 64;
+
+export function Sidebar({ user, counts, mini = false }: SidebarProps) {
   const { pathname } = useLocation();
   const entries = visibleNavTree(navTree, user?.role);
   // Semua grup terbuka secara default; yang ditutup manual disimpan di sini.
@@ -107,83 +112,173 @@ export function Sidebar({ user, counts }: SidebarProps) {
     );
   }
 
+  /** Mode terlipat: satu ikon per menu, nama sebagai tooltip. */
+  function renderIkon(item: NavItem) {
+    const active = item.match ? item.match(pathname) : pathname.startsWith(item.href);
+    const Icon = item.icon;
+    const countKey = COUNT_KEY[item.href];
+    const count = countKey ? counts?.[countKey] : undefined;
+    const badge = BADGE_KEYS.has(item.href) && count != null && count > 0;
+    return (
+      <Link
+        key={item.href}
+        to={item.href}
+        title={item.label}
+        aria-label={item.label}
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 40,
+          height: 38,
+          margin: "0 auto",
+          borderRadius: 8,
+          background: active ? "var(--brand-primary-light)" : "transparent",
+          color: active ? "var(--brand-primary-dark)" : "var(--text-secondary)",
+          transition: "background 120ms ease"
+        }}
+        onMouseEnter={(e) => {
+          if (!active) e.currentTarget.style.background = "var(--bg-muted)";
+        }}
+        onMouseLeave={(e) => {
+          if (!active) e.currentTarget.style.background = "transparent";
+        }}
+      >
+        <Icon style={{ width: 18, height: 18 }} />
+        {badge && (
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: 6,
+              right: 7,
+              width: 8,
+              height: 8,
+              borderRadius: 99,
+              background: "var(--brand-primary)",
+              border: "1.5px solid white"
+            }}
+          />
+        )}
+      </Link>
+    );
+  }
+
   return (
     <aside
-      className="hidden lg:flex flex-col h-screen sticky top-0 flex-shrink-0"
+      className="hidden lg:flex h-screen sticky top-0 flex-shrink-0"
+      data-mini={mini}
       style={{
-        width: "var(--sidebar-w)",
+        width: mini ? LEBAR_MINI : "var(--sidebar-w)",
+        overflow: "hidden",
+        transition: "width 180ms ease",
         background: "white",
         borderRight: "0.5px solid var(--border-default)"
       }}
     >
-      <div style={{ padding: "20px 18px 14px" }}>
-        <Logo size="md" showSub />
-      </div>
-      <div className="divider" />
-      <nav
-        className="flex-1 overflow-y-auto scroll-region"
-        style={{ padding: 12, display: "flex", flexDirection: "column", gap: 2 }}
-      >
-        <div className="eyebrow" style={{ padding: "8px 10px 4px" }}>
-          Menu
-        </div>
-        {entries.map((entry) => {
-          if (!isNavGroup(entry)) return renderItem(entry, false);
-
-          const hasActive = groupHasActive(entry, pathname);
-          // Submenu yang sedang aktif memaksa induknya terbuka, supaya
-          // halaman yang dibuka tidak tersembunyi di balik grup tertutup.
-          const open = !collapsed.has(entry.key) || hasActive;
-          const GroupIcon = entry.icon;
-          return (
-            <div key={entry.key} style={{ display: "contents" }}>
-              <button
-                type="button"
-                onClick={() => toggle(entry.key)}
-                aria-expanded={open}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  width: "100%",
-                  padding: "8px 10px",
-                  marginTop: 6,
-                  borderRadius: 8,
-                  border: "none",
-                  background: "transparent",
-                  color: hasActive
-                    ? "var(--brand-primary-dark)"
-                    : "var(--text-primary)",
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                  textAlign: "left"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--bg-muted)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                }}
-              >
-                <GroupIcon style={{ width: 18, height: 18 }} />
-                <span style={{ flex: 1 }}>{entry.label}</span>
-                <ChevronDown
-                  style={{
-                    width: 15,
-                    height: 15,
-                    color: "var(--text-tertiary)",
-                    transform: open ? "rotate(0deg)" : "rotate(-90deg)",
-                    transition: "transform 150ms ease"
-                  }}
-                />
-              </button>
-              {open && entry.items.map((item) => renderItem(item, true))}
+      {mini ? (
+        <div className="flex flex-col h-full" style={{ width: LEBAR_MINI, flexShrink: 0 }}>
+          {/* Hanya bagian ikon dari logo. */}
+          <div style={{ padding: "22px 0 16px", display: "flex", justifyContent: "center" }}>
+            <div style={{ width: 34, height: 30, overflow: "hidden" }} title="MAS Group">
+              <img src="/logo.png" alt="MAS Group" style={{ height: 30, width: "auto", maxWidth: "none" }} />
             </div>
-          );
-        })}
-      </nav>
+          </div>
+          <div className="divider" />
+          <nav
+            className="flex-1 overflow-y-auto scroll-region"
+            aria-label="Menu"
+            style={{ padding: "12px 0", display: "flex", flexDirection: "column", gap: 2 }}
+          >
+            {entries.map((entry, idx) =>
+              isNavGroup(entry) ? (
+                <div key={entry.key} style={{ display: "contents" }}>
+                  {/* Pemisah antar grup (Master, Monitoring, …). */}
+                  <div
+                    aria-hidden
+                    style={{ height: 0.5, background: "var(--border-default)", margin: idx === 0 ? "0 14px 6px" : "6px 14px" }}
+                  />
+                  {entry.items.map(renderIkon)}
+                </div>
+              ) : (
+                renderIkon(entry)
+              )
+            )}
+          </nav>
+        </div>
+      ) : (
+        <div className="flex flex-col h-full" style={{ width: "var(--sidebar-w)", flexShrink: 0 }}>
+          <div style={{ padding: "20px 18px 14px" }}>
+            <Logo size="md" showSub />
+          </div>
+          <div className="divider" />
+          <nav
+            className="flex-1 overflow-y-auto scroll-region"
+            style={{ padding: 12, display: "flex", flexDirection: "column", gap: 2 }}
+          >
+            <div className="eyebrow" style={{ padding: "8px 10px 4px" }}>
+              Menu
+            </div>
+            {entries.map((entry) => {
+              if (!isNavGroup(entry)) return renderItem(entry, false);
+
+              const hasActive = groupHasActive(entry, pathname);
+              // Submenu yang sedang aktif memaksa induknya terbuka, supaya
+              // halaman yang dibuka tidak tersembunyi di balik grup tertutup.
+              const open = !collapsed.has(entry.key) || hasActive;
+              const GroupIcon = entry.icon;
+              return (
+                <div key={entry.key} style={{ display: "contents" }}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(entry.key)}
+                    aria-expanded={open}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      width: "100%",
+                      padding: "8px 10px",
+                      marginTop: 6,
+                      borderRadius: 8,
+                      border: "none",
+                      background: "transparent",
+                      color: hasActive
+                        ? "var(--brand-primary-dark)"
+                        : "var(--text-primary)",
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      textAlign: "left"
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "var(--bg-muted)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    <GroupIcon style={{ width: 18, height: 18 }} />
+                    <span style={{ flex: 1 }}>{entry.label}</span>
+                    <ChevronDown
+                      style={{
+                        width: 15,
+                        height: 15,
+                        color: "var(--text-tertiary)",
+                        transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+                        transition: "transform 150ms ease"
+                      }}
+                    />
+                  </button>
+                  {open && entry.items.map((item) => renderItem(item, true))}
+                </div>
+              );
+            })}
+          </nav>
+        </div>
+      )}
     </aside>
   );
 }
