@@ -32,6 +32,8 @@ interface Props {
   selesai?: boolean;
   /** Batas link bisa dibuka (ISO), unloading tuntas + 24 jam. */
   berlakuSampai?: string | null;
+  /** Poller lokasi menerima 410 (mis. job dibatalkan) → halaman induk cek ulang. */
+  onBerakhir?: () => void;
 }
 
 type StatusInfo = { title: string; body: string; color: string; bg: string };
@@ -90,7 +92,7 @@ function driverInitials(nama: string) {
     .toUpperCase();
 }
 
-export function CustomerTrackingView({ job: jobAsli, unit, driver, selesai = false, berlakuSampai }: Props) {
+export function CustomerTrackingView({ job: jobAsli, unit, driver, selesai = false, berlakuSampai, onBerakhir }: Props) {
   // Setelah unloading tuntas, status internal (pool / validasi) disembunyikan:
   // customer melihat "Selesai", peta berhenti memantau posisi truk.
   const job = selesai && jobAsli.status !== "cancelled" ? { ...jobAsli, status: "selesai" as const } : jobAsli;
@@ -349,6 +351,7 @@ export function CustomerTrackingView({ job: jobAsli, unit, driver, selesai = fal
                 jobToken={job.share_token}
                 externalLink={unit?.tracksolid_share_link ?? null}
                 jobStatus={job.status}
+                onBerakhir={onBerakhir}
                 route={
                   job.asal_lat != null &&
                   job.asal_lng != null &&
