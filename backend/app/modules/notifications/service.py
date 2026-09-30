@@ -36,6 +36,8 @@ NotificationKind = Literal[
     "job_diterima",
     "uang_jalan_diajukan",
     "job_menunggu_validasi",
+    # Keadaan: login TrackSolid butuh captcha (superadmin saja)
+    "tracksolid_captcha",
 ]
 Severity = Literal["info", "warning", "danger"]
 
@@ -99,7 +101,33 @@ class NotificationService:
         if ids:
             await self.mark_read(user_id, ids)
 
-    async def page(self, params: PageParams, *, user_id: str | None = None) -> Page[AppNotification]:
+    async def _tracksolid_captcha(self, now_iso: str) -> list[AppNotification]:
+        """Superadmin: pelacakan GPS terputus karena login TrackSolid butuh captcha."""
+        try:
+            data = rows(await self._db.rpc("tracksolid_status", {}).execute())
+        except Exception as exc:  # noqa: BLE001 — mis. migrasi belum dijalankan
+            log.warning("status TrackSolid tidak terbaca: %s", exc)
+            return []
+        if not data or not data[0].get("perlu_captcha"):
+            return []
+        return [
+            AppNotification(
+                id="tracksolid-captcha",
+                kind="tracksolid_captcha",
+                severity="danger",
+                title="TrackSolid butuh captcha",
+                body=(
+                    "Lokasi & jarak tempuh GPS berhenti diperbarui. "
+                    "Login ulang TrackSolid dengan mengetik kode captcha."
+                ),
+                href="/tracksolid-login",
+                created_at=data[0].get("perlu_captcha_at") or now_iso,
+            )
+        ]
+
+    async def page(
+        self, params: PageParams, *, user_id: str | None = None, superadmin: bool = False
+    ) -> Page[AppNotification]:
         """Halaman Notifikasi — isinya sama persis dengan lonceng.
 
         Dipotong di memori, bukan di database: sebagian besar baris di sini
@@ -107,13 +135,15 @@ class NotificationService:
         habis, job belum dikonfirmasi) dan tidak punya baris tabel untuk
         di-`range()`. Daftarnya dibatasi per jenis, jadi tetap kecil.
         """
-        semua = await self.build(user_id=user_id)
+        semua = await self.build(user_id=user_id, superadmin=superadmin)
         if params.is_all:
             return build_page(semua, len(semua), params)
         potong = semua[params.offset : params.offset + params.page_size]
         return build_page(potong, len(semua), params)
 
-    async def build(self, now: datetime | None = None, *, user_id: str | None = None) -> list[AppNotification]:
+    async def build(
+        self, now: datetime | None = None, *, user_id: str | None = None, superadmin: bool = False
+    ) -> list[AppNotification]:
         now = now or now_utc()
         now_iso = iso_utc(now)
         db = self._db
@@ -131,6 +161,8 @@ class NotificationService:
 
         out: list[AppNotification] = []
         out.extend(await self._event_notifications(user_id))
+        if superadmin:
+            out.extend(await self._tracksolid_captcha(now_iso))
 
         # Job belum dikonfirmasi / belum berangkat, dokumen jatuh tempo, servis,
         # insiden, dan penawaran (deal belum ada job / hampir kedaluwarsa) tidak

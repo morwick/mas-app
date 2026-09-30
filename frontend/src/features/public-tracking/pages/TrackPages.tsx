@@ -15,9 +15,10 @@ export function CustomerTrackingPage() {
     queryKey: ["track", token],
     queryFn: () => publicTracking(token),
     enabled: !!token,
-    // Status job disegarkan tanpa realtime: halaman ini dibuka pelanggan
-    // sesekali, polling 30 detik sudah cukup.
-    refetchInterval: 30_000
+    // Status job disegarkan tanpa realtime. 15 detik + saat tab kembali
+    // dilihat: job dibatalkan → halaman segera pindah ke "berakhir".
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true
   });
 
   if (q.isPending) return <PageLoading label="Memuat pelacakan…" />;
@@ -34,6 +35,7 @@ export function CustomerTrackingPage() {
       driver={q.data.driver}
       selesai={q.data.selesai}
       berlakuSampai={q.data.berlaku_sampai}
+      onBerakhir={() => void q.refetch()}
     />
   );
 }

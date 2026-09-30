@@ -70,6 +70,7 @@ import { EditInvoicePage, NewInvoicePage } from "@/features/invoices/pages/Invoi
 import { InvoicePrintPage } from "@/features/invoices/pages/InvoicePrintPage";
 import { PiutangPage } from "@/features/invoices/pages/PiutangPage";
 import { LogSistemPage } from "@/features/log-sistem/pages/LogSistemPage";
+import { TrackSolidLoginPage } from "@/features/tracksolid/pages/TrackSolidLoginPage";
 import { KaryawanPage } from "@/features/karyawan/pages/KaryawanPage";
 import { PenjualanUnitPage } from "@/features/penjualan-unit/pages/PenjualanUnitPage";
 import { BastPenjualanPage, SuratPenjualanPage } from "@/features/penjualan-unit/pages/DokumenPenjualanPages";
@@ -276,6 +277,8 @@ export const router = createBrowserRouter([
             element: <RequireSuperadmin />,
             children: [
               { path: "/karyawan", element: <KaryawanPage /> },
+              // Dibuka dari notifikasi "TrackSolid butuh captcha".
+              { path: "/tracksolid-login", element: <TrackSolidLoginPage /> },
               { path: "/penjualan-unit", element: <PenjualanUnitPage /> },
               { path: "/penghapusan-aset", element: <PenghapusanAsetPage /> },
               { path: "/pengguna", element: <UsersPage /> }

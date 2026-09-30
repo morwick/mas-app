@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, ChevronRight, FileText, Plus, Search } from "lucide-react";
+import { CheckCircle2, ChevronRight, FileText, Handshake, Plus, Search, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
@@ -12,6 +12,7 @@ import type { Customer, QuotationListRow, QuotationStatus } from "@/types";
 import { formatDate, formatRupiah, hariIniWIB, tambahHari } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/features/dashboard/components/stat-card";
 
 interface Props {
   quotations: QuotationListRow[];
@@ -27,7 +28,16 @@ interface Props {
 // "deal_pending" bukan status di database — ia turunan dari status deal yang
 // belum punya job sama sekali. Dipisah sebagai chip sendiri karena itulah
 // daftar kerja admin: penawaran yang sudah disetujui tapi belum dijadwalkan.
-type FilterKey = "all" | QuotationStatus | "deal_pending" | "akan_kedaluwarsa";
+// Dari kartu monitoring: "ada_item_deal" = punya item disetujui (status
+// penawarannya bisa masih terkirim bila item lain belum diputuskan);
+// "tidak_deal" = ditolak + kedaluwarsa.
+type FilterKey =
+  | "all"
+  | QuotationStatus
+  | "deal_pending"
+  | "akan_kedaluwarsa"
+  | "ada_item_deal"
+  | "tidak_deal";
 
 /** Terkirim & masa berlakunya habis dalam sekian hari (sama dengan dashboard). */
 const AKAN_KEDALUWARSA_HARI = 7;
@@ -43,6 +53,37 @@ function akanKedaluwarsa(row: QuotationListRow, hariIni: string, batas: string):
 function dealBelumJob(row: QuotationListRow): boolean {
   if (row.status !== "deal") return false;
   return row.jumlah_item_deal_belum_job != null ? row.jumlah_item_deal_belum_job > 0 : row.jumlah_job === 0;
+}
+
+const NAMA_BULAN = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+];
+
+/** Penawaran di periode terpilih: tahun "" = semua tahun, bulan "" = setahun penuh. */
+function dalamPeriode(row: QuotationListRow, tahun: string, bulan: string): boolean {
+  if (!tahun) return true;
+  const t = row.tanggal.slice(0, 10);
+  if (!t.startsWith(`${tahun}-`)) return false;
+  return !bulan || t.slice(5, 7) === bulan;
+}
+
+/**
+ * Nilai item sebelum PPN → nilai seperti di tabel: + PPN hanya bila surat itu
+ * memakai PPN, dengan tarif & pembulatan yang sama dengan database
+ * (ROUND(subtotal × persen / 100)).
+ */
+function denganPpn(row: QuotationListRow, nilai: number): number {
+  return row.ppn_aktif ? nilai + Math.round((nilai * Number(row.ppn_persen)) / 100) : nilai;
+}
+
+/** Item ditolak, ditambah item yang belum diputuskan saat penawarannya kedaluwarsa. */
+function itemTidakDeal(row: QuotationListRow): { item: number; nilai: number } {
+  const lewat = row.status === "kedaluwarsa";
+  return {
+    item: (row.jumlah_item_ditolak ?? 0) + (lewat ? row.jumlah_item_menunggu ?? 0 : 0),
+    nilai: (row.nilai_item_ditolak ?? 0) + (lewat ? row.nilai_item_menunggu ?? 0 : 0)
+  };
 }
 
 const FILTER_URL: FilterKey[] = ["all", "draft", "terkirim", "deal", "deal_pending", "akan_kedaluwarsa", "ditolak", "kedaluwarsa"];
@@ -98,6 +139,26 @@ export function QuotationsListView({
     return { hariIni, batasKedaluwarsa: tambahHari(hariIni, AKAN_KEDALUWARSA_HARI) };
   }, []);
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
+  // Periode: default bulan ini (WIB). Datang dari tautan (customer / kartu
+  // dashboard) → semua periode, supaya angkanya sama dengan tempat asalnya.
+  const dariTautan = Boolean(initialCustomerId || initialFilter);
+  const [tahun, setTahun] = useState(dariTautan ? "" : hariIni.slice(0, 4));
+  const [bulan, setBulan] = useState(dariTautan ? "" : hariIni.slice(5, 7));
+  const pilihanTahun = useMemo(() => {
+    const set = new Set(quotations.map((r) => r.tanggal.slice(0, 4)));
+    set.add(hariIni.slice(0, 4));
+    return [...set].sort().reverse();
+  }, [quotations, hariIni]);
+
+  // Baris di periode & customer terpilih — dasar kartu monitoring, hitungan
+  // chip status, dan tabel.
+  const periode = useMemo(
+    () =>
+      quotations.filter(
+        (row) => dalamPeriode(row, tahun, bulan) && (!customerId || row.customer_id === customerId)
+      ),
+    [quotations, tahun, bulan, customerId]
+  );
 
   // Menyesuaikan saat halaman dibuka lagi lewat tautan customer lain
   // (mis. dari kolom "Jumlah penawaran" di menu Customer) tanpa remount komponen.
@@ -128,21 +189,51 @@ export function QuotationsListView({
       ditolak: 0,
       kedaluwarsa: 0
     };
-    for (const row of quotations) c[row.status] += 1;
+    for (const row of periode) c[row.status] += 1;
     return c;
-  }, [quotations]);
+  }, [periode]);
+
+  // Kartu monitoring: jumlah surat (penawaran) & item (baris rincian).
+  // Nilai dihitung seperti kolom Nilai di tabel: + PPN bila suratnya ber-PPN.
+  // Item deal memakai harga revisi bila ada.
+  const monitor = useMemo(() => {
+    const ringkas = (per: (r: QuotationListRow) => { item: number; nilai: number }) => {
+      let item = 0;
+      let nilai = 0;
+      let surat = 0;
+      for (const row of periode) {
+        const x = per(row);
+        if (x.item > 0) surat += 1;
+        item += x.item;
+        nilai += denganPpn(row, x.nilai);
+      }
+      return { item, nilai, surat };
+    };
+    return {
+      // subtotal + PPN surat = kolom Nilai di tabel.
+      total: ringkas((r) => ({ item: r.jumlah_item, nilai: r.subtotal })),
+      deal: {
+        ...ringkas((r) => ({ item: r.jumlah_item_deal ?? 0, nilai: r.nilai_deal })),
+        revisi: periode.reduce((sum, r) => sum + (r.jumlah_item_deal_revisi ?? 0), 0)
+      },
+      tidakDeal: ringkas(itemTidakDeal)
+    };
+  }, [periode]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return quotations.filter((row) => {
+    return periode.filter((row) => {
       if (filter === "deal_pending") {
         if (!dealBelumJob(row)) return false;
       } else if (filter === "akan_kedaluwarsa") {
         if (!akanKedaluwarsa(row, hariIni, batasKedaluwarsa)) return false;
+      } else if (filter === "ada_item_deal") {
+        if (!(row.jumlah_item_deal ?? 0)) return false;
+      } else if (filter === "tidak_deal") {
+        if (itemTidakDeal(row).item === 0) return false;
       } else if (filter !== "all" && row.status !== filter) {
         return false;
       }
-      if (customerId && row.customer_id !== customerId) return false;
       if (!needle) return true;
       return (
         row.quote_number.toLowerCase().includes(needle) ||
@@ -151,20 +242,22 @@ export function QuotationsListView({
         (row.pic_nama ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [quotations, q, filter, customerId, hariIni, batasKedaluwarsa]);
+  }, [periode, q, filter, hariIni, batasKedaluwarsa]);
 
   const totalNilai = useMemo(
     () => filtered.reduce((sum, r) => sum + r.total, 0),
     [filtered]
   );
 
-  const dealBelumJalan = useMemo(() => quotations.filter(dealBelumJob).length, [quotations]);
+  const dealBelumJalan = useMemo(() => periode.filter(dealBelumJob).length, [periode]);
   const jumlahAkanKedaluwarsa = useMemo(
-    () => quotations.filter((r) => akanKedaluwarsa(r, hariIni, batasKedaluwarsa)).length,
-    [quotations, hariIni, batasKedaluwarsa]
+    () => periode.filter((r) => akanKedaluwarsa(r, hariIni, batasKedaluwarsa)).length,
+    [periode, hariIni, batasKedaluwarsa]
   );
 
-  const pg = usePagination(filtered, { resetKey: `${q}|${filter}|${customerId}` });
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}|${customerId}|${tahun}|${bulan}` });
+  const labelPeriode = !tahun ? "semua periode" : bulan ? `${NAMA_BULAN[Number(bulan) - 1]} ${tahun}` : `tahun ${tahun}`;
+  const pilihChip = (k: FilterKey) => setFilter((f) => (f === k ? "all" : k));
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
@@ -192,6 +285,33 @@ export function QuotationsListView({
             clearable
           />
         </div>
+        <div className="toolbar-filter">
+          <Select value={bulan} onChange={(e) => setBulan(e.target.value)} disabled={!tahun} aria-label="Filter bulan">
+            <option value="">Semua bulan</option>
+            {NAMA_BULAN.map((nama, i) => (
+              <option key={nama} value={String(i + 1).padStart(2, "0")}>
+                {nama}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="toolbar-filter">
+          <Select
+            value={tahun}
+            onChange={(e) => {
+              setTahun(e.target.value);
+              if (!e.target.value) setBulan("");
+            }}
+            aria-label="Filter tahun"
+          >
+            <option value="">Semua tahun</option>
+            {pilihanTahun.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
+        </div>
         {!hanyaLihat && (
           <Link to="/quotations/new" className="hidden lg:inline-flex">
             <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
@@ -201,13 +321,57 @@ export function QuotationsListView({
         )}
       </div>
 
+      {/* Kartu monitoring — mengikuti periode & customer terpilih. Klik kartu
+          = saring tabel ke status itu (klik lagi untuk melepas). */}
+      <div className="flex flex-col" style={{ gap: 6 }}>
+        <div className="stat-grid stat-grid-3">
+          <StatCard
+            label={`Total penawaran · ${labelPeriode}`}
+            value={`${periode.length} surat`}
+            sublabel={`${monitor.total.item} item · ${formatRupiah(monitor.total.nilai)}`}
+            icon={FileText}
+            active={filter === "all"}
+            onClick={() => setFilter("all")}
+          />
+          <StatCard
+            label="Deal (disetujui)"
+            value={`${monitor.deal.item} item`}
+            sublabel={[
+              `dari ${monitor.deal.surat} surat`,
+              formatRupiah(monitor.deal.nilai),
+              monitor.deal.revisi > 0 ? `${monitor.deal.revisi} harga direvisi` : null
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            icon={Handshake}
+            tone="unitStandby"
+            active={filter === "ada_item_deal"}
+            onClick={() => pilihChip("ada_item_deal")}
+          />
+          <StatCard
+            label="Ditolak / kedaluwarsa"
+            value={`${monitor.tidakDeal.item} item`}
+            sublabel={`dari ${monitor.tidakDeal.surat} surat · ${formatRupiah(monitor.tidakDeal.nilai)}`}
+            icon={XCircle}
+            active={filter === "tidak_deal"}
+            onClick={() => pilihChip("tidak_deal")}
+          />
+        </div>
+        <p className="caption">
+          1 surat penawaran bisa berisi beberapa item (rute). Nilai dihitung seperti kolom Nilai di tabel: sudah
+          termasuk PPN bila suratnya memakai PPN. Item deal memakai harga setelah revisi.
+          Klik kartu untuk menyaring tabel.
+        </p>
+      </div>
+
       <FilterChips
         value={filter}
         onChange={(k) => setFilter(k as FilterKey)}
         items={[
-          { key: "all", label: "Semua", count: quotations.length },
+          { key: "all", label: "Semua", count: periode.length },
           { key: "draft", label: "Draft", count: counts.draft },
-          { key: "terkirim", label: "Terkirim", count: counts.terkirim },
+          // Terkirim = belum dijawab customer → daftar kerja admin untuk follow up.
+          { key: "terkirim", label: "Terkirim (Butuh Follow up)", count: counts.terkirim },
           { key: "deal", label: "Deal", count: counts.deal },
           {
             key: "deal_pending",
@@ -239,7 +403,7 @@ export function QuotationsListView({
           description={
             quotations.length === 0
               ? "Buat surat penawaran pertama — nomor surat diisi otomatis."
-              : "Coba ubah kata kunci atau filter statusnya."
+              : "Coba ubah periode, kata kunci, atau filter statusnya."
           }
           action={
             quotations.length === 0 && !hanyaLihat ? (

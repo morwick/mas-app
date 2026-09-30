@@ -165,10 +165,15 @@ class TestTrackSolidLink:
 
 
 class TestDerivedStatuses:
-    def test_quotation_expired_only_when_sent_and_past(self) -> None:
+    def test_quotation_expired_when_past_for_draft_and_sent(self) -> None:
         assert derive_status("terkirim", "2000-01-01") == "kedaluwarsa"
         assert derive_status("terkirim", "2999-01-01") == "terkirim"
-        assert derive_status("draft", "2000-01-01") == "draft"
+        # Draft yang lewat masa berlaku juga kedaluwarsa.
+        assert derive_status("draft", "2000-01-01") == "kedaluwarsa"
+        assert derive_status("draft", "2999-01-01") == "draft"
+        # Deal / ditolak tidak pernah kedaluwarsa.
+        assert derive_status("deal", "2000-01-01") == "deal"
+        assert derive_status("ditolak", "2000-01-01") == "ditolak"
 
     def test_invoice_overdue(self) -> None:
         status, hari = derive_tampil("terkirim", "2000-01-01")

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.modules.customers.schemas import Sapaan
 from app.modules.jobs.schemas import JobStatus
@@ -32,12 +33,30 @@ class QuotationItem(BaseModel):
     subtotal_final: float = 0
     alasan_ditolak: str | None = None
     diputuskan_at: str | None = None
+    # Karyawan TERAKHIR yang memberi / mengubah keputusan item (diisi trigger DB).
+    diputuskan_oleh: str | None = None
+    diputuskan_oleh_nama: str | None = None
     # Job aktif (tidak dibatalkan) yang dibuat dari item ini.
     jumlah_job: int = 0
 
 
 class QuotationBase(BaseModel):
     id: str
+    # True bila tersimpan sebagai draft (belum pernah dikirim) — juga saat
+    # statusnya tampil "kedaluwarsa" karena masa berlakunya lewat.
+    belum_dikirim: bool = False
+    # Surat versi revisi (nomor sama): tanggal suratnya, dan masa berlaku surat
+    # ASLI (sejak surat revisi dicetak, berlaku_sampai = masa berlaku revisi).
+    tanggal_revisi: str | None = None
+    berlaku_sampai_asli: str | None = None
+    # Siapa & kapan terakhir mengisi / mengubah berlaku_sampai (diisi trigger DB).
+    berlaku_diatur_oleh: str | None = None
+    berlaku_diatur_oleh_nama: str | None = None
+    berlaku_diatur_at: str | None = None
+    # Siapa & kapan surat versi revisi dibuat (diisi trigger DB).
+    revisi_dibuat_oleh: str | None = None
+    revisi_dibuat_oleh_nama: str | None = None
+    revisi_dibuat_at: str | None = None
     quote_number: str
     seq_no: int
     seq_tahun: int
@@ -83,6 +102,16 @@ class QuotationListRow(QuotationBase):
     jumlah_job_selesai: int
     # Item deal yang belum punya job aktif (tidak dibatalkan).
     jumlah_item_deal_belum_job: int = 0
+    # Item yang disetujui (deal), termasuk yang harganya direvisi.
+    jumlah_item_deal: int = 0
+    jumlah_item_deal_revisi: int = 0
+    # Jumlah subtotal_final item deal (sebelum PPN) — sama dengan detail.
+    nilai_deal: float = 0
+    # Item yang belum diputuskan / ditolak dan nilainya (harga awal, sebelum PPN).
+    jumlah_item_menunggu: int = 0
+    nilai_item_menunggu: float = 0
+    jumlah_item_ditolak: int = 0
+    nilai_item_ditolak: float = 0
 
 
 class QuotationJobRef(BaseModel):
@@ -120,6 +149,23 @@ class QuotationInput(BaseModel):
     ttd_jabatan: str | None = None
     catatan: str | None = None
     items: list[QuotationItemInput] = Field(default_factory=list)
+
+
+class SuratRevisiRequest(BaseModel):
+    """Tanggal surat versi revisi & masa berlakunya — disimpan saat dicetak."""
+
+    tanggal: date
+    berlaku_sampai: date
+
+    @model_validator(mode="after")
+    def _berlaku_setelah_tanggal(self) -> SuratRevisiRequest:
+        if self.berlaku_sampai <= self.tanggal:
+            raise ValueError("Berlaku sampai harus setelah tanggal surat revisi")
+        return self
+
+
+class CatatCetakRequest(BaseModel):
+    versi: Literal["asli", "revisi"] = "asli"
 
 
 class SetQuotationStatusRequest(BaseModel):

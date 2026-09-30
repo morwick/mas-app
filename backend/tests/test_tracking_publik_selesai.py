@@ -110,3 +110,17 @@ async def test_posisi_truk_tidak_dikirim_setelah_unloading_tuntas() -> None:
     )
     with pytest.raises(GoneError):
         await svc.location("tok")
+
+
+async def test_posisi_truk_tidak_dikirim_bila_job_dibatalkan() -> None:
+    svc = _svc(
+        {
+            "id": "job-1",
+            "status_job": "cancelled",
+            "unloading_selesai_at": None,
+            "unit_id": "unit-1",
+            "units": {"imei_gps": "123"},
+        }
+    )
+    with pytest.raises(GoneError, match="berakhir"):
+        await svc.location("tok")

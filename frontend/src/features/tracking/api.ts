@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client";
+import { jagaSesiTrackSolid } from "@/lib/tracksolid-captcha";
 import type { Job, LocationEntry } from "@/types";
 
 export interface FleetLocations {
@@ -24,10 +25,12 @@ export interface PublicTracking {
 }
 
 /** Lokasi semua unit aktif ber-IMEI (admin). */
-export const fleetLocations = () => api.get<FleetLocations>("/tracking/units/locations");
+// Memanggil TrackSolid di backend → tidak dikirim selama sesi butuh captcha.
+export const fleetLocations = () =>
+  jagaSesiTrackSolid(() => api.get<FleetLocations>("/tracking/units/locations"));
 
 export const unitLocation = (unitId: string) =>
-  api.get<LocationEntry>(`/tracking/units/${unitId}/location`);
+  jagaSesiTrackSolid(() => api.get<LocationEntry>(`/tracking/units/${unitId}/location`));
 
 /** Halaman pelanggan — tanpa login. */
 export const publicTracking = (token: string) =>

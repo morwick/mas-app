@@ -36,6 +36,7 @@ from app.modules.quotations.router import router as quotations_router
 from app.modules.reports.router import router as reports_router
 from app.modules.search.router import router as search_router
 from app.modules.tracking.router import router as tracking_router
+from app.modules.tracksolid_login.router import router as tracksolid_login_router
 from app.modules.uang_jalan.router import router as uang_jalan_router
 from app.modules.unit_trailer.router import router as unit_trailer_router
 from app.modules.units.router import router as units_router
@@ -65,6 +66,7 @@ def build_api_router() -> APIRouter:
         mekanik_router,
         perintah_kerja_router,
         tracking_router,
+        tracksolid_login_router,
         quotations_router,
         uang_jalan_router,
         invoices_router,

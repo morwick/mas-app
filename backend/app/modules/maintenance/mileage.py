@@ -36,7 +36,7 @@ from app.core.timeutil import (
     parse_iso,
     today_wib,
 )
-from app.integrations.tracksolid.client import TrackSolidClient
+from app.integrations.tracksolid.client import CaptchaDiperlukanError, TrackSolidClient
 from app.modules.maintenance.schemas import (
     BackfillFailure,
     BackfillSummary,
@@ -187,6 +187,8 @@ class MileageService:
                     timeout=PER_UNIT_TIMEOUT_S,
                 )
                 return u["id"], MileageEntry(km=res.today_km, fetched_at=iso_utc())
+            except CaptchaDiperlukanError:
+                raise  # popup captcha di frontend, bukan "gagal" per unit
             except Exception as exc:  # noqa: BLE001 — satu unit gagal jangan blokir lainnya
                 log.warning("sync mileage unit %s gagal: %s", u["id"], exc)
                 return u["id"], None

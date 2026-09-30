@@ -12,6 +12,7 @@
 
 import { adminSession, driverSession, isExpiringSoon, type AdminSession } from "@/lib/auth/session";
 import type { ActionResult } from "@/types";
+import { KODE_GALAT_CAPTCHA, kabariButuhCaptcha } from "@/lib/tracksolid-captcha";
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
@@ -115,6 +116,8 @@ async function parseError(res: Response): Promise<ApiError> {
             ""
           )
         : `Permintaan gagal (${res.status})`;
+  // Sesi TrackSolid tidak valid & butuh captcha → popup captcha di halaman ini.
+  if (body.kode === KODE_GALAT_CAPTCHA) kabariButuhCaptcha();
   return new ApiError(res.status, message, body);
 }
 

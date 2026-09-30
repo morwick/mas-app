@@ -43,6 +43,8 @@ interface Props {
   externalLink: string | null;
   jobStatus: JobStatus;
   route: RouteData | null;
+  /** Dipanggil saat server menyatakan link berakhir (410/404). */
+  onBerakhir?: () => void;
 }
 
 interface LocationData {
@@ -65,8 +67,12 @@ export function TrackSolidEmbed({
   jobToken,
   externalLink,
   jobStatus,
-  route
+  route,
+  onBerakhir
 }: Props) {
+  // Ref supaya callback baru tidak me-restart polling.
+  const onBerakhirRef = useRef(onBerakhir);
+  onBerakhirRef.current = onBerakhir;
   const [state, setState] = useState<State>({ kind: "loading" });
   const errorCountRef = useRef(0);
   const jobEnded = jobStatus === "selesai" || jobStatus === "cancelled";
@@ -90,6 +96,9 @@ export function TrackSolidEmbed({
         if (err instanceof ApiError) {
           if (err.status === 410 || err.status === 404) {
             setState({ kind: "ended" });
+            // Link berakhir (mis. job dibatalkan) → halaman induk segera
+            // memeriksa ulang dan pindah ke "Link sudah berakhir".
+            onBerakhirRef.current?.();
             return;
           }
           if (err.status === 422) {

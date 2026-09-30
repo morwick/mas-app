@@ -9,10 +9,13 @@ import { useJenisUnit } from "@/features/settings/queries";
 import { DaftarPerintahKerja } from "@/features/perintah-kerja/components/daftar-perintah-kerja";
 import { ServicesListView } from "../components/services-list-view";
 import { useUnitsWithService } from "../queries";
+import { useSesiTrackSolid } from "@/features/tracksolid/use-sesi-tracksolid";
 
 type Tab = "servis" | "perintah-kerja";
 
 export function ServicesPage() {
+  // Halaman ber-data TrackSolid: cek sesi saat dibuka, popup captcha bila perlu.
+  useSesiTrackSolid();
   const [params, setParams] = useSearchParams();
   const tab: Tab = params.get("tab") === "perintah-kerja" ? "perintah-kerja" : "servis";
 

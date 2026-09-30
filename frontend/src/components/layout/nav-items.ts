@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Hammer,
   HardHat,
+  WifiOff,
   type LucideIcon
 } from "lucide-react";
 
@@ -79,7 +80,7 @@ const unitTrailer: NavItem = {
 };
 
 const jenisUnit: NavItem = {
-  // Master jenis armada (lowbed, highbed, dst). Ditaruh tepat di bawah Unit
+  // Master jenis armada (lowbed, highbed, dst). Ditaruh tepat di atas Unit
   // karena isinya yang mengklasifikasikan unit.
   href: "/jenis-unit",
   label: "Jenis Unit",
@@ -114,7 +115,7 @@ const asuransi: NavItem = {
 
 const bengkel: NavItem = {
   href: "/bengkel",
-  label: "Bengkel",
+  label: "Bengkel Luar",
   icon: Hammer,
   match: (p) => p.startsWith("/bengkel"),
   roles: ["superadmin", "admin", "operator"]
@@ -265,6 +266,15 @@ export const profileItem: NavItem = {
   match: (p) => p.startsWith("/profil")
 };
 
+/** Login TrackSolid (isi captcha bila diminta) — juga dibuka dari notifikasi. */
+export const tracksolidLoginItem: NavItem = {
+  href: "/tracksolid-login",
+  label: "Login TrackSolid",
+  icon: WifiOff,
+  match: (p) => p.startsWith("/tracksolid-login"),
+  roles: ["superadmin"]
+};
+
 // ── Susunan menu ───────────────────────────────────────────────────────────
 export const navTree: NavEntry[] = [
   dashboard,
@@ -272,7 +282,19 @@ export const navTree: NavEntry[] = [
     key: "master",
     label: "Master",
     icon: Boxes,
-    items: [karyawan, pengguna, jenisUnit, unit, unitTrailer, driver, customer, asuransi, bengkel, mekanik]
+    items: [
+      karyawan,
+      pengguna,
+      jenisUnit,
+      unit,
+      unitTrailer,
+      driver,
+      mekanik,
+      customer,
+      asuransi,
+      bengkel,
+      tracksolidLoginItem
+    ]
   },
   {
     key: "monitoring",

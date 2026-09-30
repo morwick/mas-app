@@ -13,6 +13,7 @@ import { TrackingTabs } from "@/features/tracking/components/tracking-tabs";
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from "@/lib/job-status";
 import type { Job, JobStatus, Unit } from "@/types";
 import { fleetLocations } from "@/features/tracking/api";
+import { dengarTersambung } from "@/lib/tracksolid-captcha";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 
 const STATUS_LABEL: Record<JobStatus, string> = JOB_STATUS_LABEL;
@@ -71,9 +72,12 @@ export function AdminTrackingListView({ jobs, units }: Props) {
 
     fetchOnce();
     const id = setInterval(fetchOnce, POLL_INTERVAL_MS);
+    // Login captcha TrackSolid berhasil → muat ulang saat itu juga.
+    const lepas = dengarTersambung(() => void fetchOnce());
     return () => {
       cancelled = true;
       clearInterval(id);
+      lepas();
     };
   }, []);
 

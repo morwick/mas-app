@@ -7,6 +7,7 @@ from app.core.auth import AuthContext, require_auth, require_role, user_client
 from app.core.errors import ForbiddenError
 from app.modules.auth.schemas import OkResponse
 from app.modules.quotations.schemas import (
+    CatatCetakRequest,
     NextNumberResponse,
     Quotation,
     QuotationCreated,
@@ -16,6 +17,7 @@ from app.modules.quotations.schemas import (
     QuotationStatus,
     SetQuotationStatusRequest,
     SimpanKeputusanRequest,
+    SuratRevisiRequest,
 )
 from app.modules.quotations.service import QuotationService
 
@@ -81,6 +83,27 @@ async def set_status(
     svc: QuotationService = Depends(get_service),
 ) -> OkResponse:
     await svc.set_status(quotation_id, payload)
+    return OkResponse()
+
+
+@router.post("/{quotation_id}/cetak", response_model=OkResponse)
+async def catat_cetak(
+    quotation_id: str,
+    payload: CatatCetakRequest,
+    svc: QuotationService = Depends(get_service),
+) -> OkResponse:
+    """Dipanggil halaman cetak sebelum dialog print — semua role boleh mencetak."""
+    await svc.catat_cetak(quotation_id, payload.versi)
+    return OkResponse()
+
+
+@router.post("/{quotation_id}/surat-revisi", response_model=OkResponse, dependencies=[Depends(_bukan_finance)])
+async def simpan_surat_revisi(
+    quotation_id: str,
+    payload: SuratRevisiRequest,
+    svc: QuotationService = Depends(get_service),
+) -> OkResponse:
+    await svc.simpan_surat_revisi(quotation_id, payload)
     return OkResponse()
 
 

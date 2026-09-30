@@ -31,7 +31,9 @@ export type NotificationKind =
   // Kejadian alur job v2 (tersimpan di database, dibaca per pengguna)
   | "job_diterima"
   | "uang_jalan_diajukan"
-  | "job_menunggu_validasi";
+  | "job_menunggu_validasi"
+  // Superadmin: login TrackSolid butuh captcha
+  | "tracksolid_captcha";
 
 export type NotificationSeverity = "info" | "warning" | "danger";
 
@@ -64,7 +66,8 @@ export const KIND_META: Record<NotificationKind, KindMeta> = {
   invoice_overdue: { icon: Receipt, label: "Tagihan jatuh tempo" },
   job_diterima: { icon: PackageCheck, label: "Driver menerima job" },
   uang_jalan_diajukan: { icon: Wallet, label: "Pengajuan uang jalan" },
-  job_menunggu_validasi: { icon: ClipboardCheck, label: "Menunggu validasi" }
+  job_menunggu_validasi: { icon: ClipboardCheck, label: "Menunggu validasi" },
+  tracksolid_captcha: { icon: WifiOff, label: "TrackSolid butuh captcha" }
 };
 
 const SEVERITY_TOKENS: Record<
