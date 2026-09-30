@@ -23,7 +23,7 @@ describe("susunan menu", () => {
     ).toEqual(["Dashboard", "Master", "Monitoring", "Laporan", "Log Sistem", "Notifikasi"]);
   });
 
-  it("Master urut: Karyawan, Pengguna, Jenis Unit, Unit, Unit Trailer, Driver, Mekanik, Customer, Asuransi, Bengkel Luar, Login TrackSolid", () => {
+  it("Master urut: Karyawan, Pengguna, Jenis Unit, Unit, Unit Trailer, Driver, Mekanik, Customer, Asuransi, Bengkel Luar", () => {
     expect(group("master").items.map((i) => i.label)).toEqual([
       "Karyawan",
       "Pengguna",
@@ -34,18 +34,8 @@ describe("susunan menu", () => {
       "Mekanik",
       "Customer",
       "Asuransi",
-      "Bengkel Luar",
-      "Login TrackSolid"
+      "Bengkel Luar"
     ]);
-  });
-
-  it("Login TrackSolid hanya untuk superadmin", () => {
-    const labelMaster = (role: "superadmin" | "admin" | "operator" | "finance") => {
-      const m = visibleNavTree(navTree, role).find((e) => isNavGroup(e) && e.key === "master");
-      return m && isNavGroup(m) ? m.items.map((i) => i.label) : [];
-    };
-    expect(labelMaster("superadmin")).toContain("Login TrackSolid");
-    for (const role of ["admin", "operator", "finance"] as const) expect(labelMaster(role)).not.toContain("Login TrackSolid");
   });
 
   it("Jenis Unit tidak lagi bersarang di bawah /settings", () => {

@@ -25,7 +25,6 @@ import {
   ShieldCheck,
   Hammer,
   HardHat,
-  WifiOff,
   type LucideIcon
 } from "lucide-react";
 
@@ -266,15 +265,6 @@ export const profileItem: NavItem = {
   match: (p) => p.startsWith("/profil")
 };
 
-/** Login TrackSolid (isi captcha bila diminta) — juga dibuka dari notifikasi. */
-export const tracksolidLoginItem: NavItem = {
-  href: "/tracksolid-login",
-  label: "Login TrackSolid",
-  icon: WifiOff,
-  match: (p) => p.startsWith("/tracksolid-login"),
-  roles: ["superadmin"]
-};
-
 // ── Susunan menu ───────────────────────────────────────────────────────────
 export const navTree: NavEntry[] = [
   dashboard,
@@ -292,8 +282,7 @@ export const navTree: NavEntry[] = [
       mekanik,
       customer,
       asuransi,
-      bengkel,
-      tracksolidLoginItem
+      bengkel
     ]
   },
   {

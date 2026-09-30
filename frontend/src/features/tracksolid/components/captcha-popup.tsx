@@ -19,7 +19,7 @@ export function CaptchaPopup() {
 
   useEffect(() => dengarMintaPopup(() => setOpen(true)), []);
 
-  // Login captcha berhasil (dari popup atau menu Master) → semua tanda hilang.
+  // Login captcha berhasil → semua tanda hilang.
   useEffect(
     () =>
       dengarTersambung(() => {
