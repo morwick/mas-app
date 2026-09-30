@@ -186,19 +186,24 @@ describe("UnitTrailerView", () => {
     expect(panggilan.some((p) => p.method === "POST" && p.url.pathname.endsWith("/unit-trailer"))).toBe(false);
   });
 
-  it("filter status bisa menyaring Terjual", async () => {
+  it("tab Milik perusahaan: filter status tanpa Terjual, server diminta trailer milik", async () => {
     renderView();
     await screen.findAllByText("TR-01");
     const opsi = Array.from(screen.getByLabelText("Filter status").querySelectorAll("option")).map((o) => o.textContent);
-    // Status trailer sama dengan status unit.
-    expect(opsi).toEqual([
-      "Semua status",
-      "Standby",
-      "Bertugas",
-      "Breakdown",
-      "Perbaikan",
-      "Terjual",
-      "Diafkirkan"
-    ]);
+    // Status trailer sama dengan status unit; yang Terjual ada di tab sendiri.
+    expect(opsi).toEqual(["Semua status", "Standby", "Bertugas", "Breakdown", "Perbaikan", "Diafkirkan"]);
+    const daftar = panggilan.filter((p) => p.method === "GET" && p.url.pathname.endsWith("/unit-trailer"));
+    expect(daftar.at(-1)?.url.searchParams.get("kepemilikan")).toBe("milik");
+  });
+
+  it("tab Sudah terjual meminta trailer terjual dan menyembunyikan filter status", async () => {
+    renderView();
+    await screen.findAllByText("TR-01");
+    fireEvent.click(screen.getByRole("button", { name: "Sudah terjual" }));
+    await waitFor(() => {
+      const daftar = panggilan.filter((p) => p.method === "GET" && p.url.pathname.endsWith("/unit-trailer"));
+      expect(daftar.at(-1)?.url.searchParams.get("kepemilikan")).toBe("terjual");
+    });
+    expect(screen.queryByLabelText("Filter status")).toBeNull();
   });
 });

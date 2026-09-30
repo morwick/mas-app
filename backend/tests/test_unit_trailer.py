@@ -149,6 +149,14 @@ def test_daftar_paging_limit_offset_dan_filter(client: TestClient, db: _FakeDb) 
     }
 
 
+def test_tab_kepemilikan_memisahkan_trailer_terjual(client: TestClient, db: _FakeDb) -> None:
+    assert client.get("/api/unit-trailer", params={"kepemilikan": "milik"}).status_code == 200
+    assert ("neq", ("status_trailer", "terjual")) in db.query[-1]
+    assert client.get("/api/unit-trailer", params={"kepemilikan": "terjual"}).status_code == 200
+    assert ("eq", ("status_trailer", "terjual")) in db.query[-1]
+    assert client.get("/api/unit-trailer", params={"kepemilikan": "lain"}).status_code == 422
+
+
 def test_tambah_kode_duplikat_ditolak(client: TestClient, db: _FakeDb) -> None:
     res = client.post("/api/unit-trailer", data=_form({"kode_trailer": " tr-01 ", "jenis_unit_trailer_id": "j1"}))
     assert res.status_code == 409

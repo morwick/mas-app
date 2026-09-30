@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { NOTIFIKASI_POLL_MS } from "@/features/notifications/queries";
 import { driverNotifications, driverUangJalan, myJob, myJobs, type DriverJobFilter } from "./api";
 
 export const useMyJobs = (status: DriverJobFilter = "all") =>
@@ -25,4 +26,9 @@ export const useDriverUangJalan = (jobId: string | undefined) =>
   });
 
 export const useDriverNotifications = () =>
-  useQuery({ queryKey: ["driver", "notifications"], queryFn: driverNotifications, refetchInterval: 60_000 });
+  useQuery({
+    queryKey: ["driver", "notifications"],
+    queryFn: driverNotifications,
+    refetchInterval: NOTIFIKASI_POLL_MS,
+    refetchIntervalInBackground: true
+  });

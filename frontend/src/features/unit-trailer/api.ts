@@ -89,7 +89,11 @@ export interface UnitTrailerPage {
   page_size: number;
 }
 
+/** Tab halaman: trailer yang masih milik perusahaan, atau yang sudah terjual. */
+export type Kepemilikan = "milik" | "terjual";
+
 export interface UnitTrailerFilter {
+  kepemilikan?: Kepemilikan;
   page: number;
   pageSize: number;
   q: string;
@@ -131,7 +135,8 @@ export const listUnitTrailer = (f: UnitTrailerFilter) =>
     page_size: f.pageSize,
     q: f.q.trim() || undefined,
     status: f.status || undefined,
-    jenis_unit_trailer_id: f.jenisUnitTrailerId || undefined
+    jenis_unit_trailer_id: f.jenisUnitTrailerId || undefined,
+    kepemilikan: f.kepemilikan
   });
 
 // ── Detail (setara detail unit) ─────────────────────────────────────────────

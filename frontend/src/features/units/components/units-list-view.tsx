@@ -18,6 +18,10 @@ import { fleetLocations } from "@/features/tracking/api";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { Combobox } from "@/components/ui/combobox";
 import { PageHeader } from "@/components/ui/page-header";
+import { Tabs } from "@/components/ui/tabs";
+
+/** Tab halaman: unit yang masih milik perusahaan, atau yang sudah terjual. */
+type Kepemilikan = "milik" | "terjual";
 
 interface Props {
   units: Unit[];
@@ -39,7 +43,9 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
   const { canManageOperational } = useAuth();
   const [q, setQ] = useState("");
   const [jenis, setJenis] = useState("");
-  const [status, setStatus] = useState(initialStatus ?? "");
+  // ?status=terjual langsung membuka tab "Sudah terjual".
+  const [tab, setTab] = useState<Kepemilikan>(initialStatus === "terjual" ? "terjual" : "milik");
+  const [status, setStatus] = useState(initialStatus && initialStatus !== "terjual" ? initialStatus : "");
   const [showInactive, setShowInactive] = useState(false);
 
   // Alamat real-time per unit. State diisi via polling /api/units/locations.
@@ -72,6 +78,7 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
 
   const filtered = useMemo(() => {
     return units.filter((u) => {
+      if ((u.status === "terjual") !== (tab === "terjual")) return false;
       if (!showInactive && !u.is_active) return false;
       if (jenis && u.jenis_unit_id !== jenis) return false;
       if (status && u.status !== status) return false;
@@ -85,15 +92,31 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
       }
       return true;
     });
-  }, [units, q, jenis, status, showInactive]);
+  }, [units, tab, q, jenis, status, showInactive]);
 
-  const pg = usePagination(filtered, { resetKey: `${q}|${jenis}|${status}|${showInactive}` });
+  const pg = usePagination(filtered, { resetKey: `${tab}|${q}|${jenis}|${status}|${showInactive}` });
+
+  function gantiTab(t: Kepemilikan) {
+    setTab(t);
+    // Status di tab "Terjual" pasti Terjual; filter status tab lain tidak berlaku.
+    setStatus("");
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Unit"
         description="Daftar armada beserta jenis, no polisi, dan status operasionalnya."
+      />
+
+      <Tabs
+        variant="pill"
+        value={tab}
+        onChange={(k) => gantiTab(k as Kepemilikan)}
+        items={[
+          { key: "milik", label: "Milik perusahaan" },
+          { key: "terjual", label: "Sudah terjual" }
+        ]}
       />
 
       {/* Toolbar */}
@@ -116,20 +139,22 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
             clearable
           />
         </div>
-        <div className="toolbar-filter">
-          <Select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">Semua status</option>
-            <option value="standby">Standby</option>
-            <option value="bertugas">Bertugas</option>
-            <option value="breakdown">Breakdown</option>
-            <option value="perbaikan">Perbaikan</option>
-            <option value="terjual">Terjual</option>
-            <option value="diafkirkan">Diafkirkan</option>
-          </Select>
-        </div>
+        {tab === "milik" && (
+          <div className="toolbar-filter">
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              aria-label="Filter status"
+            >
+              <option value="">Semua status</option>
+              <option value="standby">Standby</option>
+              <option value="bertugas">Bertugas</option>
+              <option value="breakdown">Breakdown</option>
+              <option value="perbaikan">Perbaikan</option>
+              <option value="diafkirkan">Diafkirkan</option>
+            </Select>
+          </div>
+        )}
         {canManageOperational && (
           <Link to="/units/new" className="hidden lg:inline-flex">
             <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
@@ -156,10 +181,16 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={Truck}
-          title="Tidak ada unit"
-          description={canManageOperational ? "Coba ubah filter atau tambah unit baru." : "Coba ubah filter."}
+          title={tab === "terjual" ? "Tidak ada unit terjual" : "Tidak ada unit"}
+          description={
+            tab === "terjual"
+              ? "Unit yang dijual lewat menu Penjualan Unit & Unit Trailer akan tampil di sini."
+              : canManageOperational
+                ? "Coba ubah filter atau tambah unit baru."
+                : "Coba ubah filter."
+          }
           action={
-            canManageOperational ? (
+            canManageOperational && tab === "milik" ? (
               <Link to="/units/new">
                 <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
                   Tambah unit
