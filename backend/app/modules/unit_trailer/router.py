@@ -31,6 +31,9 @@ from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any, page_params
 from app.core.pg import first, rows, single
 from app.core.timeutil import today_wib
+from app.core.transaksi import Transaksi
+from app.modules.asuransi.polis import PolisService
+from app.modules.asuransi.schemas import PolisAsuransi, PolisInput
 from app.modules.auth.schemas import OkResponse
 from app.modules.incidents.schemas import Incident
 from app.modules.incidents.service import IncidentService
@@ -71,6 +74,8 @@ class UnitTrailer(BaseModel):
     kir_url: str | None = None
     srut_uploaded_at: str | None = None
     srut_url: str | None = None
+    # Polis asuransi terkini (berlaku hari ini, atau yang terakhir). Hanya di detail.
+    polis_terkini: PolisAsuransi | None = None
     # False = dinonaktifkan: tidak muncul di pilihan job, penjualan, penghapusan.
     is_active: bool = True
 
@@ -111,6 +116,11 @@ class UnitTrailerInput(BaseModel):
     # True = dokumen yang tersimpan dilepas (diabaikan bila ada file baru).
     hapus_dokumen_kir: bool = False
     hapus_dokumen_srut: bool = False
+    # Asuransi (opsional): polis ikut tersimpan dalam transaksi yang sama.
+    # `polis_id` = polis terkini yang diubah (kosong = tambah baru).
+    polis: PolisInput | None = None
+    polis_id: str | None = None
+    hapus_polis: bool = False
 
     @field_validator("kir_nomor", "srut_nomor", mode="before")
     @classmethod
@@ -321,7 +331,11 @@ async def daftar_unit_trailer(
     if jenis_unit_trailer_id:
         query = query.eq("jenis_unit_trailer_id", jenis_unit_trailer_id)
     res = await apply_window(query.order("kode_trailer").order("id"), params).execute()
-    return build_page([_to_trailer(r) for r in rows(res)], res.count, params)
+    items = [_to_trailer(r) for r in rows(res)]
+    # Kolom Asuransi di tabel: polis terkini semua baris halaman ini, satu query.
+    polis = await PolisService(client).terkini_banyak("unit_trailer", [t.id for t in items])
+    items = [t.model_copy(update={"polis_terkini": polis.get(t.id)}) for t in items]
+    return build_page(items, res.count, params)
 
 
 async def _siapkan_dokumen(
@@ -347,6 +361,7 @@ async def tambah_unit_trailer(
     data_form: str = Form(..., alias="data", description="Isian UnitTrailerInput (JSON)"),
     dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR (opsional)"),
     dokumen_srut: UploadFile | None = File(None, description="Scan/foto SRUT (opsional)"),
+    dokumen_polis: UploadFile | None = File(None, description="Scan/foto polis asuransi (opsional)"),
     client: AsyncClient = Depends(superadmin_or_admin_client),
 ) -> UnitTrailer:
     payload = parse_form(UnitTrailerInput, data_form)
@@ -359,16 +374,35 @@ async def tambah_unit_trailer(
     data.update(
         await _siapkan_dokumen(dokumen, payload, await baca_berkas(dokumen_kir), await baca_berkas(dokumen_srut))
     )
+    dokumen_polis_baru: PerubahanDokumen | None = None
     try:
-        res = await client.table("unit_trailer").insert(data).execute()
+        if payload.polis:
+            # Unit trailer + polis asuransi dalam satu transaksi.
+            tx = Transaksi(client)
+            tx.insert("unit_trailer", data)
+            dokumen_polis_baru = await PolisService(client).siapkan(
+                tx,
+                jenis="unit_trailer",
+                asset_id=trailer_id,
+                payload=payload.polis,
+                dokumen=await baca_berkas(dokumen_polis),
+            )
+            await tx.jalankan()
+            baru = data
+        else:
+            res = await client.table("unit_trailer").insert(data).execute()
+            baru = rows(res)[0]
     except APIError as exc:
         await dokumen.batalkan()
+        if dokumen_polis_baru:
+            await dokumen_polis_baru.batalkan()
         _duplikat_dari_db(exc)
         raise
     except Exception:
         await dokumen.batalkan()
+        if dokumen_polis_baru:
+            await dokumen_polis_baru.batalkan()
         raise
-    baru = rows(res)[0]
     row = single(await client.table("unit_trailer").select(_SELECT).eq("id", baru["id"]).maybe_single().execute())
     return _to_trailer(row or baru)
 
@@ -379,6 +413,7 @@ async def ubah_unit_trailer(
     data_form: str = Form(..., alias="data", description="Isian UnitTrailerInput (JSON)"),
     dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR pengganti (opsional)"),
     dokumen_srut: UploadFile | None = File(None, description="Scan/foto SRUT pengganti (opsional)"),
+    dokumen_polis: UploadFile | None = File(None, description="Scan/foto polis asuransi (opsional)"),
     client: AsyncClient = Depends(superadmin_or_admin_client),
 ) -> OkResponse:
     payload = parse_form(UnitTrailerInput, data_form)
@@ -401,19 +436,45 @@ async def ubah_unit_trailer(
     data.update(
         await _siapkan_dokumen(dokumen, payload, await baca_berkas(dokumen_kir), await baca_berkas(dokumen_srut), lama)
     )
+    dokumen_polis_baru: PerubahanDokumen | None = None
     try:
-        res = await client.table("unit_trailer").update(data).eq("id", trailer_id).execute()
+        if payload.polis is not None or (payload.hapus_polis and payload.polis_id):
+            # Unit trailer + polis asuransi dalam satu transaksi.
+            tx = Transaksi(client)
+            tx.update("unit_trailer", data, {"id": trailer_id})
+            if payload.polis is not None:
+                dokumen_polis_baru = await PolisService(client).siapkan(
+                    tx,
+                    jenis="unit_trailer",
+                    asset_id=trailer_id,
+                    payload=payload.polis,
+                    dokumen=await baca_berkas(dokumen_polis),
+                    polis_id=payload.polis_id,
+                )
+            elif payload.polis_id:
+                tx.hapus("polis_asuransi", {"id": payload.polis_id, "unit_trailer_id": trailer_id}, wajib=True)
+            await tx.jalankan()
+            tersimpan = True
+        else:
+            res = await client.table("unit_trailer").update(data).eq("id", trailer_id).execute()
+            tersimpan = bool(rows(res))
     except APIError as exc:
         await dokumen.batalkan()
+        if dokumen_polis_baru:
+            await dokumen_polis_baru.batalkan()
         _duplikat_dari_db(exc)
         raise
     except Exception:
         await dokumen.batalkan()
+        if dokumen_polis_baru:
+            await dokumen_polis_baru.batalkan()
         raise
-    if not rows(res):
+    if not tersimpan:
         await dokumen.batalkan()
         raise NotFoundError("Unit trailer tidak ditemukan atau sudah dihapus")
     await dokumen.selesaikan()
+    if dokumen_polis_baru:
+        await dokumen_polis_baru.selesaikan()
     return OkResponse()
 
 
@@ -446,6 +507,7 @@ async def _ambil(client: AsyncClient, trailer_id: str) -> UnitTrailer:
         update={
             "kir_url": await signed_url_dokumen(client, row.get("kir_path")),
             "srut_url": await signed_url_dokumen(client, row.get("srut_path")),
+            "polis_terkini": await PolisService(client).terkini("unit_trailer", trailer_id),
         }
     )
 

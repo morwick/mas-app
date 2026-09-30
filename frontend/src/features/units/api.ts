@@ -35,8 +35,9 @@ export interface UnitInput {
   pajak_berlaku_sampai?: string | null;
 }
 
-export const listUnits = (includeInactive = false) =>
-  api.get<Unit[]>("/units", { include_inactive: includeInactive });
+/** `denganPolis`: ikut mengisi `polis_terkini` (kolom Asuransi di halaman Unit). */
+export const listUnits = (includeInactive = false, denganPolis = false) =>
+  api.get<Unit[]>("/units", { include_inactive: includeInactive, dengan_polis: denganPolis || undefined });
 
 export const getUnit = (id: string) => api.get<Unit>(`/units/${id}`);
 export const getUnitStatusHistory = (id: string) =>
@@ -51,17 +52,28 @@ export const getDriverAssignments = () =>
 export interface DokumenUnit {
   stnk?: File | null;
   kir?: File | null;
+  polis?: File | null;
 }
 
-const berkasUnit = (d: DokumenUnit) => ({ dokumen_stnk: d.stnk, dokumen_kir: d.kir });
+/** Polis asuransi yang ikut tersimpan bersama unit (satu transaksi). */
+export interface AsuransiUnitInput {
+  polis?: import("@/features/asuransi/api").PolisInput | null;
+  polis_id?: string | null;
+  hapus_polis?: boolean;
+}
 
-export function createUnit(input: UnitInput, dokumen: DokumenUnit = {}): Promise<ActionResult<Unit>> {
+const berkasUnit = (d: DokumenUnit) => ({ dokumen_stnk: d.stnk, dokumen_kir: d.kir, dokumen_polis: d.polis });
+
+export function createUnit(
+  input: UnitInput & AsuransiUnitInput,
+  dokumen: DokumenUnit = {}
+): Promise<ActionResult<Unit>> {
   return mutate(api.upload<Unit>("/units", formDenganDokumen(input, berkasUnit(dokumen))));
 }
 
 export function updateUnit(
   id: string,
-  input: Partial<UnitInput> & { hapus_dokumen_stnk?: boolean; hapus_dokumen_kir?: boolean },
+  input: Partial<UnitInput> & AsuransiUnitInput & { hapus_dokumen_stnk?: boolean; hapus_dokumen_kir?: boolean },
   dokumen: DokumenUnit = {}
 ): Promise<ActionResult<unknown>> {
   return mutate(api.patchForm(`/units/${id}`, formDenganDokumen(input, berkasUnit(dokumen))));
@@ -111,6 +123,14 @@ export function setIncidentStatus(
   status: IncidentStatus
 ): Promise<ActionResult<unknown>> {
   return mutate(api.post(`/incidents/${id}/status`, { status }));
+}
+
+/**
+ * Selesaikan insiden Terbuka tanpa perbaikan (tidak lewat "Dalam penanganan") —
+ * status aset kembali Standby lewat trigger DB, sama seperti perbaikan selesai.
+ */
+export function resolveIncidentTanpaPerbaikan(id: string): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/incidents/${id}/resolve-tanpa-perbaikan`));
 }
 
 /** Selesaikan perbaikan — status unit ikut kembali (Standby) lewat trigger DB. */

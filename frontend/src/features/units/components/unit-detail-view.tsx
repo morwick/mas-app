@@ -24,6 +24,8 @@ import {
   utilisasiSementara
 } from "@/features/units/components/aset-detail-parts";
 import { ServiceHistoryTab } from "@/features/services/components/service-history-tab";
+import { KartuAsuransi } from "@/features/asuransi/components/polis-aset";
+import { TabPerbaikan } from "@/features/perintah-kerja/components/tab-perbaikan";
 import { deriveServiceStatus } from "@/lib/service";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -44,7 +46,7 @@ interface Props {
   services: ServiceRecord[];
 }
 
-type TabKey = "aktif" | "riwayat" | "history" | "insiden" | "service";
+type TabKey = "aktif" | "riwayat" | "history" | "insiden" | "service" | "perbaikan";
 
 export function UnitDetailView({
   unit,
@@ -72,7 +74,14 @@ export function UnitDetailView({
 
   const initialTab: TabKey = ((): TabKey => {
     const qp = searchParams.get("tab");
-    if (qp === "service" || qp === "insiden" || qp === "history" || qp === "riwayat" || qp === "aktif") {
+    if (
+      qp === "service" ||
+      qp === "perbaikan" ||
+      qp === "insiden" ||
+      qp === "history" ||
+      qp === "riwayat" ||
+      qp === "aktif"
+    ) {
       return qp;
     }
     return unit.status === "bertugas" ? "aktif" : "riwayat";
@@ -215,7 +224,8 @@ export function UnitDetailView({
                     : serviceDerived.status === "mendekati"
                       ? 1
                       : services.length
-              }
+              },
+              { key: "perbaikan", label: "Perintah Kerja Perbaikan" }
             ]}
           />
 
@@ -234,6 +244,7 @@ export function UnitDetailView({
               />
             )}
 
+            {tab === "perbaikan" && <TabPerbaikan aset={{ unit_id: unit.id }} />}
             {tab === "service" && (
               <ServiceHistoryTab
                 unit={unitWithService}
@@ -254,6 +265,7 @@ export function UnitDetailView({
             { label: "Pajak", tanggal: unit.pajak_berlaku_sampai, nomor: null }
           ]}
         />
+        <KartuAsuransi aset={{ unit_id: unit.id }} polis={unit.polis_terkini} />
         <UtilisasiCard utilisasi={utilisasi} />
         <div className="card card-pad">
           <div className="h3" style={{ marginBottom: 4 }}>

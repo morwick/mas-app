@@ -59,6 +59,12 @@ async def resolve(incident_id: str, svc: IncidentService = Depends(get_service))
     return OkResponse()
 
 
+@router.post("/{incident_id}/resolve-tanpa-perbaikan", response_model=OkResponse)
+async def resolve_tanpa_perbaikan(incident_id: str, svc: IncidentService = Depends(get_service)) -> OkResponse:
+    await svc.resolve_tanpa_perbaikan(incident_id)
+    return OkResponse()
+
+
 @router.delete("/{incident_id}", response_model=OkResponse)
 async def delete_incident(incident_id: str, svc: IncidentService = Depends(get_service)) -> OkResponse:
     await svc.delete(incident_id)

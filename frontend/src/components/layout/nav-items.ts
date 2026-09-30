@@ -22,6 +22,9 @@ import {
   IdCard,
   BadgeDollarSign,
   PackageX,
+  ShieldCheck,
+  Hammer,
+  HardHat,
   type LucideIcon
 } from "lucide-react";
 
@@ -101,6 +104,30 @@ const customer: NavItem = {
   roles: ["superadmin", "admin", "finance"]
 };
 
+const asuransi: NavItem = {
+  href: "/asuransi",
+  label: "Asuransi",
+  icon: ShieldCheck,
+  match: (p) => p.startsWith("/asuransi"),
+  roles: ["superadmin", "admin", "operator"]
+};
+
+const bengkel: NavItem = {
+  href: "/bengkel",
+  label: "Bengkel",
+  icon: Hammer,
+  match: (p) => p.startsWith("/bengkel"),
+  roles: ["superadmin", "admin", "operator"]
+};
+
+const mekanik: NavItem = {
+  href: "/mekanik",
+  label: "Mekanik",
+  icon: HardHat,
+  match: (p) => p.startsWith("/mekanik"),
+  roles: ["superadmin", "admin", "operator"]
+};
+
 const penawaran: NavItem = {
   href: "/quotations",
   label: "Penawaran",
@@ -139,7 +166,7 @@ const service: NavItem = {
   href: "/services",
   label: "Service",
   icon: Wrench,
-  match: (p) => p.startsWith("/services"),
+  match: (p) => p.startsWith("/services") || p.startsWith("/perintah-kerja"),
   // Operator: lihat + tambah service saja (tidak ada UI edit/hapus record service).
   roles: ["superadmin", "admin", "operator"]
 };
@@ -245,7 +272,7 @@ export const navTree: NavEntry[] = [
     key: "master",
     label: "Master",
     icon: Boxes,
-    items: [karyawan, pengguna, jenisUnit, unit, unitTrailer, driver, customer]
+    items: [karyawan, pengguna, jenisUnit, unit, unitTrailer, driver, customer, asuransi, bengkel, mekanik]
   },
   {
     key: "monitoring",

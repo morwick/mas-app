@@ -27,6 +27,7 @@ import {
 } from "../api";
 import { usePenjualanList } from "../queries";
 import { PenjualanFormModal } from "./penjualan-form-modal";
+import { StatusDokumen } from "./status-dokumen";
 
 const LABEL_JENIS: Record<JenisAset, string> = { unit: "Unit", unit_trailer: "Unit Trailer" };
 const LABEL_DOKUMEN: Record<DokumenTtd, string> = { surat: "Surat penjualan", bast: "BAST" };
@@ -297,7 +298,7 @@ export function PenjualanListView() {
                     <td className="mono" style={{ textAlign: "right", fontWeight: 600 }}>
                       {formatRupiah(p.harga_jual)}
                     </td>
-                    <td className="caption">
+                    <td>
                       <StatusTtd p={p} />
                     </td>
                     <td>
@@ -329,7 +330,7 @@ export function PenjualanListView() {
                     ? ` (${[p.no_hp_pembeli, p.email_pembeli].filter(Boolean).join(" · ")})`
                     : ""}
                 </div>
-                <div className="caption">
+                <div>
                   <StatusTtd p={p} />
                 </div>
                 <Aksi p={p} />
@@ -384,8 +385,14 @@ export function PenjualanListView() {
   );
 }
 
-/** Ringkas status dokumen bertanda tangan di baris daftar. */
+/** Status dokumen bertanda tangan di baris daftar. */
 function StatusTtd({ p }: { p: PenjualanUnit }) {
-  const ada = [p.bukti_uploaded_at ? "Surat" : null, p.bukti_bast_uploaded_at ? "BAST" : null].filter(Boolean);
-  return <>{ada.length ? `✓ ${ada.join(" & ")}` : "Belum ada"}</>;
+  return (
+    <StatusDokumen
+      dokumen={[
+        { label: "Surat penjualan", ada: Boolean(p.bukti_uploaded_at) },
+        { label: "BAST", ada: Boolean(p.bukti_bast_uploaded_at) }
+      ]}
+    />
+  );
 }

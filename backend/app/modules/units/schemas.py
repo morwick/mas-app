@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.modules.asuransi.schemas import PolisAsuransi, PolisInput
+
 # breakdown: ada insiden yang belum ditangani (migration 20260925000006).
 # terjual / diafkirkan: unit keluar dari armada — tidak bisa dipakai job
 # (migration 20260924000028 & 000029).
@@ -42,6 +44,8 @@ class Unit(BaseModel):
     stnk_url: str | None = None
     kir_uploaded_at: str | None = None
     kir_url: str | None = None
+    # Polis asuransi terkini (berlaku hari ini, atau yang terakhir). Hanya di detail unit.
+    polis_terkini: PolisAsuransi | None = None
 
 
 class UnitWithService(Unit):
@@ -63,6 +67,8 @@ class UnitCreate(BaseModel):
     kir_nomor: str | None = None
     kir_berlaku_sampai: str | None = None
     pajak_berlaku_sampai: str | None = None
+    # Asuransi (opsional): polis ikut tersimpan dalam transaksi yang sama.
+    polis: PolisInput | None = None
 
 
 class UnitUpdate(BaseModel):
@@ -82,6 +88,11 @@ class UnitUpdate(BaseModel):
     # True = dokumen yang tersimpan dilepas (diabaikan bila ada file baru).
     hapus_dokumen_stnk: bool = False
     hapus_dokumen_kir: bool = False
+    # Asuransi (opsional): `polis_id` = polis terkini yang sedang diubah
+    # (kosong = tambah polis baru); `hapus_polis` = lepas polis tersebut.
+    polis: PolisInput | None = None
+    polis_id: str | None = None
+    hapus_polis: bool = False
 
 
 class RiwayatAset(BaseModel):
@@ -92,6 +103,7 @@ class RiwayatAset(BaseModel):
     service: int = 0
     penjualan: int = 0
     penghapusan: int = 0
+    perbaikan: int = 0
     # True bila semua riwayat kosong → boleh dihapus; selain itu hanya nonaktifkan.
     bisa_dihapus: bool = False
 

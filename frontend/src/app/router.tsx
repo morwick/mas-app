@@ -42,6 +42,20 @@ import {
   TrackingListPage
 } from "@/features/tracking/pages/TrackingPages";
 import { ServicesPage } from "@/features/services/pages/ServicesPage";
+import { LaporanPerawatan } from "@/features/perintah-kerja/components/laporan-perawatan";
+import {
+  AsuransiDetailPage,
+  AsuransiPage,
+  BengkelPage,
+  EditAsuransiPage,
+  MekanikPage,
+  NewAsuransiPage
+} from "@/features/asuransi/pages/AsuransiPages";
+import {
+  EditPerintahKerjaPage,
+  NewPerintahKerjaPage,
+  PerintahKerjaDetailPage
+} from "@/features/perintah-kerja/pages/PerintahKerjaPages";
 import { QuotationsPage } from "@/features/quotations/pages/QuotationsPage";
 import { QuotationDetailPage } from "@/features/quotations/pages/QuotationDetailPage";
 import {
@@ -167,7 +181,26 @@ export const router = createBrowserRouter([
               { path: "/tracking/:id", element: <TrackingDetailPage /> },
 
               { path: "/uang-jalan", element: <UangJalanPage /> },
-              { path: "/services", element: <ServicesPage /> }
+              { path: "/services", element: <ServicesPage /> },
+
+              // Asuransi, bengkel, mekanik, perintah kerja: operator hanya
+              // melihat (tombol aksi disembunyikan, backend menolak).
+              { path: "/asuransi", element: <AsuransiPage /> },
+              { path: "/asuransi/:id", element: <AsuransiDetailPage /> },
+              { path: "/bengkel", element: <BengkelPage /> },
+              { path: "/mekanik", element: <MekanikPage /> },
+              { path: "/perintah-kerja/:id", element: <PerintahKerjaDetailPage /> }
+            ]
+          },
+
+          {
+            // Form asuransi & perintah kerja: superadmin & admin saja.
+            element: <RequireRole roles={["superadmin", "admin"]} />,
+            children: [
+              { path: "/asuransi/new", element: <NewAsuransiPage /> },
+              { path: "/asuransi/:id/edit", element: <EditAsuransiPage /> },
+              { path: "/perintah-kerja/new", element: <NewPerintahKerjaPage /> },
+              { path: "/perintah-kerja/:id/edit", element: <EditPerintahKerjaPage /> }
             ]
           },
 
@@ -222,7 +255,8 @@ export const router = createBrowserRouter([
             element: <RequireRole roles={["superadmin", "admin", "finance"]} />,
             children: [
               { path: "/reports/laba", element: <LabaReportPage /> },
-              { path: "/reports/customers", element: <CustomersReportPage /> }
+              { path: "/reports/customers", element: <CustomersReportPage /> },
+              { path: "/reports/perawatan", element: <LaporanPerawatan /> }
             ]
           },
 

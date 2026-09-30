@@ -50,9 +50,14 @@ async def list_units_page(
 
 
 @router.get("", response_model=list[Unit])
-async def list_units(include_inactive: bool = Query(False), svc: UnitService = Depends(get_service)) -> list[Unit]:
-    """Tanpa potongan — untuk dropdown pemilihan unit di form."""
-    return await svc.list_all(include_inactive=include_inactive)
+async def list_units(
+    include_inactive: bool = Query(False),
+    dengan_polis: bool = Query(False),
+    svc: UnitService = Depends(get_service),
+) -> list[Unit]:
+    """Tanpa potongan — untuk dropdown pemilihan unit di form. `dengan_polis`
+    dipakai halaman daftar unit (kolom Asuransi)."""
+    return await svc.list_all(include_inactive=include_inactive, dengan_polis=dengan_polis)
 
 
 @router.get("/driver-assignments", response_model=dict[str, DriverAssignment])
@@ -105,10 +110,14 @@ async def create_unit(
     data: str = Form(..., description="Isian UnitCreate (JSON)"),
     dokumen_stnk: UploadFile | None = File(None, description="Scan/foto STNK (opsional)"),
     dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR (opsional)"),
+    dokumen_polis: UploadFile | None = File(None, description="Scan/foto polis asuransi (opsional)"),
     svc: UnitService = Depends(get_service),
 ) -> Unit:
     return await svc.create(
-        parse_form(UnitCreate, data), await baca_berkas(dokumen_stnk), await baca_berkas(dokumen_kir)
+        parse_form(UnitCreate, data),
+        await baca_berkas(dokumen_stnk),
+        await baca_berkas(dokumen_kir),
+        await baca_berkas(dokumen_polis),
     )
 
 
@@ -118,10 +127,15 @@ async def update_unit(
     data: str = Form(..., description="Isian UnitUpdate (JSON)"),
     dokumen_stnk: UploadFile | None = File(None, description="Scan/foto STNK pengganti (opsional)"),
     dokumen_kir: UploadFile | None = File(None, description="Scan/foto KIR pengganti (opsional)"),
+    dokumen_polis: UploadFile | None = File(None, description="Scan/foto polis asuransi (opsional)"),
     svc: UnitService = Depends(get_service),
 ) -> OkResponse:
     await svc.update(
-        unit_id, parse_form(UnitUpdate, data), await baca_berkas(dokumen_stnk), await baca_berkas(dokumen_kir)
+        unit_id,
+        parse_form(UnitUpdate, data),
+        await baca_berkas(dokumen_stnk),
+        await baca_berkas(dokumen_kir),
+        await baca_berkas(dokumen_polis),
     )
     return OkResponse()
 

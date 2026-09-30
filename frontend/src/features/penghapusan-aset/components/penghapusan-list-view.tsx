@@ -28,6 +28,7 @@ import {
 import { usePenghapusanList } from "../queries";
 import { BatalPenghapusanModal } from "./batal-penghapusan-modal";
 import { PenghapusanFormModal } from "./penghapusan-form-modal";
+import { StatusDokumen } from "@/features/penjualan-unit/components/status-dokumen";
 
 const LABEL_JENIS: Record<JenisAset, string> = { unit: "Unit", unit_trailer: "Unit Trailer" };
 
@@ -290,7 +291,9 @@ export function PenghapusanListView() {
                       <div>{p.alasan}</div>
                       {p.catatan && <div className="caption">{p.catatan}</div>}
                     </td>
-                    <td className="caption">{p.bukti_uploaded_at ? "✓ Berita acara" : "Belum ada"}</td>
+                    <td>
+                      <StatusDokumen dokumen={[{ label: "Berita acara", ada: Boolean(p.bukti_uploaded_at) }]} />
+                    </td>
                     <td>
                       <Aksi p={p} />
                     </td>
@@ -313,6 +316,9 @@ export function PenghapusanListView() {
                 </div>
                 <div className="caption mono">{p.nomor_berita_acara ?? "—"}</div>
                 <div className="caption">{p.alasan}</div>
+                <div>
+                  <StatusDokumen dokumen={[{ label: "Berita acara", ada: Boolean(p.bukti_uploaded_at) }]} />
+                </div>
                 <Aksi p={p} />
               </div>
             ))}

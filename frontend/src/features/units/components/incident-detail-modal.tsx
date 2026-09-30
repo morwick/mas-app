@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { PerintahKerjaInsiden } from "@/features/perintah-kerja/components/perintah-kerja-insiden";
 import { Badge } from "@/components/ui/badge";
 import { Lightbox } from "@/components/ui/lightbox";
 import {
@@ -92,6 +93,7 @@ export function IncidentDetailModal({ open, onClose, incident, onAction, onEdit 
         }
       >
         <div className="flex flex-col gap-4">
+          <PerintahKerjaInsiden incident={incident} />
           <div className="flex items-center gap-2">
             <Badge variant={statusBadgeVariant[incident.status]}>
               {labelStatusInsiden(incident)}

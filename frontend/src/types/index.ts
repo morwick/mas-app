@@ -64,6 +64,8 @@ export interface Unit {
   stnk_url?: string | null;
   kir_uploaded_at?: string | null;
   kir_url?: string | null;
+  /** Polis asuransi terkini (berlaku hari ini, atau yang terakhir). Hanya di detail unit. */
+  polis_terkini?: import("@/features/asuransi/api").PolisAsuransi | null;
 }
 
 export interface Driver {
@@ -150,6 +152,8 @@ export interface RiwayatAset {
   service: number;
   penjualan: number;
   penghapusan: number;
+  /** Perintah kerja perbaikan. */
+  perbaikan?: number;
   /** True bila semua riwayat kosong → boleh dihapus; selain itu hanya dinonaktifkan. */
   bisa_dihapus: boolean;
 }
@@ -268,8 +272,8 @@ export interface Incident {
   vendor_repair?: string | null;
   status: IncidentStatus;
   resolved_at?: string | null;
-  /** Ditutup otomatis (Selesai) karena aset diafkirkan / terjual. */
-  ditutup_karena?: "diafkirkan" | "terjual" | null;
+  /** Ditutup (Selesai) di luar alur biasa: aset diafkirkan / terjual, atau diselesaikan tanpa perbaikan. */
+  ditutup_karena?: "diafkirkan" | "terjual" | "tanpa_perbaikan" | null;
   status_sebelum_ditutup?: IncidentStatus | null;
   created_by_nama?: string | null;
   created_at: string;
@@ -289,10 +293,16 @@ export const incidentStatusLabel: Record<IncidentStatus, string> = {
   resolved: "Selesai"
 };
 
-/** Label status insiden, termasuk "Selesai (diafkirkan)" / "Selesai (terjual)" bila ditutup sistem. */
+const LABEL_DITUTUP_KARENA: Record<NonNullable<Incident["ditutup_karena"]>, string> = {
+  diafkirkan: "diafkirkan",
+  terjual: "terjual",
+  tanpa_perbaikan: "tanpa perbaikan"
+};
+
+/** Label status insiden, termasuk "Selesai (diafkirkan)" / "Selesai (terjual)" / "Selesai (tanpa perbaikan)". */
 export function labelStatusInsiden(inc: Pick<Incident, "status" | "ditutup_karena">): string {
   return inc.status === "resolved" && inc.ditutup_karena
-    ? `Selesai (${inc.ditutup_karena})`
+    ? `Selesai (${LABEL_DITUTUP_KARENA[inc.ditutup_karena]})`
     : incidentStatusLabel[inc.status];
 }
 

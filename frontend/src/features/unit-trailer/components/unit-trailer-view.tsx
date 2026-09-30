@@ -30,6 +30,7 @@ import {
 } from "../api";
 import { useJenisUnitTrailer, useUnitTrailer } from "../queries";
 import { useJenisUnit } from "@/features/settings/queries";
+import { AsuransiSel } from "@/features/asuransi/components/asuransi-sel";
 import { UnitTrailerFormModal } from "./unit-trailer-form-modal";
 
 function formatKapasitas(ton: number | null) {
@@ -241,6 +242,7 @@ export function UnitTrailerView() {
                   <th style={{ width: 90 }}>Tahun</th>
                   <th style={{ width: 150 }}>Kapasitas muatan</th>
                   <th style={{ width: 120 }}>Status</th>
+                  <th>Asuransi</th>
                   <th style={{ width: 50 }}></th>
                 </tr>
               </thead>
@@ -271,6 +273,9 @@ export function UnitTrailerView() {
                       <StatusBadge status={t.status} />
                     </td>
                     <td>
+                      <AsuransiSel polis={t.polis_terkini} />
+                    </td>
+                    <td>
                       <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
                     </td>
                   </tr>
@@ -283,28 +288,33 @@ export function UnitTrailerView() {
           {/* Mobile: kartu */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
             {items.map((t) => (
-              <Link
-                key={t.id}
-                to={`/unit-trailer/${t.id}`}
-                className="card card-pad"
-                style={{ display: "flex", flexDirection: "column", gap: 6, textDecoration: "none", color: "inherit" }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontWeight: 700 }}>
-                    {t.kode_trailer}
-                    {!t.is_active && (
-                      <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
-                        Nonaktif
-                      </span>
-                    )}
-                  </span>
-                  <StatusBadge status={t.status} />
+              <div key={t.id} className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <Link
+                  to={`/unit-trailer/${t.id}`}
+                  style={{ display: "flex", flexDirection: "column", gap: 6, textDecoration: "none", color: "inherit" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontWeight: 700 }}>
+                      {t.kode_trailer}
+                      {!t.is_active && (
+                        <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                          Nonaktif
+                        </span>
+                      )}
+                    </span>
+                    <StatusBadge status={t.status} />
+                  </div>
+                  <div className="caption">
+                    {t.jenis_nama ?? "—"} ({t.jenis_unit_nama ?? "—"}) · {t.tahun ?? "—"} ·{" "}
+                    {formatKapasitas(t.kapasitas_ton)}
+                  </div>
+                </Link>
+                {/* Di luar tautan kartu: tautan asuransi tidak boleh bersarang di tautan lain. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>Asuransi:</span>
+                  <AsuransiSel polis={t.polis_terkini} />
                 </div>
-                <div className="caption">
-                  {t.jenis_nama ?? "—"} ({t.jenis_unit_nama ?? "—"}) · {t.tahun ?? "—"} ·{" "}
-                  {formatKapasitas(t.kapasitas_ton)}
-                </div>
-              </Link>
+              </div>
             ))}
             <Pagination state={pg} label="unit trailer" />
           </div>

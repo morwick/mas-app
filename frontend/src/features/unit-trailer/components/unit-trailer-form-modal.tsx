@@ -8,6 +8,12 @@ import { Field, Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { DOKUMEN_KOSONG, DokumenInput, type NilaiDokumen } from "@/components/ui/dokumen-input";
 import {
+  BagianAsuransiForm,
+  awalAsuransiForm,
+  payloadAsuransi
+} from "@/features/asuransi/components/polis-aset";
+import { periksaPolis, type ErrorPolis } from "@/features/asuransi/components/polis-fields";
+import {
   type DokumenTrailer,
   type JenisUnitTrailer,
   type UnitTrailer,
@@ -102,6 +108,8 @@ export function UnitTrailerFormModal({
   const [err, setErr] = useState<Partial<Record<keyof FormState, string>>>({});
   const [dokumenKir, setDokumenKir] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
   const [dokumenSrut, setDokumenSrut] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
+  const [asuransi, setAsuransi] = useState(() => awalAsuransiForm(trailer?.polis_terkini));
+  const [errorPolis, setErrorPolis] = useState<ErrorPolis>({});
   const [jenisBaruOpen, setJenisBaruOpen] = useState(false);
   const [jenisBaru, setJenisBaru] = useState("");
   const [jenisBaruErr, setJenisBaruErr] = useState("");
@@ -115,6 +123,8 @@ export function UnitTrailerFormModal({
       setErr({});
       setDokumenKir(DOKUMEN_KOSONG);
       setDokumenSrut(DOKUMEN_KOSONG);
+      setAsuransi(awalAsuransiForm(trailer?.polis_terkini));
+      setErrorPolis({});
     }
   }, [open, trailer]);
 
@@ -143,7 +153,9 @@ export function UnitTrailerFormModal({
     if (tahun.error) errs.tahun = tahun.error;
     if (kapasitas.error) errs.kapasitas = kapasitas.error;
     setErr(errs);
-    const pesan = Object.values(errs).filter(Boolean);
+    const errPolis = asuransi.aktif ? periksaPolis(asuransi.isi) : {};
+    setErrorPolis(errPolis);
+    const pesan = [...Object.values(errs), ...Object.values(errPolis).map((p) => `Asuransi: ${p}`)].filter(Boolean);
     if (pesan.length > 0) {
       // Isian tidak valid → proses dibatalkan, tidak ada yang dikirim ke server.
       toast.error(`${trailer ? "Gagal mengubah data" : "Gagal menambah data"}. ${pesan[0]}`);
@@ -161,9 +173,10 @@ export function UnitTrailerFormModal({
         srut_nomor: form.srutNomor.trim() || null,
         srut_tanggal: form.srutTanggal || null,
         hapus_dokumen_kir: dokumenKir.hapus,
-        hapus_dokumen_srut: dokumenSrut.hapus
+        hapus_dokumen_srut: dokumenSrut.hapus,
+        ...payloadAsuransi(asuransi, trailer?.polis_terkini)
       },
-      { kir: dokumenKir.file, srut: dokumenSrut.file }
+      { kir: dokumenKir.file, srut: dokumenSrut.file, polis: asuransi.aktif ? asuransi.dokumen.file : null }
     );
   }
 
@@ -307,6 +320,17 @@ export function UnitTrailerFormModal({
               />
             </Field>
           </div>
+
+          <div className="field-label" style={{ marginTop: 4 }}>
+            Asuransi <span className="caption">(opsional)</span>
+          </div>
+          <BagianAsuransiForm
+            value={asuransi}
+            onChange={setAsuransi}
+            error={errorPolis}
+            polisLama={trailer?.polis_terkini}
+            labelAset="Unit trailer"
+          />
         </form>
       </Modal>
 

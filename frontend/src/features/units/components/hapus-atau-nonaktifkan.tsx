@@ -112,7 +112,7 @@ export function HapusAtauNonaktifkan({
         open={konfirmasi === "hapus"}
         onClose={() => setKonfirmasi(null)}
         title={`Hapus ${cfg.label} ${kode}?`}
-        body={`Ini menghapus bersih segala informasi ${cfg.label} ${kode}, seakan-akan ${cfg.label} ini tidak pernah ada. Hanya bisa dilakukan karena ${cfg.label} ini belum punya riwayat job, insiden, service, penjualan, maupun penghapusan.`}
+        body={`Ini menghapus bersih segala informasi ${cfg.label} ${kode}, seakan-akan ${cfg.label} ini tidak pernah ada. Hanya bisa dilakukan karena ${cfg.label} ini belum punya riwayat job, insiden, service, perbaikan, penjualan, maupun penghapusan.`}
         confirmText="Ya, hapus bersih"
         variant="danger"
         onConfirm={jalankan}

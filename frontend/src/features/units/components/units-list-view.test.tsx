@@ -29,7 +29,11 @@ const unit = (kode: string, status: Unit["status"]) =>
     default_driver_nama: null
   }) as unknown as Unit;
 
-const UNITS = [unit("TR-01", "standby"), unit("TR-02", "diafkirkan"), unit("TR-03", "terjual")];
+const UNITS = [
+  { ...unit("TR-01", "standby"), polis_terkini: { asuransi_id: "a1", asuransi_nama: "Asuransi Sinar", keadaan: "berlaku" } },
+  unit("TR-02", "diafkirkan"),
+  unit("TR-03", "terjual")
+] as Unit[];
 
 function renderView(initialStatus?: string) {
   return render(
@@ -55,6 +59,14 @@ describe("UnitsListView", () => {
     expect(screen.getAllByText("TR-03").length).toBeGreaterThan(0);
     expect(screen.queryByText("TR-01")).toBeNull();
     expect(screen.queryByLabelText("Filter status")).toBeNull();
+  });
+
+  it("kolom Asuransi: tautan ke detail asuransi, atau Tidak ada", () => {
+    renderView();
+    const tautan = screen.getAllByRole("link", { name: "Asuransi Sinar" });
+    expect(tautan.length).toBeGreaterThan(0);
+    tautan.forEach((a) => expect(a.getAttribute("href")).toBe("/asuransi/a1"));
+    expect(screen.getAllByText("Tidak ada").length).toBeGreaterThan(0);
   });
 
   it("?status=terjual langsung membuka tab Sudah terjual", () => {

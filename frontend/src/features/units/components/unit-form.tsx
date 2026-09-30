@@ -10,6 +10,12 @@ import { Combobox } from "@/components/ui/combobox";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { DOKUMEN_KOSONG, DokumenInput, type NilaiDokumen } from "@/components/ui/dokumen-input";
 import { createUnit, updateUnit } from "@/features/units/api";
+import {
+  BagianAsuransiForm,
+  awalAsuransiForm,
+  payloadAsuransi
+} from "@/features/asuransi/components/polis-aset";
+import { periksaPolis, type ErrorPolis } from "@/features/asuransi/components/polis-fields";
 import { parseTrackingInput } from "@/lib/tracksolid-link";
 import type { Driver, JenisUnit, Unit, UnitStatus } from "@/types";
 
@@ -58,6 +64,8 @@ export function UnitForm({
   });
   const [dokumenStnk, setDokumenStnk] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
   const [dokumenKir, setDokumenKir] = useState<NilaiDokumen>(DOKUMEN_KOSONG);
+  const [asuransi, setAsuransi] = useState(() => awalAsuransiForm(initial?.polis_terkini));
+  const [errorPolis, setErrorPolis] = useState<ErrorPolis>({});
   const [error, setError] = useState<Record<string, string>>({});
 
   // Smart parse: user boleh ketik IMEI 15 digit langsung atau paste link.
@@ -79,7 +87,15 @@ export function UnitForm({
       errs.tracking_input =
         "Format tidak dikenali. Masukkan IMEI 15 digit atau paste link TrackSolid lengkap.";
     setError(errs);
+    const errPolis = asuransi.aktif ? periksaPolis(asuransi.isi) : {};
+    setErrorPolis(errPolis);
     if (Object.keys(errs).length > 0) return;
+    if (Object.keys(errPolis).length > 0) {
+      toast.error(
+        `${mode === "new" ? "Gagal menambah data" : "Gagal mengubah data"}. Asuransi: ${Object.values(errPolis)[0]}`
+      );
+      return;
+    }
     setLoading(true);
 
     const payload = {
@@ -98,13 +114,23 @@ export function UnitForm({
       pajak_berlaku_sampai: form.pajak_berlaku_sampai || null
     };
 
-    const dokumen = { stnk: dokumenStnk.file, kir: dokumenKir.file };
+    const dokumen = {
+      stnk: dokumenStnk.file,
+      kir: dokumenKir.file,
+      polis: asuransi.aktif ? asuransi.dokumen.file : null
+    };
+    const polis = payloadAsuransi(asuransi, initial?.polis_terkini);
     const res =
       mode === "new"
-        ? await createUnit({ ...payload, status: form.status }, dokumen)
+        ? await createUnit({ ...payload, status: form.status, polis: polis.polis }, dokumen)
         : await updateUnit(
             initial!.id,
-            { ...payload, hapus_dokumen_stnk: dokumenStnk.hapus, hapus_dokumen_kir: dokumenKir.hapus },
+            {
+              ...payload,
+              ...polis,
+              hapus_dokumen_stnk: dokumenStnk.hapus,
+              hapus_dokumen_kir: dokumenKir.hapus
+            },
             dokumen
           );
     setLoading(false);
@@ -283,6 +309,20 @@ export function UnitForm({
             />
           </Field>
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Asuransi (opsional)"
+          description="Link unit ke asuransi lewat polis. Polis ikut tersimpan bersama data unit."
+        />
+        <BagianAsuransiForm
+          value={asuransi}
+          onChange={setAsuransi}
+          error={errorPolis}
+          polisLama={initial?.polis_terkini}
+          labelAset="Unit"
+        />
       </Card>
       <div className="flex items-center justify-end gap-2">
         <Link to="/units">

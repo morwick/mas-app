@@ -5,7 +5,7 @@ import { UnitsListView } from "../components/units-list-view";
 import { useUnits } from "../queries";
 
 export function UnitsPage() {
-  const units = useUnits(true);
+  const units = useUnits(true, true);
   const jenis = useJenisUnit();
   const [searchParams] = useSearchParams();
   if (units.isPending) return <PageLoading />;

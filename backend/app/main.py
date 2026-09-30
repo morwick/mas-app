@@ -10,7 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.errors import install_exception_handlers
 from app.core.request_context import ip_dari_request, ip_klien, ua_klien
+from app.modules.asuransi.router import polis_router as polis_asuransi_router
+from app.modules.asuransi.router import router as asuransi_router
 from app.modules.auth.router import router as auth_router
+from app.modules.bengkel.router import router as bengkel_router
 from app.modules.cron.router import router as cron_router
 from app.modules.customers.router import router as customers_router
 from app.modules.dashboard.router import router as dashboard_router
@@ -24,9 +27,11 @@ from app.modules.jobs.router import router as jobs_router
 from app.modules.karyawan.router import router as karyawan_router
 from app.modules.log_sistem.router import router as log_sistem_router
 from app.modules.maintenance.router import router as maintenance_router
+from app.modules.mekanik.router import router as mekanik_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.penghapusan_aset.router import router as penghapusan_aset_router
 from app.modules.penjualan_unit.router import router as penjualan_unit_router
+from app.modules.perintah_kerja.router import router as perintah_kerja_router
 from app.modules.quotations.router import router as quotations_router
 from app.modules.reports.router import router as reports_router
 from app.modules.search.router import router as search_router
@@ -54,6 +59,11 @@ def build_api_router() -> APIRouter:
         jobs_router,
         incidents_router,
         maintenance_router,
+        asuransi_router,
+        polis_asuransi_router,
+        bengkel_router,
+        mekanik_router,
+        perintah_kerja_router,
         tracking_router,
         quotations_router,
         uang_jalan_router,

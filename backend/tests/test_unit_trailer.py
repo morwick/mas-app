@@ -44,6 +44,8 @@ class _Query:
 
     async def execute(self) -> SimpleNamespace:
         ops = [n for n, _ in self.langkah]
+        if self.langkah[0] == ("table", "polis_asuransi"):
+            return SimpleNamespace(data=self.db.polis, count=None)
         if "update" in ops:
             return SimpleNamespace(data=self.db.hasil_update, count=None)
         if "insert" in ops:
@@ -64,6 +66,7 @@ class _FakeDb:
         self.hasil_update: list[dict[str, Any]] = [BARIS]
         self.terakhir: dict[str, Any] | None = None
         self.rpc_data: list[dict[str, Any]] = []
+        self.polis: list[dict[str, Any]] = []
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
         self.storage = _FakeStorage()
 
@@ -144,15 +147,45 @@ def test_daftar_paging_limit_offset_dan_filter(client: TestClient, db: _FakeDb) 
         "kir_url": None,
         "srut_uploaded_at": None,
         "srut_url": None,
+        "polis_terkini": None,
         "is_active": True,
     }
 
 
+def test_daftar_menyertakan_polis_terkini(client: TestClient, db: _FakeDb) -> None:
+    polis = {
+        "id": "p-lama",
+        "asuransi_id": "a1",
+        "unit_trailer_id": "t1",
+        "nomor_polis": "POL-1",
+        "jenis_pertanggungan": "all_risk",
+        "mulai": "2020-01-01",
+        "berakhir": "2020-12-31",
+        "asuransi": {"nama": "Asuransi Lama", "pic": []},
+    }
+    db.polis = [
+        {**polis, "id": "p-baru", "mulai": "2099-01-01", "berakhir": "2099-12-31", "asuransi": {"nama": "Nanti"}},
+        {**polis, "id": "p-kini", "mulai": "2000-01-01", "berakhir": "2999-12-31", "asuransi": {"nama": "Kini"}},
+        polis,
+    ]
+    res = client.get("/api/unit-trailer")
+    assert res.status_code == 200
+    # Satu query polis untuk seluruh baris halaman, hanya polis yang belum dihapus.
+    langkah_polis = db.query[1]
+    assert ("in_", ("unit_trailer_id", ["t1"])) in langkah_polis
+    assert ("eq", ("status", 1)) in langkah_polis
+    # Yang dipilih polis yang sedang berlaku, bukan yang mulainya paling akhir.
+    terkini = res.json()["items"][0]["polis_terkini"]
+    assert terkini["id"] == "p-kini"
+    assert terkini["asuransi_nama"] == "Kini"
+    assert terkini["polis_url"] is None
+
+
 def test_tab_kepemilikan_memisahkan_trailer_terjual(client: TestClient, db: _FakeDb) -> None:
     assert client.get("/api/unit-trailer", params={"kepemilikan": "milik"}).status_code == 200
-    assert ("neq", ("status_trailer", "terjual")) in db.query[-1]
+    assert ("neq", ("status_trailer", "terjual")) in db.query[0]
     assert client.get("/api/unit-trailer", params={"kepemilikan": "terjual"}).status_code == 200
-    assert ("eq", ("status_trailer", "terjual")) in db.query[-1]
+    assert ("eq", ("status_trailer", "terjual")) in db.query[2]
     assert client.get("/api/unit-trailer", params={"kepemilikan": "lain"}).status_code == 422
 
 
@@ -190,10 +223,19 @@ def test_nonaktifkan_trailer(client: TestClient, db: _FakeDb) -> None:
 
 
 def test_ringkasan_riwayat_menentukan_boleh_hapus(client: TestClient, db: _FakeDb) -> None:
+    db.total = 0  # belum ada perintah kerja
     db.rpc_data = [{"job": 0, "insiden": 2, "service": 0, "penjualan": 0, "penghapusan": 0}]
     res = client.get("/api/unit-trailer/t1/riwayat")
     assert res.status_code == 200
-    assert res.json() == {"job": 0, "insiden": 2, "service": 0, "penjualan": 0, "penghapusan": 0, "bisa_dihapus": False}
+    assert res.json() == {
+        "job": 0,
+        "insiden": 2,
+        "service": 0,
+        "penjualan": 0,
+        "penghapusan": 0,
+        "perbaikan": 0,
+        "bisa_dihapus": False,
+    }
     db.rpc_data = [{"job": 0, "insiden": 0, "service": 0, "penjualan": 0, "penghapusan": 0}]
     assert client.get("/api/unit-trailer/t1/riwayat").json()["bisa_dihapus"] is True
 
