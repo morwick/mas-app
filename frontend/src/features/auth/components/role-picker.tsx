@@ -26,8 +26,12 @@ const ICON_ROLE: Record<UserRole, typeof Shield> = {
 };
 
 /**
- * Pilihan role untuk akun yang punya lebih dari satu role. Dipakai setelah
- * login dan dari menu profil. Setiap pergantian tercatat di log sistem.
+ * Pilihan role untuk akun yang punya lebih dari satu role, tampil setelah
+ * login. Setiap pergantian tercatat di log sistem.
+ *
+ * Saat login, backend (mulai_sesi) sudah memasang role awal (Operator bila
+ * ada), tapi pengguna belum memilih apa pun — jadi tidak ada role yang
+ * ditandai "sedang dipakai" di sini.
  */
 export function RolePicker({ onSelesai }: { onSelesai: (role: UserRole) => void }) {
   const { user, gantiRole } = useAuth();
@@ -57,7 +61,6 @@ export function RolePicker({ onSelesai }: { onSelesai: (role: UserRole) => void 
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {user.roles.map((r) => {
         const Icon = ICON_ROLE[r];
-        const aktif = r === user.role;
         return (
           <button
             key={r}
@@ -71,8 +74,8 @@ export function RolePicker({ onSelesai }: { onSelesai: (role: UserRole) => void 
               textAlign: "left",
               padding: "12px 14px",
               borderRadius: 10,
-              border: aktif ? "1.5px solid var(--brand-primary)" : "0.5px solid var(--border-default)",
-              background: aktif ? "var(--brand-primary-light)" : "white",
+              border: "0.5px solid var(--border-default)",
+              background: "white",
               cursor: "pointer",
               fontFamily: "inherit"
             }}
@@ -81,7 +84,6 @@ export function RolePicker({ onSelesai }: { onSelesai: (role: UserRole) => void 
             <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontWeight: 600, fontSize: 14 }}>
                 {LABEL_ROLE[r]}
-                {aktif ? " (sedang dipakai)" : ""}
               </span>
               <span className="caption">{KETERANGAN_ROLE[r]}</span>
             </span>
