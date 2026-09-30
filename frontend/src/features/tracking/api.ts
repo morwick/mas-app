@@ -38,3 +38,11 @@ export const publicTracking = (token: string) =>
 
 export const publicLocation = (token: string) =>
   api.get<LocationEntry>(`/track/${token}/location`, undefined, "none");
+
+/** Gambar kode verifikasi lokasi (customer) — hanya saat lokasi butuh verifikasi. */
+export const publicVerifikasi = (token: string) =>
+  api.post<{ id: string; gambar: string }>(`/track/${token}/verifikasi`, undefined, "none");
+
+/** Kode benar → lokasi unit langsung dikembalikan. */
+export const publicVerifikasiKirim = (token: string, id: string, kode: string) =>
+  api.post<LocationEntry>(`/track/${token}/verifikasi/kirim`, { id, kode }, "none");

@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
+import { useSidebarMini } from "@/components/layout/use-sidebar-mini";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { NotifikasiBaru } from "@/components/layout/notifikasi-baru";
@@ -11,6 +12,7 @@ import { useNotifications } from "@/features/notifications/queries";
 
 export function AdminLayout() {
   const user = useCurrentUser();
+  const [sidebarMini, toggleSidebar] = useSidebarMini();
   const countsQuery = useLayoutCounts();
   // Lonceng tidak boleh menjatuhkan halaman — backend membalas [] bila bermasalah.
   const notificationsQuery = useNotifications();
@@ -24,9 +26,13 @@ export function AdminLayout() {
 
   return (
     <div className="min-h-screen flex" style={{ background: "var(--bg-page)" }}>
-      <Sidebar user={user} counts={counts} />
+      <Sidebar user={user} counts={counts} mini={sidebarMini} />
       <div className="flex-1 min-w-0 flex flex-col">
-        <TopBar notifications={notifications} />
+        <TopBar
+          notifications={notifications}
+          sidebarMini={sidebarMini}
+          onToggleSidebar={toggleSidebar}
+        />
         <MobileHeader user={user} counts={counts} notifications={notifications} />
         <main className="flex-1 pb-20 lg:pb-12">
           <div className="mx-auto w-full max-w-page px-3 sm:px-6 lg:px-8 py-4 lg:py-6">

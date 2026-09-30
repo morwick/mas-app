@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Menu } from "lucide-react";
 import { navItems } from "./nav-items";
 import { GlobalSearch } from "./global-search";
 import { NotificationBell } from "./notification-bell";
@@ -42,9 +42,14 @@ function getPageTitle(pathname: string): string {
 }
 
 export function TopBar({
-  notifications
+  notifications,
+  sidebarMini = false,
+  onToggleSidebar
 }: {
   notifications?: AppNotification[];
+  sidebarMini?: boolean;
+  /** Tombol lipat (hanya ikon) / buka menu kiri. */
+  onToggleSidebar?: () => void;
 }) {
   const { pathname } = useLocation();
   const crumbs = getBreadcrumb(pathname);
@@ -61,6 +66,18 @@ export function TopBar({
         gap: 16
       }}
     >
+      {onToggleSidebar && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={onToggleSidebar}
+          aria-label={sidebarMini ? "Buka menu" : "Lipat menu"}
+          title={sidebarMini ? "Buka menu" : "Lipat menu (hanya ikon)"}
+          style={{ padding: 6, flexShrink: 0 }}
+        >
+          <Menu style={{ width: 18, height: 18 }} />
+        </button>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         {breadcrumbTrail.length > 0 && (
           <div

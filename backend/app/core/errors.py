@@ -55,6 +55,12 @@ class ConflictError(AppError):
     status_code = 409
 
 
+class TooManyRequestsError(AppError):
+    """Terlalu banyak percobaan dalam waktu singkat."""
+
+    status_code = 429
+
+
 class UpstreamError(AppError):
     """Layanan pihak ketiga (TrackSolid, ORS) gagal — bukan salah pengguna."""
 
@@ -165,7 +171,10 @@ def install_exception_handlers(app: FastAPI) -> None:
         # bisa ditelusuri lewat log server saat pengguna melapor error samar.
         logger.warning(
             "Postgrest error pada %s %s: [%s] %s",
-            request.method, request.url.path, exc.code, exc.message,
+            request.method,
+            request.url.path,
+            exc.code,
+            exc.message,
         )
         return _json(request, _postgrest_status(exc), _pesan_postgres(exc), {"code": exc.code})
 

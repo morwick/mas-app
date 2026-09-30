@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import time
 from datetime import timedelta
 
 from supabase import AsyncClient
 
-from app.core.errors import GoneError, NotFoundError, UpstreamError, ValidationError
+from app.core.errors import GoneError, NotFoundError, TooManyRequestsError, UpstreamError, ValidationError
 from app.core.pg import first, rows, single
 from app.core.timeutil import iso_utc, parse_iso
 from app.integrations.tracksolid.client import CaptchaDiperlukanError, TrackSolidClient
@@ -17,6 +19,7 @@ from app.modules.tracking.schemas import (
     PublicDriver,
     PublicTrackingResponse,
     PublicUnit,
+    VerifikasiLokasi,
 )
 
 log = logging.getLogger(__name__)
@@ -133,7 +136,12 @@ class PublicTrackingService:
 
     async def location(self, token: str) -> LocationEntry:
         """410 = job usai → klien berhenti polling; 422 = tanpa IMEI → fallback link;
-        502 = TrackSolid bermasalah → coba lagi interval berikutnya."""
+        502 = TrackSolid bermasalah → coba lagi interval berikutnya
+        (ber-`kode: tracksolid_captcha` → customer bisa mengisi kode verifikasi)."""
+        return await _locate(self._ts, await self.imei_aktif(token))
+
+    async def imei_aktif(self, token: str) -> str:
+        """IMEI unit dari link tracking yang masih boleh menampilkan posisi truk."""
         row = single(
             await self._db.table("jobs")
             .select("id, status_job, unloading_selesai_at, unit_id, units!inner(imei_gps)")
@@ -154,4 +162,47 @@ class PublicTrackingService:
         imei = (first(row.get("units")) or {}).get("imei_gps")
         if not imei:
             raise ValidationError("Unit belum punya IMEI tracking")
+        return imei
+
+    # ── Verifikasi lokasi oleh customer ─────────────────────────────────────
+
+    async def verifikasi_ambil(self, token: str) -> VerifikasiLokasi:
+        await self.imei_aktif(token)  # hanya link aktif yang menampilkan posisi truk
+        _PEMBATAS_GAMBAR.cek(token)
+        captcha_id, gambar = await self._ts.verifikasi_customer_ambil()
+        return VerifikasiLokasi(id=captcha_id, gambar="data:image/jpeg;base64," + base64.b64encode(gambar).decode())
+
+    async def verifikasi_kirim(self, token: str, captcha_id: str, kode: str) -> LocationEntry:
+        imei = await self.imei_aktif(token)
+        _PEMBATAS_KIRIM.cek(token)
+        _PEMBATAS_KIRIM_SEMUA.cek("*")
+        await self._ts.verifikasi_customer_kirim(captcha_id, kode)
         return await _locate(self._ts, imei)
+
+
+class _Pembatas:
+    """Batas percobaan per kunci dalam satu jendela waktu (per proses).
+
+    Melindungi akun TrackSolid perusahaan: link tracking publik tidak bisa
+    dipakai untuk mencoba login berulang-ulang sampai akunnya terkunci."""
+
+    def __init__(self, maks: int, jendela_s: float) -> None:
+        self._maks = maks
+        self._jendela = jendela_s
+        self._catatan: dict[str, list[float]] = {}
+
+    def cek(self, kunci: str) -> None:
+        sekarang = time.monotonic()
+        baru = [t for t in self._catatan.get(kunci, []) if sekarang - t < self._jendela]
+        if len(baru) >= self._maks:
+            self._catatan[kunci] = baru
+            raise TooManyRequestsError("Terlalu banyak percobaan. Coba lagi beberapa menit lagi.")
+        baru.append(sekarang)
+        self._catatan[kunci] = baru
+
+
+# Per link tracking: 10 gambar & 5 kiriman kode per 10 menit; semua link:
+# 20 kiriman per 10 menit (satu akun TrackSolid dipakai bersama).
+_PEMBATAS_GAMBAR = _Pembatas(10, 600)
+_PEMBATAS_KIRIM = _Pembatas(5, 600)
+_PEMBATAS_KIRIM_SEMUA = _Pembatas(20, 600)

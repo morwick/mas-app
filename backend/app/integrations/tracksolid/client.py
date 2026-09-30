@@ -27,15 +27,16 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 import httpx
 from pydantic import BaseModel
 
 from app.core.config import get_settings
-from app.core.errors import UpstreamError, ValidationError
+from app.core.errors import ConflictError, UpstreamError, ValidationError
 from app.core.supabase import SupabaseClientFactory, get_client_factory
-from app.core.timeutil import iso_utc
+from app.core.timeutil import iso_utc, now_utc
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +45,8 @@ IMEI_RE = re.compile(r"^\d{14,17}$")
 TIMEOUT_S = 15.0
 # Balasan login TrackSolid saat captcha wajib diisi.
 KODE_PERLU_CAPTCHA = 20227
+# Gambar captcha (dan cookie sesinya) hanya berlaku sebentar.
+CAPTCHA_BERLAKU = timedelta(minutes=10)
 
 # Header ala browser supaya request dari server tidak dianggap bot.
 BROWSER_HEADERS = {
@@ -101,7 +104,8 @@ class SesiStore:
             )
         return res.data if res and isinstance(res.data, dict) else None
 
-    async def simpan_otomatis(self, session: _Session) -> None:
+    async def simpan_otomatis(self, session: _Session, via: str = "otomatis") -> None:
+        """Sesi hasil login oleh sistem ('otomatis') atau customer ('customer')."""
         async with self._factory.admin() as db:
             await (
                 db.table("tracksolid_sesi")
@@ -114,11 +118,34 @@ class SesiStore:
                         "perlu_captcha_at": None,
                         "diperbarui_at": iso_utc(),
                         "diperbarui_oleh": None,
+                        "diperbarui_via": via,
                     }
                 )
                 .eq("id", 1)
                 .execute()
             )
+
+    async def simpan_captcha(self, cookies: str, via: str) -> str:
+        """Cookie sesi gambar captcha disimpan di server; browser hanya dapat id-nya."""
+        async with self._factory.admin() as db:
+            res = await db.table("tracksolid_captcha").insert({"cookies": cookies, "diminta_via": via}).execute()
+        return res.data[0]["id"]
+
+    async def pakai_captcha(self, captcha_id: str) -> str | None:
+        """Cookie captcha yang masih berlaku & belum dipakai; sekali pakai."""
+        batas = iso_utc(now_utc() - CAPTCHA_BERLAKU)
+        async with self._factory.admin() as db:
+            res = await (
+                db.table("tracksolid_captcha")
+                .update({"dipakai_at": iso_utc()})
+                .eq("id", captcha_id)
+                .eq("status", 1)
+                .is_("dipakai_at", "null")
+                .gte("dibuat_at", batas)
+                .execute()
+            )
+        data = res.data if res and isinstance(res.data, list) else []
+        return data[0]["cookies"] if data else None
 
     async def tandai_perlu_captcha(self) -> None:
         async with self._factory.admin() as db:
@@ -293,6 +320,37 @@ class TrackSolidClient:
         async with self._login_lock:
             self._session = session
         return session
+
+    # ── Verifikasi oleh customer (halaman link tracking) ────────────────────
+    # Customer mengetik kode captcha supaya lokasi unit tampil tanpa menunggu
+    # staf. Cookie captcha (yang menjadi sesi login akun perusahaan) tetap di
+    # server; customer hanya menerima gambar & id. Hanya boleh saat sesi memang
+    # butuh captcha — link tracking tidak bisa dipakai memancing login.
+
+    async def verifikasi_customer_ambil(self) -> tuple[str, bytes]:
+        if not self._store:
+            raise UpstreamError("Verifikasi lokasi belum tersedia")
+        if not await self.perlu_captcha():
+            raise ConflictError("Lokasi sudah bisa ditampilkan")
+        gambar, cookies = await self.ambil_captcha()
+        return await self._store.simpan_captcha(cookies, "customer"), gambar
+
+    async def verifikasi_customer_kirim(self, captcha_id: str, kode: str) -> None:
+        if not self._store:
+            raise UpstreamError("Verifikasi lokasi belum tersedia")
+        if not await self.perlu_captcha():
+            raise ConflictError("Lokasi sudah bisa ditampilkan")
+        cookies = await self._store.pakai_captcha(captcha_id)
+        if not cookies:
+            raise ValidationError("Kode verifikasi sudah kedaluwarsa. Muat gambar baru lalu coba lagi.")
+        try:
+            session = await self.login_dengan_captcha(kode, cookies)
+        except ValidationError as exc:
+            raise ValidationError("Kode verifikasi salah. Muat gambar baru lalu coba lagi.") from exc
+        except UpstreamError as exc:
+            log.warning("verifikasi lokasi oleh customer gagal: %s", exc.message)
+            raise UpstreamError("Lokasi belum bisa dimuat saat ini. Coba beberapa saat lagi.") from exc
+        await self._store.simpan_otomatis(session, via="customer")
 
     async def _post(self, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         """POST dengan sesi aktif; login ulang sekali bila token ditolak."""
