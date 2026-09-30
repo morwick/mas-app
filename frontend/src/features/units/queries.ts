@@ -10,7 +10,7 @@ import {
 } from "./api";
 
 export const unitKeys = {
-  list: (includeInactive: boolean) => ["units", "list", includeInactive] as const,
+  list: (includeInactive: boolean, denganPolis = false) => ["units", "list", includeInactive, denganPolis] as const,
   detail: (id: string) => ["units", "detail", id] as const,
   history: (id: string) => ["units", "history", id] as const,
   jobs: (id: string) => ["units", "jobs", id] as const,
@@ -19,10 +19,10 @@ export const unitKeys = {
   driverAssignments: ["units", "driver-assignments"] as const
 };
 
-export const useUnits = (includeInactive = false) =>
+export const useUnits = (includeInactive = false, denganPolis = false) =>
   useQuery({
-    queryKey: unitKeys.list(includeInactive),
-    queryFn: () => listUnits(includeInactive)
+    queryKey: unitKeys.list(includeInactive, denganPolis),
+    queryFn: () => listUnits(includeInactive, denganPolis)
   });
 
 export const useUnit = (id: string | undefined) =>

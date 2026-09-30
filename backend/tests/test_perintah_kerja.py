@@ -307,3 +307,33 @@ def test_riwayat_perintah_kerja_mencegah_hapus_aset(client: TestClient, db: _Fak
     body = client.get("/api/units/u1/riwayat").json()
     assert body["perbaikan"] == 2
     assert body["bisa_dihapus"] is False
+
+
+def test_daftar_unit_dengan_polis_terkini(client: TestClient, db: _FakeDb) -> None:
+    unit = {
+        "id": "u1",
+        "kode_unit": "SL-01",
+        "jenis_unit_id": "j1",
+        "no_polisi": "B 1",
+        "status_operasional": "standby",
+        "created_at": "2026-01-01T00:00:00+00:00",
+    }
+    db.data["units"] = [unit, {**unit, "id": "u2", "kode_unit": "SL-02"}]
+    db.data["polis_asuransi"] = [
+        {
+            "id": "p1",
+            "asuransi_id": "a1",
+            "unit_id": "u1",
+            "nomor_polis": "POL-1",
+            "jenis_pertanggungan": "tlo",
+            "mulai": "2000-01-01",
+            "berakhir": "2999-12-31",
+            "asuransi": {"nama": "Asuransi Sinar", "pic": []},
+        }
+    ]
+    body = client.get("/api/units", params={"include_inactive": True, "dengan_polis": True}).json()
+    assert body[0]["polis_terkini"]["asuransi_id"] == "a1"
+    assert body[0]["polis_terkini"]["asuransi_nama"] == "Asuransi Sinar"
+    assert body[1]["polis_terkini"] is None
+    # Tanpa `dengan_polis` (dropdown form) polis tidak ikut diambil.
+    assert client.get("/api/units").json()[0]["polis_terkini"] is None

@@ -24,7 +24,8 @@ const TRAILER = {
   jenis_nama: "Lowbed",
   jenis_unit_nama: "Lowbed",
   kapasitas_ton: 40,
-  status: "standby"
+  status: "standby",
+  polis_terkini: { asuransi_id: "a1", asuransi_nama: "Asuransi Sinar", nomor_polis: "POL-1", keadaan: "berakhir" }
 };
 
 type Panggilan = { method: string; url: URL; body: unknown };
@@ -194,6 +195,15 @@ describe("UnitTrailerView", () => {
     expect(opsi).toEqual(["Semua status", "Standby", "Bertugas", "Breakdown", "Perbaikan", "Diafkirkan"]);
     const daftar = panggilan.filter((p) => p.method === "GET" && p.url.pathname.endsWith("/unit-trailer"));
     expect(daftar.at(-1)?.url.searchParams.get("kepemilikan")).toBe("milik");
+  });
+
+  it("klik asuransi di tabel membuka detail asuransi, bukan detail trailer", async () => {
+    renderView();
+    await screen.findAllByText("TR-01");
+    const [tautan] = screen.getAllByRole("link", { name: "Asuransi Sinar" });
+    expect(screen.getAllByText("Polis berakhir").length).toBeGreaterThan(0);
+    fireEvent.click(tautan);
+    await waitFor(() => expect(lokasi()).toBe("/asuransi/a1"));
   });
 
   it("tab Sudah terjual meminta trailer terjual dan menyembunyikan filter status", async () => {

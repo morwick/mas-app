@@ -50,9 +50,14 @@ async def list_units_page(
 
 
 @router.get("", response_model=list[Unit])
-async def list_units(include_inactive: bool = Query(False), svc: UnitService = Depends(get_service)) -> list[Unit]:
-    """Tanpa potongan — untuk dropdown pemilihan unit di form."""
-    return await svc.list_all(include_inactive=include_inactive)
+async def list_units(
+    include_inactive: bool = Query(False),
+    dengan_polis: bool = Query(False),
+    svc: UnitService = Depends(get_service),
+) -> list[Unit]:
+    """Tanpa potongan — untuk dropdown pemilihan unit di form. `dengan_polis`
+    dipakai halaman daftar unit (kolom Asuransi)."""
+    return await svc.list_all(include_inactive=include_inactive, dengan_polis=dengan_polis)
 
 
 @router.get("/driver-assignments", response_model=dict[str, DriverAssignment])

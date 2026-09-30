@@ -119,12 +119,17 @@ class UnitService:
         res = await apply_window(query.order("kode_unit"), params).execute()
         return build_page([to_unit(r) for r in rows(res)], res.count, params)
 
-    async def list_all(self, *, include_inactive: bool = False) -> list[Unit]:
-        """Seluruh baris — dipakai dropdown form dan dashboard."""
+    async def list_all(self, *, include_inactive: bool = False, dengan_polis: bool = False) -> list[Unit]:
+        """Seluruh baris — dipakai dropdown form dan dashboard. `dengan_polis`
+        ikut mengisi polis terkini (kolom Asuransi di halaman daftar unit)."""
         q = self._db.table("units").select(UNIT_SELECT).order("kode_unit")
         if not include_inactive:
             q = q.eq("is_active", True)
-        return [to_unit(r) for r in rows(await q.execute())]
+        units = [to_unit(r) for r in rows(await q.execute())]
+        if not dengan_polis:
+            return units
+        polis = await PolisService(self._db).terkini_banyak("unit", [u.id for u in units])
+        return [u.model_copy(update={"polis_terkini": polis.get(u.id)}) for u in units]
 
     async def get(self, unit_id: str) -> Unit:
         row = single(await self._db.table("units").select(UNIT_SELECT).eq("id", unit_id).maybe_single().execute())

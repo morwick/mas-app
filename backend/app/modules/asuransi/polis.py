@@ -99,6 +99,18 @@ class PolisService:
         semua = await self.riwayat(jenis, asset_id)
         return next((p for p in semua if p.keadaan == "berlaku"), semua[0] if semua else None)
 
+    async def terkini_banyak(self, jenis: JenisAset, asset_ids: list[str]) -> dict[str, PolisAsuransi]:
+        """Polis terkini (aturan sama dengan `terkini`) untuk banyak aset sekaligus
+        dalam satu query — dipakai tabel daftar unit / unit trailer."""
+        if not asset_ids:
+            return {}
+        kolom = kolom_aset(jenis)
+        res = await self._query().eq("status", 1).in_(kolom, asset_ids).order("mulai", desc=True).execute()
+        per_aset: dict[str, list[PolisAsuransi]] = {}
+        for r in rows(res):
+            per_aset.setdefault(r[kolom], []).append(await self._to_polis(r, with_url=False))
+        return {aset: next((p for p in semua if p.keadaan == "berlaku"), semua[0]) for aset, semua in per_aset.items()}
+
     async def berlaku_pada(self, jenis: JenisAset, asset_id: str, tanggal: date) -> PolisAsuransi | None:
         tgl = tanggal.isoformat()
         res = await (

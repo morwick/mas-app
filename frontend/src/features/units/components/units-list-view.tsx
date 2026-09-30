@@ -19,6 +19,7 @@ import { Pagination, usePagination } from "@/components/ui/pagination";
 import { Combobox } from "@/components/ui/combobox";
 import { PageHeader } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
+import { AsuransiSel } from "@/features/asuransi/components/asuransi-sel";
 
 /** Tab halaman: unit yang masih milik perusahaan, atau yang sudah terjual. */
 type Kepemilikan = "milik" | "terjual";
@@ -212,6 +213,7 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
                   <th style={{ minWidth: 220 }}>Alamat terkini</th>
                   <th style={{ width: 140 }}>Status</th>
                   <th>Driver default</th>
+                  <th>Asuransi</th>
                   <th style={{ width: 50 }}></th>
                 </tr>
               </thead>
@@ -274,6 +276,9 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
                       )}
                     </td>
                     <td>
+                      <AsuransiSel polis={u.polis_terkini} />
+                    </td>
+                    <td>
                       <Link
                         to={`/units/${u.id}`}
                         style={{
@@ -293,105 +298,111 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
           {/* Mobile: card list */}
           <div className="lg:hidden flex flex-col" style={{ gap: 8 }}>
             {pg.items.map((u) => (
-              <Link
-                key={u.id}
-                to={`/units/${u.id}`}
-                className="list-card"
-              >
-                <div className="list-card-row">
+              <div key={u.id} className="list-card">
+                <Link
+                  to={`/units/${u.id}`}
+                  style={{ display: "flex", flexDirection: "column", gap: 8, textDecoration: "none", color: "inherit" }}
+                >
+                  <div className="list-card-row">
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        minWidth: 0,
+                        flex: 1
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 6,
+                          background: "var(--bg-subtle)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--text-secondary)",
+                          flexShrink: 0
+                        }}
+                      >
+                        <Truck style={{ width: 16, height: 16 }} />
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 14.5,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap"
+                          }}
+                        >
+                          {u.kode_unit}
+                        </div>
+                        <div
+                          className="mono"
+                          style={{
+                            fontSize: 12,
+                            color: "var(--text-tertiary)"
+                          }}
+                        >
+                          {u.no_polisi}
+                        </div>
+                      </div>
+                    </div>
+                    <StatusBadge status={u.status} />
+                  </div>
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      minWidth: 0,
-                      flex: 1
+                      flexWrap: "wrap",
+                      gap: "4px 12px",
+                      fontSize: 12,
+                      color: "var(--text-secondary)"
                     }}
                   >
-                    <div
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 6,
-                        background: "var(--bg-subtle)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--text-secondary)",
-                        flexShrink: 0
-                      }}
-                    >
-                      <Truck style={{ width: 16, height: 16 }} />
-                    </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          fontSize: 14.5,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap"
-                        }}
+                    <span>{u.jenis_unit_nama}</span>
+                    {u.default_driver_nama && (
+                      <span>
+                        <span style={{ color: "var(--text-tertiary)" }}>
+                          Driver:
+                        </span>{" "}
+                        {u.default_driver_nama}
+                      </span>
+                    )}
+                    {!u.is_active && (
+                      <span
+                        className="badge"
+                        style={{ fontSize: 10, height: 18 }}
                       >
-                        {u.kode_unit}
-                      </div>
-                      <div
-                        className="mono"
-                        style={{
-                          fontSize: 12,
-                          color: "var(--text-tertiary)"
-                        }}
-                      >
-                        {u.no_polisi}
-                      </div>
-                    </div>
+                        Nonaktif
+                      </span>
+                    )}
                   </div>
-                  <StatusBadge status={u.status} />
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-secondary)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6
+                    }}
+                    className="break-anywhere"
+                  >
+                    <LocationCell
+                      hasImei={!!u.imei_gps}
+                      entry={locations[u.id]}
+                      loaded={locationsLoaded}
+                    />
+                  </div>
+                </Link>
+                {/* Di luar tautan kartu: tautan asuransi tidak boleh bersarang di tautan lain. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>Asuransi:</span>
+                  <AsuransiSel polis={u.polis_terkini} />
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "4px 12px",
-                    fontSize: 12,
-                    color: "var(--text-secondary)"
-                  }}
-                >
-                  <span>{u.jenis_unit_nama}</span>
-                  {u.default_driver_nama && (
-                    <span>
-                      <span style={{ color: "var(--text-tertiary)" }}>
-                        Driver:
-                      </span>{" "}
-                      {u.default_driver_nama}
-                    </span>
-                  )}
-                  {!u.is_active && (
-                    <span
-                      className="badge"
-                      style={{ fontSize: 10, height: 18 }}
-                    >
-                      Nonaktif
-                    </span>
-                  )}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--text-secondary)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6
-                  }}
-                  className="break-anywhere"
-                >
-                  <LocationCell
-                    hasImei={!!u.imei_gps}
-                    entry={locations[u.id]}
-                    loaded={locationsLoaded}
-                  />
-                </div>
-              </Link>
+              </div>
             ))}
           </div>
 

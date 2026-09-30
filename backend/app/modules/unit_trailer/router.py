@@ -331,7 +331,11 @@ async def daftar_unit_trailer(
     if jenis_unit_trailer_id:
         query = query.eq("jenis_unit_trailer_id", jenis_unit_trailer_id)
     res = await apply_window(query.order("kode_trailer").order("id"), params).execute()
-    return build_page([_to_trailer(r) for r in rows(res)], res.count, params)
+    items = [_to_trailer(r) for r in rows(res)]
+    # Kolom Asuransi di tabel: polis terkini semua baris halaman ini, satu query.
+    polis = await PolisService(client).terkini_banyak("unit_trailer", [t.id for t in items])
+    items = [t.model_copy(update={"polis_terkini": polis.get(t.id)}) for t in items]
+    return build_page(items, res.count, params)
 
 
 async def _siapkan_dokumen(

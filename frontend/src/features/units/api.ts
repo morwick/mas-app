@@ -35,8 +35,9 @@ export interface UnitInput {
   pajak_berlaku_sampai?: string | null;
 }
 
-export const listUnits = (includeInactive = false) =>
-  api.get<Unit[]>("/units", { include_inactive: includeInactive });
+/** `denganPolis`: ikut mengisi `polis_terkini` (kolom Asuransi di halaman Unit). */
+export const listUnits = (includeInactive = false, denganPolis = false) =>
+  api.get<Unit[]>("/units", { include_inactive: includeInactive, dengan_polis: denganPolis || undefined });
 
 export const getUnit = (id: string) => api.get<Unit>(`/units/${id}`);
 export const getUnitStatusHistory = (id: string) =>
@@ -122,6 +123,14 @@ export function setIncidentStatus(
   status: IncidentStatus
 ): Promise<ActionResult<unknown>> {
   return mutate(api.post(`/incidents/${id}/status`, { status }));
+}
+
+/**
+ * Selesaikan insiden Terbuka tanpa perbaikan (tidak lewat "Dalam penanganan") —
+ * status aset kembali Standby lewat trigger DB, sama seperti perbaikan selesai.
+ */
+export function resolveIncidentTanpaPerbaikan(id: string): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/incidents/${id}/resolve-tanpa-perbaikan`));
 }
 
 /** Selesaikan perbaikan — status unit ikut kembali (Standby) lewat trigger DB. */
