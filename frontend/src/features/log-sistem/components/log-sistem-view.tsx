@@ -23,7 +23,8 @@ const WARNA_AKSI: Record<AksiLog, { bg: string; fg: string }> = {
   Logout: { bg: "var(--bg-muted)", fg: "var(--text-secondary)" },
   "Tambah Data": { bg: "var(--status-standby-bg)", fg: "var(--status-standby-text)" },
   "Update Data": { bg: "var(--status-perjalanan-bg)", fg: "var(--status-perjalanan-text)" },
-  "Hapus Data": { bg: "var(--status-cancelled-bg)", fg: "var(--status-cancelled-text)" }
+  "Hapus Data": { bg: "var(--status-cancelled-bg)", fg: "var(--status-cancelled-text)" },
+  "Cetak Dokumen": { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" }
 };
 
 function AksiBadge({ aksi }: { aksi: AksiLog }) {

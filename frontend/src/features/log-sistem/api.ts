@@ -1,8 +1,8 @@
 import { api } from "@/lib/api/client";
 
-export type AksiLog = "Login" | "Logout" | "Tambah Data" | "Update Data" | "Hapus Data";
+export type AksiLog = "Login" | "Logout" | "Tambah Data" | "Update Data" | "Hapus Data" | "Cetak Dokumen";
 
-export const AKSI_LOG: AksiLog[] = ["Login", "Logout", "Tambah Data", "Update Data", "Hapus Data"];
+export const AKSI_LOG: AksiLog[] = ["Login", "Logout", "Tambah Data", "Update Data", "Hapus Data", "Cetak Dokumen"];
 
 export interface LogSistem {
   id: string;

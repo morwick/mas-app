@@ -65,6 +65,27 @@ export function setQuotationStatus(
   return mutate(api.post(`/quotations/${id}/status`, { status, alasan: opts?.alasan ?? null }));
 }
 
+/**
+ * Catat cetak surat penawaran di log sistem (karyawan, waktu, IP). Tanpa
+ * invalidasi query — data penawaran tidak berubah.
+ */
+export async function catatCetakPenawaran(id: string, versi: "asli" | "revisi"): Promise<ActionResult<unknown>> {
+  try {
+    await api.post(`/quotations/${id}/cetak`, { versi });
+    return { ok: true, data: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Gagal mencatat cetak" };
+  }
+}
+
+/** Simpan tanggal surat versi revisi & masa berlakunya (dipanggil saat cetak). */
+export function simpanSuratRevisi(
+  id: string,
+  input: { tanggal: string; berlaku_sampai: string }
+): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/quotations/${id}/surat-revisi`, input));
+}
+
 export interface KeputusanItemInput {
   item_id: string;
   keputusan: KeputusanItem;

@@ -19,6 +19,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { QuotationStatusBadge } from "./quotation-status-badge";
 import { KeputusanItemModal } from "./keputusan-item-modal";
+import { adaRevisi, berlakuSuratAsli } from "../surat-revisi";
+import { CetakRevisiModal } from "./cetak-revisi-modal";
 import {
   deleteQuotation,
   setQuotationStatus
@@ -64,11 +66,16 @@ export function QuotationDetailView({
   const [loading, setLoading] = useState(false);
   const [keputusanOpen, setKeputusanOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [cetakRevisiOpen, setCetakRevisiOpen] = useState(false);
+
+  // Draft yang masa berlakunya lewat tampil "kedaluwarsa", tapi tetap draft:
+  // masih bisa diubah (mis. memperpanjang Berlaku sampai) atau dihapus.
+  const draftKedaluwarsa = q.status === "kedaluwarsa" && Boolean(q.belum_dikirim);
 
   // Sekali terkirim, penawaran tidak boleh diubah lagi — hanya draft yang
   // bisa diedit (satu-satunya jalan merevisi yang sudah ditolak: "Buka
   // kembali" ke draft dulu).
-  const isLocked = q.status !== "draft";
+  const isLocked = q.status !== "draft" && !draftKedaluwarsa;
 
   async function changeStatus(status: QuotationStatus) {
     setLoading(true);
@@ -207,7 +214,9 @@ export function QuotationDetailView({
             }}
           >
             Masa berlaku habis {q.berlaku_sampai ? formatDate(q.berlaku_sampai) : "—"}.
-            Keputusan per item masih bisa diisi bila customer baru menjawab.
+            {draftKedaluwarsa
+              ? " Penawaran ini belum pernah dikirim. Ubah tanggal Berlaku sampai bila ingin mengirimnya."
+              : " Keputusan per item masih bisa diisi bila customer baru menjawab."}
           </p>
         )}
 
@@ -247,6 +256,26 @@ export function QuotationDetailView({
             </Button>
           </Link>
 
+          {/* Surat dengan harga hasil revisi — nomor surat tetap sama. */}
+          {/* Cetak pertama: pilih & simpan tanggal surat revisi dulu. Sudah
+              pernah → langsung cetak dengan tanggal yang tersimpan. */}
+          {adaRevisi(q) &&
+            (q.tanggal_revisi ? (
+              <Link to={`/quotations/${q.id}/cetak?versi=revisi`} target="_blank">
+                <Button variant="secondary" leftIcon={<Printer style={{ width: 15, height: 15 }} />}>
+                  Cetak versi revisi
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                variant="secondary"
+                leftIcon={<Printer style={{ width: 15, height: 15 }} />}
+                onClick={() => setCetakRevisiOpen(true)}
+              >
+                Cetak versi revisi
+              </Button>
+            ))}
+
           <Button
             variant="secondary"
             leftIcon={<MessageCircle style={{ width: 15, height: 15 }} />}
@@ -278,7 +307,7 @@ export function QuotationDetailView({
 
           {/* Deal / tolak ditentukan per item. Kedaluwarsa ikut: customer
               kadang baru menjawab setelah masa berlaku lewat. */}
-          {(q.status === "terkirim" || q.status === "kedaluwarsa" || q.status === "deal") && (
+          {(q.status === "terkirim" || (q.status === "kedaluwarsa" && !draftKedaluwarsa) || q.status === "deal") && (
             <Button
               variant={q.status === "deal" ? "secondary" : "primary"}
               leftIcon={<ListChecks style={{ width: 15, height: 15 }} />}
@@ -328,12 +357,10 @@ export function QuotationDetailView({
           }
         />
         <InfoRow label="Perihal" value={q.perihal} />
-        {q.berlaku_sampai && (
-          <InfoRow
-            label="Berlaku sampai"
-            value={formatDate(q.berlaku_sampai)}
-          />
-        )}
+        {/* Masa berlaku surat asli — surat revisi punya panel sendiri di bawah. */}
+        {berlakuSuratAsli(q) && <InfoRow label="Berlaku sampai" value={formatDate(berlakuSuratAsli(q)!)} />}
+
+        {adaRevisi(q) && <PanelRevisi q={q} />}
       </div>
 
       {/* Rincian */}
@@ -388,6 +415,13 @@ export function QuotationDetailView({
                     {it.keputusan === "ditolak" && it.alasan_ditolak && (
                       <div className="caption" style={{ marginTop: 2 }}>
                         {it.alasan_ditolak}
+                      </div>
+                    )}
+                    {/* Karyawan terakhir yang memberi / mengubah keputusan. */}
+                    {it.keputusan !== "menunggu" && it.diputuskan_oleh_nama && (
+                      <div className="caption" style={{ marginTop: 2 }}>
+                        oleh {it.diputuskan_oleh_nama}
+                        {it.diputuskan_at ? ` · ${formatDateTime(it.diputuskan_at)}` : ""}
                       </div>
                     )}
                   </td>
@@ -521,6 +555,8 @@ export function QuotationDetailView({
         onClose={() => setKeputusanOpen(false)}
       />
 
+      <CetakRevisiModal open={cetakRevisiOpen} onClose={() => setCetakRevisiOpen(false)} quotation={q} />
+
       <ConfirmDialog
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
@@ -609,5 +645,52 @@ function Harga({ awal, revisi }: { awal: number; revisi?: number | null }) {
       </div>
       <div>{formatRupiah(revisi)}</div>
     </>
+  );
+}
+
+/**
+ * Panel biru di kartu "Ditujukan kepada": penawaran punya harga revisi —
+ * tanggal & masa berlaku surat revisi, serta siapa yang membuatnya.
+ */
+function PanelRevisi({ q }: { q: Quotation }) {
+  const baris = (label: string, nilai: string) => (
+    <div style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
+      <span style={{ minWidth: 150, color: "var(--status-pickup-text)", opacity: 0.8 }}>{label}</span>
+      <span style={{ fontWeight: 600 }}>{nilai}</span>
+    </div>
+  );
+  return (
+    <div
+      role="note"
+      aria-label="Revisi penawaran"
+      style={{
+        marginTop: 12,
+        padding: "10px 12px",
+        borderRadius: 8,
+        background: "var(--status-pickup-bg)",
+        color: "var(--status-pickup-text)",
+        border: "0.5px solid var(--status-pickup-text)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4
+      }}
+    >
+      <p style={{ fontWeight: 700, fontSize: 13 }}>Penawaran ini direvisi</p>
+      {q.tanggal_revisi ? (
+        <>
+          {baris("Surat revisi dikeluarkan", formatDate(q.tanggal_revisi))}
+          {q.berlaku_sampai && baris("Berlaku sampai", formatDate(q.berlaku_sampai))}
+          {baris(
+            "Dibuat oleh",
+            `${q.revisi_dibuat_oleh_nama ?? "—"}${q.revisi_dibuat_at ? ` · ${formatDateTime(q.revisi_dibuat_at)}` : ""}`
+          )}
+        </>
+      ) : (
+        <p style={{ fontSize: 12.5 }}>
+          Ada harga item yang direvisi, tetapi surat revisi belum dikeluarkan. Klik <strong>Cetak versi revisi</strong>{" "}
+          untuk menentukan tanggal surat & masa berlakunya.
+        </p>
+      )}
+    </div>
   );
 }

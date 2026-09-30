@@ -22,6 +22,7 @@ from app.modules.quotations.schemas import (
     QuotationStatus,
     SetQuotationStatusRequest,
     SimpanKeputusanRequest,
+    SuratRevisiRequest,
 )
 
 QUOTATION_SELECT = """
@@ -30,14 +31,15 @@ QUOTATION_SELECT = """
   kota_terbit, tanggal, berlaku_sampai, perihal, objek, lampiran,
   ppn_aktif, ppn_persen, subtotal, ppn_nominal, total,
   status_penawaran, ttd_nama, ttd_jabatan, catatan, alasan_ditolak,
-  sent_at, decided_at, created_at, updated_at,
+  sent_at, decided_at, created_at, updated_at, tanggal_revisi, berlaku_sampai_asli,
+  berlaku_diatur_oleh, berlaku_diatur_at, revisi_dibuat_oleh, revisi_dibuat_at,
   created_by_profile:profiles!quotations_created_by_fkey(nama)
 """
 
 ITEM_SELECT = """
   id, quotation_id, urutan, dari, tujuan, qty, satuan,
   nama_alat, harga_satuan, subtotal,
-  keputusan, harga_revisi, subtotal_final, alasan_ditolak, diputuskan_at
+  keputusan, harga_revisi, subtotal_final, alasan_ditolak, diputuskan_at, diputuskan_oleh
 """
 
 # Penawaran yang sudah `deal` dikunci: job (dan invoice) menggantungkan harga ke sana.
@@ -46,10 +48,11 @@ EDITABLE_STATUSES: tuple[QuotationStatus, ...] = ("draft",)
 
 def derive_status(stored: str, berlaku_sampai: str | None) -> QuotationStatus:
     """Kedaluwarsa diturunkan dari tanggal saat dibaca, bukan disimpan — tidak
-    perlu cron, dan perpanjangan masa berlaku langsung mengaktifkan lagi."""
-    if stored != "terkirim" or not berlaku_sampai:
+    perlu cron, dan perpanjangan masa berlaku langsung mengaktifkan lagi.
+    Berlaku untuk draft maupun terkirim; deal / ditolak tidak pernah kedaluwarsa."""
+    if stored not in ("draft", "terkirim") or not berlaku_sampai:
         return stored  # type: ignore[return-value]
-    return "kedaluwarsa" if berlaku_sampai[:10] < today_wib_str() else "terkirim"
+    return "kedaluwarsa" if berlaku_sampai[:10] < today_wib_str() else stored  # type: ignore[return-value]
 
 
 def status_dari_keputusan(keputusan: list[str]) -> QuotationStatus:
@@ -59,7 +62,7 @@ def status_dari_keputusan(keputusan: list[str]) -> QuotationStatus:
     return "deal" if "deal" in keputusan else "ditolak"
 
 
-def _to_item(r: dict[str, Any], jumlah_job: int = 0) -> QuotationItem:
+def _to_item(r: dict[str, Any], jumlah_job: int = 0, nama: dict[str, str] | None = None) -> QuotationItem:
     revisi = r.get("harga_revisi")
     harga_satuan = num(r.get("harga_satuan"))
     subtotal_final = r.get("subtotal_final")
@@ -80,6 +83,8 @@ def _to_item(r: dict[str, Any], jumlah_job: int = 0) -> QuotationItem:
         subtotal_final=num(r.get("subtotal") if subtotal_final is None else subtotal_final),
         alasan_ditolak=r.get("alasan_ditolak"),
         diputuskan_at=r.get("diputuskan_at"),
+        diputuskan_oleh=r.get("diputuskan_oleh"),
+        diputuskan_oleh_nama=(nama or {}).get(r.get("diputuskan_oleh") or ""),
         jumlah_job=jumlah_job,
     )
 
@@ -107,6 +112,13 @@ def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
         "ppn_nominal": num(r.get("ppn_nominal")),
         "total": num(r.get("total")),
         "status": derive_status(r["status_penawaran"], r.get("berlaku_sampai")),
+        "belum_dikirim": r["status_penawaran"] == "draft",
+        "tanggal_revisi": r.get("tanggal_revisi"),
+        "berlaku_sampai_asli": r.get("berlaku_sampai_asli"),
+        "berlaku_diatur_oleh": r.get("berlaku_diatur_oleh"),
+        "berlaku_diatur_at": r.get("berlaku_diatur_at"),
+        "revisi_dibuat_oleh": r.get("revisi_dibuat_oleh"),
+        "revisi_dibuat_at": r.get("revisi_dibuat_at"),
         "ttd_nama": r.get("ttd_nama"),
         "ttd_jabatan": r.get("ttd_jabatan"),
         "catatan": r.get("catatan"),
@@ -192,7 +204,10 @@ class QuotationService:
         # jenis unit untuk operator, jadi hitungannya hanya job yang boleh ia lihat.
         q = (
             self._db.table("quotations")
-            .select(f"{QUOTATION_SELECT}, quotation_items(id, keputusan), jobs(id, status_job, quotation_item_id)")
+            .select(
+                f"{QUOTATION_SELECT}, quotation_items(id, keputusan, harga_revisi, subtotal, subtotal_final),"
+                " jobs(id, status_job, quotation_item_id)"
+            )
             .eq("quotation_items.status", AKTIF)
             .eq("jobs.status", AKTIF)
             .order("seq_tahun", desc=True)
@@ -210,6 +225,9 @@ class QuotationService:
             jobs = [j for j in (r.get("jobs") or []) if j.get("status_job") != "cancelled"]
             punya_job = {j["quotation_item_id"] for j in jobs if j.get("quotation_item_id")}
             items = r.get("quotation_items") or []
+            deal = [it for it in items if it.get("keputusan") == "deal"]
+            menunggu = [it for it in items if it.get("keputusan") == "menunggu"]
+            ditolak = [it for it in items if it.get("keputusan") == "ditolak"]
             out.append(
                 QuotationListRow(
                     **_base_fields(r),
@@ -217,6 +235,16 @@ class QuotationService:
                     jumlah_item_deal_belum_job=sum(
                         1 for it in items if it.get("keputusan") == "deal" and it["id"] not in punya_job
                     ),
+                    jumlah_item_deal=len(deal),
+                    jumlah_item_deal_revisi=sum(1 for it in deal if it.get("harga_revisi") is not None),
+                    nilai_deal=sum(
+                        num(it.get("subtotal") if it.get("subtotal_final") is None else it["subtotal_final"])
+                        for it in deal
+                    ),
+                    jumlah_item_menunggu=len(menunggu),
+                    nilai_item_menunggu=sum(num(it.get("subtotal")) for it in menunggu),
+                    jumlah_item_ditolak=len(ditolak),
+                    nilai_item_ditolak=sum(num(it.get("subtotal")) for it in ditolak),
                     jumlah_job=len(jobs),
                     jumlah_job_selesai=sum(1 for j in jobs if j.get("status_job") == "selesai"),
                 )
@@ -248,12 +276,29 @@ class QuotationService:
         for j in job_rows:
             if j.get("quotation_item_id"):
                 per_item[j["quotation_item_id"]] = per_item.get(j["quotation_item_id"], 0) + 1
-        hasil = [_to_item(i, per_item.get(i["id"], 0)) for i in items]
+        nama = await self._nama_karyawan(
+            [row.get("berlaku_diatur_oleh"), row.get("revisi_dibuat_oleh"), *(i.get("diputuskan_oleh") for i in items)]
+        )
+        hasil = [_to_item(i, per_item.get(i["id"], 0), nama) for i in items]
         return Quotation(
             **_base_fields(row),
+            berlaku_diatur_oleh_nama=nama.get(row.get("berlaku_diatur_oleh") or ""),
+            revisi_dibuat_oleh_nama=nama.get(row.get("revisi_dibuat_oleh") or ""),
             items=hasil,
             nilai_deal=sum(i.subtotal_final for i in hasil if i.keputusan == "deal"),
         )
+
+    async def _nama_karyawan(self, ids: list[str | None]) -> dict[str, str]:
+        """Nama karyawan pelaku (hr.karyawan ada di schema lain → lewat fungsi DB)."""
+        unik = sorted({i for i in ids if i})
+        if not unik:
+            return {}
+        res = await self._db.rpc("nama_karyawan", {"p_ids": unik}).execute()
+        return {r["id"]: r["nama"] for r in rows(res)}
+
+    async def catat_cetak(self, quotation_id: str, versi: str) -> None:
+        """Setiap cetak surat penawaran tercatat di log sistem (karyawan, waktu, IP)."""
+        await self._db.rpc("catat_cetak_penawaran", {"p_quotation_id": quotation_id, "p_versi": versi}).execute()
 
     async def peek_next_number(self) -> str:
         """Pratinjau nomor berikutnya. Sengaja tidak memanggil next_quotation_number():
@@ -426,11 +471,63 @@ class QuotationService:
         await tx.jalankan()
         return status
 
+    async def simpan_surat_revisi(self, quotation_id: str, payload: SuratRevisiRequest) -> None:
+        """Simpan tanggal surat versi revisi & masa berlakunya (dipanggil saat
+        dicetak). Masa berlaku surat asli disimpan sekali di berlaku_sampai_asli;
+        berlaku_sampai lalu mengikuti surat revisi, sehingga status kedaluwarsa
+        dan pengingat ikut surat revisi. Satu UPDATE = satu transaksi; tercatat
+        di log sistem lewat trigger."""
+        q = single(
+            await self._db.table("quotations")
+            .select("status_penawaran, berlaku_sampai, berlaku_sampai_asli")
+            .eq("id", quotation_id)
+            .maybe_single()
+            .execute()
+        )
+        if q is None:
+            raise NotFoundError("Penawaran tidak ditemukan")
+        if q["status_penawaran"] not in ("terkirim", "deal"):
+            raise ValidationError("Surat revisi hanya untuk penawaran yang sudah terkirim atau deal.")
+        revisi = rows(
+            await self._db.table("quotation_items")
+            .select("id")
+            .eq("quotation_id", quotation_id)
+            .not_.is_("harga_revisi", "null")
+            .limit(1)
+            .execute()
+        )
+        if not revisi:
+            raise ValidationError("Belum ada harga item yang direvisi — surat revisi belum bisa dibuat.")
+        tx = Transaksi(self._db)
+        tx.update(
+            "quotations",
+            {
+                "tanggal_revisi": payload.tanggal.isoformat(),
+                "berlaku_sampai": payload.berlaku_sampai.isoformat(),
+                "berlaku_sampai_asli": q.get("berlaku_sampai_asli") or q["berlaku_sampai"],
+            },
+            {"id": quotation_id},
+        )
+        await tx.jalankan()
+
     async def set_status(self, quotation_id: str, payload: SetQuotationStatusRequest) -> None:
         if payload.status in ("deal", "ditolak"):
             raise ValidationError("Deal / tolak ditentukan per item penawaran — isi lewat keputusan item.")
         if payload.status == "kedaluwarsa":
             raise ValidationError("Status kedaluwarsa dihitung otomatis dari tanggal berlaku.")
+        if payload.status == "terkirim":
+            q = single(
+                await self._db.table("quotations")
+                .select("berlaku_sampai")
+                .eq("id", quotation_id)
+                .maybe_single()
+                .execute()
+            )
+            if q and q.get("berlaku_sampai") and str(q["berlaku_sampai"])[:10] < today_wib_str():
+                raise ValidationError(
+                    "Masa berlaku penawaran ini sudah lewat. "
+                    "Ubah tanggal Berlaku sampai dulu sebelum menandai terkirim."
+                )
         data: dict[str, Any] = {"status_penawaran": payload.status}
         now = iso_utc()
         if payload.status == "terkirim":
@@ -442,7 +539,18 @@ class QuotationService:
         if payload.status == "draft":
             # Dibuka kembali → jejak keputusan sebelumnya (termasuk per item)
             # dibersihkan, dalam satu transaksi.
-            data.update({"sent_at": None, "decided_at": None, "alasan_ditolak": None})
+            data.update({"sent_at": None, "decided_at": None, "alasan_ditolak": None, "tanggal_revisi": None})
+            # Harga revisi per item ikut direset → surat revisi tidak berlaku lagi;
+            # masa berlaku kembali ke surat asli.
+            asli = single(
+                await self._db.table("quotations")
+                .select("berlaku_sampai_asli")
+                .eq("id", quotation_id)
+                .maybe_single()
+                .execute()
+            )
+            if asli and asli.get("berlaku_sampai_asli"):
+                data.update({"berlaku_sampai": asli["berlaku_sampai_asli"], "berlaku_sampai_asli": None})
             tx = Transaksi(self._db)
             tx.update("quotations", data, {"id": quotation_id})
             tx.update(

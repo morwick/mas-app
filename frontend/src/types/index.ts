@@ -405,6 +405,9 @@ export interface QuotationItem {
   subtotal_final: number;
   alasan_ditolak?: string | null;
   diputuskan_at?: string | null;
+  /** Karyawan TERAKHIR yang memberi / mengubah keputusan item. */
+  diputuskan_oleh?: string | null;
+  diputuskan_oleh_nama?: string | null;
   /** Job aktif (tidak dibatalkan) dari item ini. */
   jumlah_job: number;
 }
@@ -419,6 +422,20 @@ export const keputusanItemLabel: Record<KeputusanItem, string> = {
 
 export interface Quotation {
   id: string;
+  /** Tersimpan sebagai draft (belum pernah dikirim) — juga saat tampil kedaluwarsa. */
+  belum_dikirim?: boolean;
+  /** Tanggal surat versi revisi (disimpan saat dicetak); null = belum pernah dicetak. */
+  tanggal_revisi?: string | null;
+  /** Masa berlaku surat asli — sejak surat revisi dicetak, berlaku_sampai milik surat revisi. */
+  berlaku_sampai_asli?: string | null;
+  /** Siapa & kapan terakhir mengisi / mengubah Berlaku sampai. */
+  berlaku_diatur_oleh?: string | null;
+  berlaku_diatur_oleh_nama?: string | null;
+  berlaku_diatur_at?: string | null;
+  /** Siapa & kapan surat versi revisi dibuat. */
+  revisi_dibuat_oleh?: string | null;
+  revisi_dibuat_oleh_nama?: string | null;
+  revisi_dibuat_at?: string | null;
   quote_number: string;
   seq_no: number;
   seq_tahun: number;
@@ -470,6 +487,14 @@ export type QuotationListRow = Omit<Quotation, "items"> & {
   jumlah_job_selesai: number;
   /** Item deal yang belum punya job aktif. */
   jumlah_item_deal_belum_job?: number;
+  /** Item yang disetujui (deal), termasuk yang harganya direvisi. */
+  jumlah_item_deal?: number;
+  jumlah_item_deal_revisi?: number;
+  /** Item belum diputuskan / ditolak dan nilainya (harga awal, sebelum PPN). */
+  jumlah_item_menunggu?: number;
+  nilai_item_menunggu?: number;
+  jumlah_item_ditolak?: number;
+  nilai_item_ditolak?: number;
 };
 
 /** Ringkasan job yang lahir dari sebuah penawaran. */
