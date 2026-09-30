@@ -80,7 +80,7 @@ export function BengkelView() {
     <div className="flex flex-col" style={{ gap: 16 }}>
       <div style={{ display: "flex", gap: 12, justifyContent: "space-between", flexWrap: "wrap" }}>
         <PageHeader
-          title="Bengkel"
+          title="Bengkel Luar"
           description="Bengkel / vendor luar yang bisa dipilih sebagai pelaksana perintah kerja perbaikan."
           style={{ flex: 1, minWidth: 240 }}
         />

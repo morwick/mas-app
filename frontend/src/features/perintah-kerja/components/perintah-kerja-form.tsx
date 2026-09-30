@@ -527,7 +527,7 @@ export function PerintahKerjaForm({ mode, initial, awal }: Props) {
 
         {pelaksana === "bengkel" && (
           <div className="grid gap-4 sm:grid-cols-2" style={{ marginTop: 16 }}>
-            <Field label="Bengkel" required hint="Belum ada? Tambahkan di menu Master → Bengkel.">
+            <Field label="Bengkel" required hint="Belum ada? Tambahkan di menu Master → Bengkel Luar.">
               <Combobox
                 value={bengkelId}
                 onChange={(v) => {
