@@ -225,7 +225,7 @@ export function UnitDetailView({
                       ? 1
                       : services.length
               },
-              { key: "perbaikan", label: "Perbaikan" }
+              { key: "perbaikan", label: "Perintah Kerja Perbaikan" }
             ]}
           />
 

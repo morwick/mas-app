@@ -185,7 +185,7 @@ export function UnitTrailerDetailView({ trailer, jobs, history, incidents }: Pro
               { key: "riwayat", label: "Riwayat job", count: pastJobs.length },
               { key: "history", label: "Riwayat status", count: history.length },
               { key: "insiden", label: "Insiden", count: hitungInsiden(incidents) },
-              { key: "perbaikan", label: "Perbaikan" }
+              { key: "perbaikan", label: "Perintah Kerja Perbaikan" }
             ]}
           />
           <div>
