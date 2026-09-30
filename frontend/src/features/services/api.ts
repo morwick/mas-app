@@ -1,5 +1,6 @@
 import { queryClient } from "@/lib/api/query";
 import { api } from "@/lib/api/client";
+import { jagaSesiTrackSolid } from "@/lib/tracksolid-captcha";
 import { mutate } from "@/lib/api/query";
 import type { ActionResult, JenisService, ServiceRecord, UnitWithService } from "@/types";
 
@@ -56,7 +57,9 @@ export function calibrateOdometer(input: {
 }
 
 /** Sinkron mileage semua unit — dipakai polling halaman Service. */
-export const syncAllMileage = () => api.get<MileageBatchResponse>("/maintenance/mileage");
+// Jarak tempuh dari TrackSolid → tidak dikirim selama sesi butuh captcha.
+export const syncAllMileage = () =>
+  jagaSesiTrackSolid(() => api.get<MileageBatchResponse>("/maintenance/mileage"));
 
 /** Sinkron odometer terakhir (menu Service / dashboard) — dibagi supaya tidak dobel. */
 let sinkronTerakhir = 0;
@@ -76,7 +79,7 @@ export async function sinkronOdometer(paksa = false): Promise<MileageBatchRespon
 }
 
 export const syncUnitMileage = (unitId: string) =>
-  api.post<SyncMileageResponse>(`/maintenance/units/${unitId}/sync-mileage`);
+  jagaSesiTrackSolid(() => api.post<SyncMileageResponse>(`/maintenance/units/${unitId}/sync-mileage`));
 
 export const mileageAt = (unitId: string, date: string) =>
   api.get<MileageAtResponse>(`/maintenance/units/${unitId}/mileage-at`, { date });

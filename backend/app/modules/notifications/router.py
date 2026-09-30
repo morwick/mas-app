@@ -29,7 +29,7 @@ async def list_notifications(
     # Lonceng tidak boleh menjatuhkan seluruh halaman kalau salah satu sumbernya
     # bermasalah — panel kosong lebih baik daripada layar error.
     try:
-        return await NotificationService(client).build(user_id=auth.user.id)
+        return await NotificationService(client).build(user_id=auth.user.id, superadmin=auth.user.role == "superadmin")
     except Exception as exc:  # noqa: BLE001
         log.warning("gagal menyusun notifikasi: %s", exc)
         return []
@@ -42,7 +42,9 @@ async def list_notifications_page(
     client: AsyncClient = Depends(user_client),
 ) -> Page[AppNotification]:
     """Halaman Notifikasi: isi yang sama dengan lonceng, sudah maupun belum dibaca."""
-    return await NotificationService(client).page(params, user_id=auth.user.id)
+    return await NotificationService(client).page(
+        params, user_id=auth.user.id, superadmin=auth.user.role == "superadmin"
+    )
 
 
 @router.post("/read-all", response_model=OkResponse)

@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { sinkronOdometer } from "@/features/services/api";
+import { useSesiTrackSolid } from "@/features/tracksolid/use-sesi-tracksolid";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
+import { dengarTersambung } from "@/lib/tracksolid-captcha";
 import { DashboardView } from "../components/dashboard-view";
 import { FinanceDashboardView } from "../components/finance-dashboard-view";
 import { useDashboard, useFinanceDashboard } from "../queries";
@@ -12,12 +14,20 @@ import { useDashboard, useFinanceDashboard } from "../queries";
 const SINKRON_ODOMETER_MS = 5 * 60_000;
 
 function OperationalDashboardPage() {
+  // Odometer GPS dari TrackSolid: cek sesi saat dibuka, popup captcha bila perlu
+  // (sama dengan menu Unit, Pantau, Service).
+  useSesiTrackSolid();
   const q = useDashboard();
   useEffect(() => {
     const sinkron = () => void sinkronOdometer().catch(() => undefined);
     sinkron();
     const id = window.setInterval(sinkron, SINKRON_ODOMETER_MS);
-    return () => window.clearInterval(id);
+    // Login captcha berhasil → sinkron sekarang juga, tanpa menunggu 5 menit.
+    const lepas = dengarTersambung(() => void sinkronOdometer(true).catch(() => undefined));
+    return () => {
+      window.clearInterval(id);
+      lepas();
+    };
   }, []);
   if (q.isPending) return <PageLoading />;
   if (q.isError) return <PageError error={q.error} onRetry={q.refetch} />;

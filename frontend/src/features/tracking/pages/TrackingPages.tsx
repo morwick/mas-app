@@ -6,8 +6,11 @@ import { useUnit, useUnits } from "@/features/units/queries";
 import { AdminTrackingDetailView } from "../components/admin-tracking-detail-view";
 import { AdminTrackingListView } from "../components/admin-tracking-list-view";
 import { FleetMapView } from "../components/fleet-map-view";
+import { useSesiTrackSolid } from "@/features/tracksolid/use-sesi-tracksolid";
 
 export function TrackingListPage() {
+  // Halaman ber-data TrackSolid: cek sesi saat dibuka, popup captcha bila perlu.
+  useSesiTrackSolid();
   const jobs = useJobs({ status: "active" });
   const units = useUnits();
   if (jobs.isPending || units.isPending) return <PageLoading />;
@@ -17,6 +20,8 @@ export function TrackingListPage() {
 }
 
 export function TrackingDetailPage() {
+  // Halaman ber-data TrackSolid: cek sesi saat dibuka, popup captcha bila perlu.
+  useSesiTrackSolid();
   const { id } = useParams<{ id: string }>();
   const job = useJob(id);
   const unit = useUnit(job.data?.unit_id);
@@ -29,6 +34,8 @@ export function TrackingDetailPage() {
 }
 
 export function FleetMapPage() {
+  // Halaman ber-data TrackSolid: cek sesi saat dibuka, popup captcha bila perlu.
+  useSesiTrackSolid();
   const units = useUnits();
   const jobs = useJobs({ status: "active" });
   if (units.isPending || jobs.isPending) return <PageLoading />;

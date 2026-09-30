@@ -5,6 +5,7 @@ import { MapFullscreenButton } from "./map-fullscreen-button";
 import type { Job, Unit, UnitStatus } from "@/types";
 import { bukanArmada } from "@/lib/unit-status";
 import { fleetLocations } from "@/features/tracking/api";
+import { dengarTersambung } from "@/lib/tracksolid-captcha";
 
 const FleetMap = lazy(() => import("./fleet-map").then((m) => ({ default: m.FleetMap })));
 
@@ -110,9 +111,12 @@ export function FleetMapView({ units, activeJobs }: Props) {
     }
     tick();
     const id = setInterval(tick, POLL_MS);
+    // Login captcha TrackSolid berhasil → muat ulang saat itu juga.
+    const lepas = dengarTersambung(() => void tick());
     return () => {
       cancelled = true;
       clearInterval(id);
+      lepas();
     };
   }, []);
 

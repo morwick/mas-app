@@ -15,6 +15,7 @@ import { Fab } from "@/components/layout/fab";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { JenisUnit, Unit } from "@/types";
 import { fleetLocations } from "@/features/tracking/api";
+import { dengarTersambung } from "@/lib/tracksolid-captcha";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { Combobox } from "@/components/ui/combobox";
 import { PageHeader } from "@/components/ui/page-header";
@@ -71,9 +72,12 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
     }
     fetchLocations();
     const id = setInterval(fetchLocations, LOCATION_POLL_MS);
+    // Login captcha TrackSolid berhasil → muat ulang saat itu juga.
+    const lepas = dengarTersambung(() => void fetchLocations());
     return () => {
       cancelled = true;
       clearInterval(id);
+      lepas();
     };
   }, []);
 

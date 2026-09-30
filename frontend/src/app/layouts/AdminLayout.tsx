@@ -4,6 +4,7 @@ import { TopBar } from "@/components/layout/top-bar";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { NotifikasiBaru } from "@/components/layout/notifikasi-baru";
+import { CaptchaPopup } from "@/features/tracksolid/components/captcha-popup";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useLayoutCounts } from "@/features/dashboard/queries";
 import { useNotifications } from "@/features/notifications/queries";
@@ -34,6 +35,8 @@ export function AdminLayout() {
         </main>
         <BottomNav role={user.role} />
         <NotifikasiBaru notifications={notificationsQuery.data} />
+        {/* Sesi TrackSolid tidak valid → popup captcha di halaman mana pun. */}
+        <CaptchaPopup />
       </div>
     </div>
   );

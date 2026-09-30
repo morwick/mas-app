@@ -9,7 +9,7 @@ from supabase import AsyncClient
 from app.core.errors import GoneError, NotFoundError, UpstreamError, ValidationError
 from app.core.pg import first, rows, single
 from app.core.timeutil import iso_utc, parse_iso
-from app.integrations.tracksolid.client import TrackSolidClient
+from app.integrations.tracksolid.client import CaptchaDiperlukanError, TrackSolidClient
 from app.modules.jobs.mappers import PUBLIC_JOB_SELECT, active_children, to_job
 from app.modules.tracking.schemas import (
     FleetLocationsResponse,
@@ -49,12 +49,18 @@ class FleetTrackingService:
             self._db.table("units").select("id, imei_gps").eq("is_active", True).not_.is_("imei_gps", "null").execute()
         )
         units = rows(res)
+        if units:
+            # Sesi TrackSolid tidak valid → langsung galat "butuh captcha"
+            # (frontend memunculkan popup), bukan semua lokasi kosong diam-diam.
+            await self._ts.pastikan_sesi()
 
         async def one(u: dict[str, str]) -> tuple[str, LocationEntry | None]:
             if not u.get("imei_gps"):
                 return u["id"], None
             try:
                 return u["id"], await asyncio.wait_for(_locate(self._ts, u["imei_gps"]), timeout=PER_CALL_TIMEOUT_S)
+            except CaptchaDiperlukanError:
+                raise
             except Exception:  # noqa: BLE001
                 return u["id"], None
 
@@ -137,6 +143,10 @@ class PublicTrackingService:
         )
         if row is None:
             raise GoneError("Job tidak ditemukan atau sudah selesai")
+        # Job dibatalkan → link langsung berakhir (RLS juga menutupnya; ini
+        # pagar kedua supaya posisi truk tidak pernah terkirim).
+        if row.get("status_job") == "cancelled":
+            raise GoneError("Link tracking sudah berakhir")
         # Setelah unloading tuntas truk kembali ke pool — posisinya bukan lagi
         # urusan customer, dan halaman berhenti polling saat menerima 410.
         if row.get("unloading_selesai_at"):
