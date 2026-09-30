@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from postgrest.exceptions import APIError
@@ -304,11 +304,18 @@ async def daftar_unit_trailer(
     q: Annotated[str | None, Query(max_length=100)] = None,
     status: UnitStatus | None = None,
     jenis_unit_trailer_id: str | None = None,
+    # Tab halaman: "milik" = trailer yang masih milik perusahaan (selain
+    # Terjual), "terjual" = trailer yang sudah dijual.
+    kepemilikan: Literal["milik", "terjual"] | None = None,
     client: AsyncClient = Depends(user_client),
 ) -> Page[UnitTrailer]:
     query = client.table("unit_trailer").select(_SELECT, count=CountMethod.exact)
     if q and q.strip():
         query = query.or_(ilike_any(["kode_trailer"], q))
+    if kepemilikan == "milik":
+        query = query.neq("status_trailer", "terjual")
+    elif kepemilikan == "terjual":
+        query = query.eq("status_trailer", "terjual")
     if status:
         query = query.eq("status_trailer", status)
     if jenis_unit_trailer_id:

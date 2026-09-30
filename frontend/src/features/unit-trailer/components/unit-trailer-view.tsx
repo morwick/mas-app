@@ -14,6 +14,7 @@ import {
   Pagination,
   type PaginationState
 } from "@/components/ui/pagination";
+import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
@@ -21,6 +22,7 @@ import {
   createJenisUnitTrailer,
   createUnitTrailer,
   type JenisUnitTrailer,
+  type Kepemilikan,
   type StatusTrailerTampil,
   type UnitTrailer,
   type DokumenTrailer,
@@ -40,6 +42,7 @@ export function UnitTrailerView() {
   const { canManageOperational } = useAuth();
   const navigate = useNavigate();
 
+  const [tab, setTab] = useState<Kepemilikan>("milik");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState("");
@@ -60,7 +63,14 @@ export function UnitTrailerView() {
     ...jenisTambahan.filter((j) => !(jenis.data ?? []).some((x) => x.id === j.id))
   ];
 
-  const data = useUnitTrailer({ page, pageSize, q: qTunda, status, jenisUnitTrailerId });
+  const data = useUnitTrailer({ kepemilikan: tab, page, pageSize, q: qTunda, status, jenisUnitTrailerId });
+
+  function gantiTab(t: Kepemilikan) {
+    setTab(t);
+    // Status di tab "Terjual" pasti Terjual; filter status tab lain tidak berlaku.
+    setStatus("");
+    setPage(1);
+  }
 
   function ubah<T>(set: (v: T) => void) {
     return (v: T) => {
@@ -139,6 +149,16 @@ export function UnitTrailerView() {
         )}
       </div>
 
+      <Tabs
+        variant="pill"
+        value={tab}
+        onChange={(k) => gantiTab(k as Kepemilikan)}
+        items={[
+          { key: "milik", label: "Milik perusahaan" },
+          { key: "terjual", label: "Sudah terjual" }
+        ]}
+      />
+
       <div className="toolbar">
         <div className="toolbar-search">
           <Input
@@ -162,20 +182,22 @@ export function UnitTrailerView() {
             clearable
           />
         </div>
-        <div className="toolbar-filter">
-          <Select
-            value={status}
-            onChange={(e) => ubah(setStatus)(e.target.value as StatusTrailerTampil | "")}
-            aria-label="Filter status"
-          >
-            <option value="">Semua status</option>
-            {STATUS_TRAILER_TAMPIL.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </Select>
-        </div>
+        {tab === "milik" && (
+          <div className="toolbar-filter">
+            <Select
+              value={status}
+              onChange={(e) => ubah(setStatus)(e.target.value as StatusTrailerTampil | "")}
+              aria-label="Filter status"
+            >
+              <option value="">Semua status</option>
+              {STATUS_TRAILER_TAMPIL.filter((s) => s.value !== "terjual").map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         {adaFilter && (
           <button type="button" className="btn btn-secondary btn-sm" onClick={resetFilter}>
             <X style={{ width: 14, height: 14 }} />
@@ -191,8 +213,20 @@ export function UnitTrailerView() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={Container}
-          title={adaFilter ? "Tidak ada unit trailer yang cocok" : "Belum ada unit trailer"}
-          description={adaFilter ? "Coba ubah filter atau kata kunci pencarian." : "Tambahkan unit trailer pertama."}
+          title={
+            adaFilter
+              ? "Tidak ada unit trailer yang cocok"
+              : tab === "terjual"
+                ? "Belum ada unit trailer yang terjual"
+                : "Belum ada unit trailer"
+          }
+          description={
+            adaFilter
+              ? "Coba ubah filter atau kata kunci pencarian."
+              : tab === "terjual"
+                ? "Trailer yang dijual lewat menu Penjualan Unit & Unit Trailer akan tampil di sini."
+                : "Tambahkan unit trailer pertama."
+          }
         />
       ) : (
         <div style={{ opacity: data.isPlaceholderData ? 0.6 : 1, transition: "opacity 120ms" }}>
