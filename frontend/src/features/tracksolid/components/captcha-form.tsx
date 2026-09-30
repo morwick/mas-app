@@ -8,8 +8,8 @@ import { kabariTersambung } from "@/lib/tracksolid-captcha";
 import { ambilCaptchaTrackSolid, loginCaptchaTrackSolid } from "../api";
 
 /**
- * Gambar captcha TrackSolid + isian kode. Dipakai halaman Master → Login
- * TrackSolid dan popup di halaman ber-data TrackSolid. Kode diketik manusia —
+ * Gambar captcha TrackSolid + isian kode, di popup halaman ber-data
+ * TrackSolid (Dashboard, Unit, Pantau, Service). Kode diketik manusia —
  * captcha tidak dibaca otomatis.
  */
 export function CaptchaForm({

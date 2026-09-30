@@ -120,7 +120,8 @@ class NotificationService:
                     "Lokasi & jarak tempuh GPS berhenti diperbarui. "
                     "Login ulang TrackSolid dengan mengetik kode captcha."
                 ),
-                href="/tracksolid-login",
+                # Popup captcha muncul di menu Pantau.
+                href="/tracking",
                 created_at=data[0].get("perlu_captcha_at") or now_iso,
             )
         ]

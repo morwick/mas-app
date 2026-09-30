@@ -1,8 +1,8 @@
 """Login TrackSolid dibantu manusia (captcha).
 
 Captcha TrackSolid tidak diakali: staf yang sedang membuka halaman ber-data
-TrackSolid (popup) atau superadmin (menu Master → Login TrackSolid) melihat
-gambar captcha di aplikasi, mengetik kodenya sendiri, lalu sesi hasil login disimpan di
+TrackSolid (popup di Dashboard, Unit, Pantau, Service) melihat gambar captcha
+di aplikasi, mengetik kodenya sendiri, lalu sesi hasil login disimpan di
 transport.tracksolid_sesi dan dipakai bersama semua proses backend.
 """
 
@@ -14,21 +14,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from supabase import AsyncClient
 
-from app.core.auth import AuthContext, require_auth, superadmin_client, user_client
+from app.core.auth import AuthContext, require_auth, user_client
 from app.core.errors import ValidationError
-from app.core.pg import rows
 from app.integrations.tracksolid.client import TrackSolidClient, get_tracksolid
 from app.modules.auth.schemas import OkResponse
 
 router = APIRouter(prefix="/tracksolid", tags=["tracksolid"])
-
-
-class StatusTrackSolid(BaseModel):
-    tersambung: bool = False
-    perlu_captcha: bool = False
-    perlu_captcha_at: str | None = None
-    diperbarui_at: str | None = None
-    diperbarui_oleh_nama: str | None = None
 
 
 class SesiTrackSolid(BaseModel):
@@ -52,12 +43,6 @@ async def sesi(
     """Cek ringan saat membuka halaman ber-data TrackSolid (Unit, Pantau):
     hanya membaca status sesi di database, TrackSolid tidak dihubungi."""
     return SesiTrackSolid(perlu_captcha=await tracksolid.perlu_captcha())
-
-
-@router.get("/status", response_model=StatusTrackSolid)
-async def status(client: AsyncClient = Depends(superadmin_client)) -> StatusTrackSolid:
-    data = rows(await client.rpc("tracksolid_status", {}).execute())
-    return StatusTrackSolid(**data[0]) if data else StatusTrackSolid()
 
 
 # Captcha & login: semua staf yang login — popup muncul untuk siapa pun yang
