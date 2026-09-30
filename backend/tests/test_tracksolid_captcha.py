@@ -170,3 +170,81 @@ async def test_token_kedaluwarsa_saat_ambil_data_banyak_unit_hanya_sekali_login(
     assert all(isinstance(h, CaptchaDiperlukanError) for h in hasil)
     assert len(kiriman) == 1  # satu login saja, bukan per unit
     assert store.ditandai == 1
+
+
+# ── Verifikasi oleh customer (link tracking) ───────────────────────────────
+
+
+class _StoreCustomer(_Store):
+    def __init__(self, perlu: bool) -> None:
+        super().__init__({"token": None, "akun_id": None, "perlu_captcha": perlu})
+        self.captcha: dict[str, str] = {}
+        self.via: list[str] = []
+
+    async def simpan_captcha(self, cookies: str, via: str) -> str:
+        self.captcha["c1"] = cookies
+        return "c1"
+
+    async def pakai_captcha(self, captcha_id: str) -> str | None:
+        return self.captcha.pop(captcha_id, None)
+
+    async def simpan_otomatis(self, session: Any, via: str = "otomatis") -> None:
+        self.disimpan.append(session)
+        self.via.append(via)
+
+
+def _pasang_gambar(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def gambar() -> tuple[bytes, str]:
+        return b"jpeg", "JSESSIONID=rahasia"
+
+    monkeypatch.setattr(TrackSolidClient, "ambil_captcha", staticmethod(gambar))
+
+
+async def test_customer_tidak_bisa_minta_verifikasi_bila_sesi_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.errors import ConflictError
+
+    _pasang_gambar(monkeypatch)
+    with pytest.raises(ConflictError):
+        await TrackSolidClient(_StoreCustomer(perlu=False)).verifikasi_customer_ambil()  # type: ignore[arg-type]
+
+
+async def test_customer_menerima_id_bukan_cookie_lalu_login_tercatat_via_customer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _pasang_gambar(monkeypatch)
+    kiriman = _pasang_login(monkeypatch, {"ok": True, "data": {"token": _token()}})
+    store = _StoreCustomer(perlu=True)
+    klien = TrackSolidClient(store)  # type: ignore[arg-type]
+    captcha_id, gambar = await klien.verifikasi_customer_ambil()
+    # Cookie sesi (yang menjadi sesi login akun perusahaan) tidak ikut dikembalikan.
+    assert (captcha_id, gambar) == ("c1", b"jpeg")
+    await klien.verifikasi_customer_kirim("c1", "ab12")
+    assert kiriman == [("ab12", "JSESSIONID=rahasia")]
+    assert store.via == ["customer"]
+    # Id captcha sekali pakai.
+    store.row = {"token": None, "akun_id": None, "perlu_captcha": True}
+    with pytest.raises(ValidationError, match="kedaluwarsa"):
+        await klien.verifikasi_customer_kirim("c1", "ab12")
+
+
+async def test_kode_customer_salah_pesan_tanpa_istilah_teknis(monkeypatch: pytest.MonkeyPatch) -> None:
+    _pasang_gambar(monkeypatch)
+    _pasang_login(monkeypatch, {"ok": False, "code": ts.KODE_PERLU_CAPTCHA, "msg": "validCodeError"})
+    klien = TrackSolidClient(_StoreCustomer(perlu=True))  # type: ignore[arg-type]
+    await klien.verifikasi_customer_ambil()
+    with pytest.raises(ValidationError) as err:
+        await klien.verifikasi_customer_kirim("c1", "xxxx")
+    assert err.value.message == "Kode verifikasi salah. Muat gambar baru lalu coba lagi."
+    assert "captcha" not in err.value.message.lower() and "tracksolid" not in err.value.message.lower()
+
+
+def test_pembatas_percobaan_per_link() -> None:
+    from app.core.errors import TooManyRequestsError
+    from app.modules.tracking.service import _Pembatas
+
+    p = _Pembatas(2, 600)
+    p.cek("link-a")
+    p.cek("link-a")
+    with pytest.raises(TooManyRequestsError):
+        p.cek("link-a")
+    p.cek("link-b")  # link lain tidak terpengaruh

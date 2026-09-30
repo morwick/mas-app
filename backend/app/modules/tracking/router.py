@@ -10,8 +10,10 @@ from app.core.supabase import SupabaseClientFactory, get_client_factory
 from app.integrations.tracksolid.client import TrackSolidClient, get_tracksolid
 from app.modules.tracking.schemas import (
     FleetLocationsResponse,
+    KirimVerifikasiRequest,
     LocationEntry,
     PublicTrackingResponse,
+    VerifikasiLokasi,
 )
 from app.modules.tracking.service import FleetTrackingService, PublicTrackingService
 
@@ -67,3 +69,17 @@ async def public_tracking(
 @router.get("/track/{token}/location", response_model=LocationEntry)
 async def public_location(token: str, svc: PublicTrackingService = Depends(get_public_service)) -> LocationEntry:
     return await svc.location(token)
+
+
+@router.post("/track/{token}/verifikasi", response_model=VerifikasiLokasi)
+async def public_verifikasi(token: str, svc: PublicTrackingService = Depends(get_public_service)) -> VerifikasiLokasi:
+    """Gambar kode verifikasi — hanya saat lokasi memang butuh verifikasi."""
+    return await svc.verifikasi_ambil(token)
+
+
+@router.post("/track/{token}/verifikasi/kirim", response_model=LocationEntry)
+async def public_verifikasi_kirim(
+    token: str, payload: KirimVerifikasiRequest, svc: PublicTrackingService = Depends(get_public_service)
+) -> LocationEntry:
+    """Kode benar → lokasi unit langsung dikembalikan."""
+    return await svc.verifikasi_kirim(token, payload.id, payload.kode)

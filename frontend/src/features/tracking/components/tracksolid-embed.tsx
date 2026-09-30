@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import type { JobStatus } from "@/types";
 import { publicLocation } from "@/features/tracking/api";
 import { ApiError } from "@/lib/api/client";
+import { KODE_GALAT_CAPTCHA } from "@/lib/tracksolid-captcha";
+import { VerifikasiLokasi } from "./verifikasi-lokasi";
 
 /**
  * Card "Lokasi real-time" di halaman customer tracking.
@@ -59,7 +61,9 @@ type State =
   | { kind: "ok"; data: LocationData }
   | { kind: "no_imei" }
   | { kind: "error"; message: string }
-  | { kind: "ended" };
+  | { kind: "ended" }
+  // Lokasi butuh verifikasi (captcha TrackSolid) — customer mengetik kodenya.
+  | { kind: "verifikasi" };
 
 const MapInner = lazy(() => import("./tracking-map").then((m) => ({ default: m.TrackingMap })));
 
@@ -72,6 +76,8 @@ export function TrackSolidEmbed({
 }: Props) {
   // Ref supaya callback baru tidak me-restart polling.
   const onBerakhirRef = useRef(onBerakhir);
+  // Muat lokasi sekarang juga (dipakai kartu verifikasi).
+  const muatUlangRef = useRef<() => void>(() => undefined);
   onBerakhirRef.current = onBerakhir;
   const [state, setState] = useState<State>({ kind: "loading" });
   const errorCountRef = useRef(0);
@@ -105,6 +111,15 @@ export function TrackSolidEmbed({
             setState({ kind: "no_imei" });
             return;
           }
+          if (err.body.kode === KODE_GALAT_CAPTCHA) {
+            // Tetap di state yang sama supaya isian kode customer tidak hilang
+            // saat polling berikutnya; polling tetap jalan (jawaban server
+            // cepat, dari database) supaya lokasi tampil sendiri bila sudah
+            // diverifikasi orang lain.
+            errorCountRef.current = 0;
+            setState((s) => (s.kind === "verifikasi" ? s : { kind: "verifikasi" }));
+            return;
+          }
         }
         errorCountRef.current += 1;
         if (errorCountRef.current >= MAX_CONSECUTIVE_ERRORS) {
@@ -119,6 +134,7 @@ export function TrackSolidEmbed({
       }
     }
 
+    muatUlangRef.current = () => void fetchOnce();
     fetchOnce();
     const id = setInterval(fetchOnce, POLL_INTERVAL_MS);
     // Safety net: kalau masih loading setelah 12s, paksa tampilkan error.
@@ -145,6 +161,16 @@ export function TrackSolidEmbed({
 
   if (state.kind === "loading") {
     return <MapPlaceholder text="Memuat lokasi GPS truk…" spinner />;
+  }
+
+  if (state.kind === "verifikasi") {
+    return (
+      <VerifikasiLokasi
+        jobToken={jobToken}
+        onLokasi={(data) => setState({ kind: "ok", data })}
+        onTidakPerlu={() => muatUlangRef.current()}
+      />
+    );
   }
 
   if (state.kind === "ok") {
@@ -256,7 +282,7 @@ function Fallback({
   state,
   externalLink
 }: {
-  state: Exclude<State, { kind: "loading" } | { kind: "ok" }>;
+  state: Exclude<State, { kind: "loading" } | { kind: "ok" } | { kind: "verifikasi" }>;
   externalLink: string | null;
 }) {
   const messages: Record<typeof state.kind, { title: string; body: string }> = {

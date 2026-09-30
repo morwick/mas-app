@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.modules.jobs.schemas import Job
 
@@ -10,6 +10,19 @@ class LocationEntry(BaseModel):
     lng: float
     address: str | None
     fetched_at: str
+
+
+class VerifikasiLokasi(BaseModel):
+    """Gambar kode verifikasi untuk customer (captcha TrackSolid, tanpa menyebutnya)."""
+
+    id: str
+    # data:image/jpeg;base64,…
+    gambar: str
+
+
+class KirimVerifikasiRequest(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    kode: str = Field(min_length=1, max_length=20)
 
 
 class FleetLocationsResponse(BaseModel):
