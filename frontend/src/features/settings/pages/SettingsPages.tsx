@@ -4,6 +4,7 @@ import { JenisUnitView } from "../components/jenis-unit-view";
 import { ProfileView } from "../components/profile-view";
 import { UsersView } from "../components/users-view";
 import { useJenisUnit, useUsers } from "../queries";
+import { useJenisUnitTrailer } from "@/features/unit-trailer/queries";
 
 export function ProfilePage() {
   const user = useCurrentUser();
@@ -21,7 +22,9 @@ export function UsersPage() {
 
 export function JenisUnitPage() {
   const jenis = useJenisUnit();
-  if (jenis.isPending) return <PageLoading />;
+  const trailer = useJenisUnitTrailer();
+  if (jenis.isPending || trailer.isPending) return <PageLoading />;
   if (jenis.isError) return <PageError error={jenis.error} onRetry={jenis.refetch} />;
-  return <JenisUnitView list={jenis.data} />;
+  if (trailer.isError) return <PageError error={trailer.error} onRetry={trailer.refetch} />;
+  return <JenisUnitView list={jenis.data} trailer={trailer.data} />;
 }

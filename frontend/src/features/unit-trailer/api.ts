@@ -119,6 +119,19 @@ export function createJenisUnitTrailer(
   return mutate(api.post<JenisUnitTrailer>("/unit-trailer/jenis", { nama, jenis_unit_id: jenisUnitId }));
 }
 
+export function updateJenisUnitTrailer(
+  id: string,
+  nama: string,
+  jenisUnitId: string
+): Promise<ActionResult<unknown>> {
+  return mutate(api.patch(`/unit-trailer/jenis/${id}`, { nama, jenis_unit_id: jenisUnitId }));
+}
+
+/** Soft delete; ditolak server bila masih dipakai unit trailer aktif. */
+export function deleteJenisUnitTrailer(id: string): Promise<ActionResult<unknown>> {
+  return mutate(api.delete(`/unit-trailer/jenis/${id}`));
+}
+
 /** Pilihan unit trailer untuk form job, berdasarkan unit yang dipilih. */
 export interface TrailerUntukUnit {
   /** True bila jenis unit dari unit itu punya jenis unit trailer → trailer wajib diisi. */

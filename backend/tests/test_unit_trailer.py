@@ -447,3 +447,28 @@ def test_hapus_dokumen_tanpa_file_baru(client: TestClient, db: _FakeDb) -> None:
     update = next(a for q in db.query for n, a in q if n == "update")[0]
     assert update["srut_path"] is None and update["srut_uploaded_at"] is None
     assert db.storage.dihapus == ["unit_trailer/t1/srut-lama.pdf"]
+
+
+def test_ubah_jenis_unit_trailer(client: TestClient, db: _FakeDb) -> None:
+    db.baris = [{"id": "j1", "nama": "Lowbed 3 as"}, {"id": "j2", "nama": "Lowbed 4 as"}]
+    db.hasil_update = [{"id": "j1"}]
+    res = client.patch("/api/unit-trailer/jenis/j1", json={"nama": "  Lowbed   3 as ", "jenis_unit_id": "ju2"})
+    assert res.status_code == 200, res.text
+    update = next(q for q in db.query if any(n == "update" for n, _ in q))
+    assert ("update", ({"nama": "Lowbed 3 as", "jenis_unit_id": "ju2"},)) in update
+    assert ("eq", ("id", "j1")) in update
+
+
+def test_ubah_jenis_unit_trailer_nama_duplikat_ditolak(client: TestClient, db: _FakeDb) -> None:
+    db.baris = [{"id": "j1", "nama": "Lowbed 3 as"}, {"id": "j2", "nama": "Lowbed 4 as"}]
+    res = client.patch("/api/unit-trailer/jenis/j1", json={"nama": "lowbed 4 AS", "jenis_unit_id": "ju1"})
+    assert res.status_code == 409
+    assert not any(n == "update" for q in db.query for n, _ in q)
+
+
+def test_hapus_jenis_unit_trailer_soft_delete(client: TestClient, db: _FakeDb) -> None:
+    res = client.delete("/api/unit-trailer/jenis/j1")
+    assert res.status_code == 200, res.text
+    hapus = next(q for q in db.query if any(n == "delete" for n, _ in q))
+    assert hapus[0] == ("table", "jenis_unit_trailer")
+    assert ("eq", ("id", "j1")) in hapus

@@ -92,6 +92,15 @@ async def delete_jenis_unit(jenis_id: str, client: AsyncClient = Depends(superad
         await client.table("jenis_unit").update({STATUS: DIHAPUS}).eq("id", jenis_id).execute()
     except APIError as exc:
         if exc.code == "23503":
-            raise ConflictError("Jenis ini masih dipakai oleh unit aktif. Hapus / pindahkan unit dulu.") from exc
+            raise ConflictError(_pesan_masih_dipakai(exc.message or "")) from exc
         raise
     return OkResponse()
+
+
+def _pesan_masih_dipakai(pesan_db: str) -> str:
+    """Pesan database menyebut tabel pemakainya (soft_delete_propagate)."""
+    if "jenis_unit_trailer" in pesan_db:
+        return "Jenis unit ini masih punya jenis unit trailer. Hapus / pindahkan jenis unit trailernya dulu."
+    if "quotation_items" in pesan_db:
+        return "Jenis unit ini sudah dipakai di item surat penawaran, jadi tidak bisa dihapus."
+    return "Jenis ini masih dipakai oleh unit aktif. Hapus / pindahkan unit dulu."

@@ -241,16 +241,26 @@ async def daftar_jenis_unit_trailer(client: AsyncClient = Depends(user_client)) 
     return [_to_jenis(r) for r in rows(res)]
 
 
+async def _nama_jenis_valid(client: AsyncClient, nama: str, kecuali_id: str | None = None) -> str:
+    """Nama dirapikan & unik (tanpa beda huruf besar/kecil dan spasi berlebih).
+    Index unik di database tetap menjadi penjaga terakhir."""
+    nama = " ".join(nama.split())
+    if not nama:
+        raise ValidationError("Nama jenis unit trailer wajib diisi")
+    ada = await client.table("jenis_unit_trailer").select("id, nama").execute()
+    if any(
+        (kecuali_id is None or r.get("id") != kecuali_id) and _kunci_nama(str(r.get("nama") or "")) == _kunci_nama(nama)
+        for r in rows(ada)
+    ):
+        raise ConflictError(_JENIS_DUPLIKAT)
+    return nama
+
+
 @router.post("/jenis", response_model=JenisUnitTrailer, status_code=201)
 async def tambah_jenis_unit_trailer(
     payload: JenisUnitTrailerInput, client: AsyncClient = Depends(superadmin_or_admin_client)
 ) -> JenisUnitTrailer:
-    nama = " ".join(payload.nama.split())
-    if not nama:
-        raise ValidationError("Nama jenis unit trailer wajib diisi")
-    ada = await client.table("jenis_unit_trailer").select("nama").execute()
-    if any(_kunci_nama(str(r.get("nama") or "")) == _kunci_nama(nama) for r in rows(ada)):
-        raise ConflictError(_JENIS_DUPLIKAT)
+    nama = await _nama_jenis_valid(client, payload.nama)
     try:
         res = (
             await client.table("jenis_unit_trailer")
@@ -268,6 +278,49 @@ async def tambah_jenis_unit_trailer(
         await client.table("jenis_unit_trailer").select(_JENIS_SELECT).eq("id", baru["id"]).maybe_single().execute()
     )
     return _to_jenis(row or baru)
+
+
+@router.patch("/jenis/{jenis_id}", response_model=OkResponse)
+async def ubah_jenis_unit_trailer(
+    jenis_id: str, payload: JenisUnitTrailerInput, client: AsyncClient = Depends(superadmin_or_admin_client)
+) -> OkResponse:
+    """Ubah nama / Jenis Unit induknya. Satu UPDATE = satu transaksi; tercatat
+    di log sistem lewat trigger."""
+    nama = await _nama_jenis_valid(client, payload.nama, kecuali_id=jenis_id)
+    try:
+        res = (
+            await client.table("jenis_unit_trailer")
+            .update({"nama": nama, "jenis_unit_id": payload.jenis_unit_id})
+            .eq("id", jenis_id)
+            .execute()
+        )
+    except APIError as exc:
+        if exc.code == "23505":
+            raise ConflictError(_JENIS_DUPLIKAT) from exc
+        if exc.code == "23503":
+            raise ValidationError("Jenis unit tidak ditemukan") from exc
+        raise
+    if not rows(res):
+        raise NotFoundError("Jenis unit trailer tidak ditemukan")
+    return OkResponse()
+
+
+@router.delete("/jenis/{jenis_id}", response_model=OkResponse)
+async def hapus_jenis_unit_trailer(
+    jenis_id: str, client: AsyncClient = Depends(superadmin_or_admin_client)
+) -> OkResponse:
+    """Soft delete (status = 2). Ditolak database bila masih dipakai unit trailer aktif."""
+    try:
+        res = await client.table("jenis_unit_trailer").delete().eq("id", jenis_id).execute()
+    except APIError as exc:
+        if exc.code == "23503":
+            raise ConflictError(
+                "Jenis unit trailer ini masih dipakai unit trailer aktif. Pindahkan / hapus unit trailernya dulu."
+            ) from exc
+        raise
+    if not rows(res):
+        raise NotFoundError("Jenis unit trailer tidak ditemukan")
+    return OkResponse()
 
 
 # ── Pilihan unit trailer untuk form job ─────────────────────────────────────
