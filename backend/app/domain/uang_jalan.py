@@ -1,4 +1,8 @@
-"""Ringkasan uang jalan — dihitung dari riwayat, tidak pernah disimpan."""
+"""Ringkasan uang jalan — dihitung dari riwayat, tidak pernah disimpan.
+
+Uang jalan job = uang jalan awal (ditetapkan saat job dibuat) + tambahan.
+Sisa = uang jalan job − yang sudah diberikan (cair) ke driver.
+"""
 
 from __future__ import annotations
 
@@ -7,13 +11,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-UangJalanJenis = Literal["pencairan", "penambahan_pagu"]
+# pencairan = uang diberikan ke driver; tambahan = kesepakatan menambah uang jalan job.
+UangJalanJenis = Literal["pencairan", "tambahan"]
 
 
 class UangJalanRingkasan(BaseModel):
-    pagu_awal: float
-    penambahan: float
-    pagu: float
+    uang_jalan_awal: float
+    tambahan: float
+    # uang_jalan_awal + tambahan
+    uang_jalan: float
     cair: float
     sisa: float
     persen_cair: int
@@ -24,20 +30,20 @@ class _Transaksi(BaseModel):
     jumlah: float
 
 
-def hitung_ringkasan(pagu_awal: float, transaksi: Iterable[_Transaksi]) -> UangJalanRingkasan:
-    penambahan = 0.0
+def hitung_ringkasan(uang_jalan_awal: float, transaksi: Iterable[_Transaksi]) -> UangJalanRingkasan:
+    tambahan = 0.0
     cair = 0.0
     for t in transaksi:
-        if t.jenis == "penambahan_pagu":
-            penambahan += t.jumlah
+        if t.jenis == "tambahan":
+            tambahan += t.jumlah
         else:
             cair += t.jumlah
-    pagu = pagu_awal + penambahan
+    uang_jalan = uang_jalan_awal + tambahan
     return UangJalanRingkasan(
-        pagu_awal=pagu_awal,
-        penambahan=penambahan,
-        pagu=pagu,
+        uang_jalan_awal=uang_jalan_awal,
+        tambahan=tambahan,
+        uang_jalan=uang_jalan,
         cair=cair,
-        sisa=pagu - cair,
-        persen_cair=round(cair / pagu * 100) if pagu > 0 else 0,
+        sisa=uang_jalan - cair,
+        persen_cair=round(cair / uang_jalan * 100) if uang_jalan > 0 else 0,
     )

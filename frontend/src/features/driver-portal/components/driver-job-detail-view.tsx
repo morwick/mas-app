@@ -273,7 +273,7 @@ export function DriverJobDetailView({ job, backTo }: Props) {
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-md bg-page p-2">
                 <div className="text-[11px] text-text-muted">Uang jalan</div>
-                <div className="font-semibold text-[13px]">{formatRupiah(posisi.pagu)}</div>
+                <div className="font-semibold text-[13px]">{formatRupiah(posisi.uang_jalan)}</div>
               </div>
               <div className="rounded-md bg-page p-2">
                 <div className="text-[11px] text-text-muted">Diterima</div>

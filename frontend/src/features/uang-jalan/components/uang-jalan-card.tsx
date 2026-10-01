@@ -8,7 +8,7 @@ import { Field, Textarea } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Modal } from "@/components/ui/modal";
 import { UangJalanModal } from "./uang-jalan-modal";
-import { deleteUangJalan, rejectRequest, setPagu } from "@/features/uang-jalan/api";
+import { deleteUangJalan, rejectRequest, setUangJalanAwal } from "@/features/uang-jalan/api";
 import { formatRupiah, formatDate, formatDateTime } from "@/lib/utils";
 import type { SumberDana, UangJalan, UangJalanRequest, UangJalanRingkasan } from "@/types";
 
@@ -85,29 +85,29 @@ export function UangJalanCard({
     setAlasanTolak("");
   }
   const [hapus, setHapus] = useState<UangJalan | null>(null);
-  const [editPagu, setEditPagu] = useState(false);
-  const [paguDraft, setPaguDraft] = useState(String(Math.round(ringkasan.pagu_awal)));
+  const [editUangJalanAwal, setEditUangJalanAwal] = useState(false);
+  const [uangJalanAwalDraft, setUangJalanAwalDraft] = useState(String(Math.round(ringkasan.uang_jalan_awal)));
   const [saving, setSaving] = useState(false);
 
-  const belumAdaPagu = ringkasan.pagu === 0;
+  const belumAdaUangJalan = ringkasan.uang_jalan === 0;
   const minus = ringkasan.sisa < 0;
 
-  async function simpanPagu() {
+  async function simpanUangJalanAwal() {
     // BATASAN: uang jalan awal tidak boleh diturunkan di bawah uang yang sudah
     // diberikan (dijaga juga di database, migration 20261001000007).
-    const baru = Number(paguDraft) || 0;
-    if (baru + ringkasan.penambahan < ringkasan.cair) {
+    const baru = Number(uangJalanAwalDraft) || 0;
+    if (baru + ringkasan.tambahan < ringkasan.cair) {
       toast.error(
         `Uang jalan awal terlalu kecil: sudah diberikan ${formatRupiah(ringkasan.cair)} ke driver.`
       );
       return;
     }
     setSaving(true);
-    const res = await setPagu(jobId, Number(paguDraft) || 0);
+    const res = await setUangJalanAwal(jobId, Number(uangJalanAwalDraft) || 0);
     setSaving(false);
     if (!res.ok) return toast.error(res.error);
     toast.success("Uang jalan tersimpan");
-    setEditPagu(false);
+    setEditUangJalanAwal(false);
   }
 
   async function konfirmasiHapus() {
@@ -157,7 +157,7 @@ export function UangJalanCard({
       )}
 
       {/* Ringkasan */}
-      {editPagu ? (
+      {editUangJalanAwal ? (
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
             <div className="eyebrow" style={{ marginBottom: 4 }}>
@@ -165,19 +165,19 @@ export function UangJalanCard({
             </div>
             <CurrencyInput
               autoFocus
-              value={paguDraft}
-              onChange={setPaguDraft}
+              value={uangJalanAwalDraft}
+              onChange={setUangJalanAwalDraft}
             />
           </div>
-          <Button size="sm" onClick={simpanPagu} loading={saving}>
+          <Button size="sm" onClick={simpanUangJalanAwal} loading={saving}>
             Simpan
           </Button>
           <Button
             size="sm"
             variant="secondary"
             onClick={() => {
-              setPaguDraft(String(Math.round(ringkasan.pagu_awal)));
-              setEditPagu(false);
+              setUangJalanAwalDraft(String(Math.round(ringkasan.uang_jalan_awal)));
+              setEditUangJalanAwal(false);
             }}
           >
             Batal
@@ -196,11 +196,11 @@ export function UangJalanCard({
           }}
         >
           <div>
-            <Angka label="Uang jalan" value={formatRupiah(ringkasan.pagu)} />
-            {ringkasan.penambahan > 0 && (
+            <Angka label="Uang jalan" value={formatRupiah(ringkasan.uang_jalan)} />
+            {ringkasan.tambahan > 0 && (
               <div className="caption" style={{ marginTop: 2 }}>
-                {formatRupiah(ringkasan.pagu_awal)} + tambahan{" "}
-                {formatRupiah(ringkasan.penambahan)}
+                {formatRupiah(ringkasan.uang_jalan_awal)} + tambahan{" "}
+                {formatRupiah(ringkasan.tambahan)}
               </div>
             )}
             {!hanyaLihat && (
@@ -209,8 +209,8 @@ export function UangJalanCard({
               className="btn-link"
               style={{ fontSize: 11, marginTop: 2 }}
               onClick={() => {
-                setPaguDraft(String(Math.round(ringkasan.pagu_awal)));
-                setEditPagu(true);
+                setUangJalanAwalDraft(String(Math.round(ringkasan.uang_jalan_awal)));
+                setEditUangJalanAwal(true);
               }}
             >
               Ubah uang jalan awal
@@ -227,7 +227,7 @@ export function UangJalanCard({
         </div>
       )}
 
-      {belumAdaPagu && !editPagu && (
+      {belumAdaUangJalan && !editUangJalanAwal && (
         <p className="caption" style={{ marginTop: -6, marginBottom: 12 }}>
           Uang jalan job belum diisi. Sisanya belum bisa dihitung sebelum angkanya
           ada.
@@ -280,7 +280,7 @@ export function UangJalanCard({
           ))}
         </div>
       )}
-      {!adaBukti && pendingRequests.length === 0 && ringkasan.pagu > 0 && (
+      {!adaBukti && pendingRequests.length === 0 && ringkasan.uang_jalan > 0 && (
         <p className="caption" style={{ marginTop: -6, marginBottom: 12 }}>
           Belum ada pencairan berbukti — tahap muat driver masih terkunci (BR-02).
         </p>
@@ -301,7 +301,7 @@ export function UangJalanCard({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {transaksi.map((t) => {
-            const tambah = t.jenis === "penambahan_pagu";
+            const tambah = t.jenis === "tambahan";
             return (
               <div
                 key={t.id}

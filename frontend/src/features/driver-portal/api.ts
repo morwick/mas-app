@@ -52,7 +52,7 @@ export interface DriverUangJalan {
 export const driverUangJalan = (jobId: string) =>
   api.get<DriverUangJalan>(`/driver/jobs/${jobId}/uang-jalan`, undefined, "driver");
 
-/** BR-05: ajukan uang jalan (nominal ≤ sisa pagu). */
+/** BR-05: ajukan uang jalan (nominal ≤ sisa uang jalan). */
 export function driverRequestUangJalan(
   jobId: string,
   nominal: number,

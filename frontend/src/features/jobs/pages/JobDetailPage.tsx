@@ -8,9 +8,9 @@ import { JobDetailView } from "../components/job-detail-view";
 import { useJob, useJobHistory } from "../queries";
 
 const EMPTY_RINGKASAN = {
-  pagu_awal: 0,
-  penambahan: 0,
-  pagu: 0,
+  uang_jalan_awal: 0,
+  tambahan: 0,
+  uang_jalan: 0,
   cair: 0,
   sisa: 0,
   persen_cair: 0

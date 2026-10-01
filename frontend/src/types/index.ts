@@ -192,7 +192,7 @@ export interface Job {
   route_distance_km?: number | null;
   route_duration_min?: number | null;
   /** Borongan uang jalan yang disepakati di awal. */
-  uang_jalan_pagu?: number | null;
+  uang_jalan_awal?: number | null;
   unit_id: string;
   /** Unit trailer yang ditarik (wajib bila jenis unit-nya punya jenis unit trailer). */
   unit_trailer_id?: string | null;
@@ -563,11 +563,11 @@ export interface SumberDana {
   is_active: boolean;
 }
 
-export type UangJalanJenis = "pencairan" | "penambahan_pagu";
+export type UangJalanJenis = "pencairan" | "tambahan";
 
 export const uangJalanJenisLabel: Record<UangJalanJenis, string> = {
   pencairan: "Dikasih",
-  penambahan_pagu: "Tambah uang jalan"
+  tambahan: "Tambah uang jalan"
 };
 
 export interface UangJalan {
@@ -608,7 +608,8 @@ export interface UangJalanRequest {
 
 /** Posisi uang jalan sebuah job, dihitung database. */
 export interface UangJalanPosisi {
-  pagu: number;
+  /** Uang jalan job (awal + tambahan). */
+  uang_jalan: number;
   cair: number;
   sisa: number;
   ada_bukti: boolean;
@@ -620,17 +621,17 @@ export interface UangJalanPosisi {
  * tidak ada yang disimpan — jadi tidak bisa berbeda dari kejadiannya.
  */
 export interface UangJalanRingkasan {
-  /** Borongan awal yang disepakati. */
-  pagu_awal: number;
+  /** Uang jalan awal, ditetapkan saat job dibuat. */
+  uang_jalan_awal: number;
   /** Total kesepakatan tambahan sesudahnya. */
-  penambahan: number;
-  /** pagu_awal + penambahan */
-  pagu: number;
+  tambahan: number;
+  /** uang_jalan_awal + tambahan */
+  uang_jalan: number;
   /** Total yang sudah benar-benar cair. */
   cair: number;
-  /** pagu - cair. Negatif berarti cair melebihi pagu. */
+  /** uang_jalan - cair. Negatif berarti cair melebihi uang jalan job. */
   sisa: number;
-  /** Porsi uang jalan terhadap pagu, untuk indikator cepat. */
+  /** Porsi yang sudah cair terhadap uang jalan job, untuk indikator cepat. */
   persen_cair: number;
 }
 
@@ -672,7 +673,7 @@ export const statusBayarLabel: Record<StatusBayar, string> = {
 
 /** Satu transaksi uang jalan job — ditampilkan di form & detail tagihan. */
 export interface UangJalanTransaksi {
-  jenis: "pencairan" | "penambahan_pagu";
+  jenis: "pencairan" | "tambahan";
   tanggal: string;
   jumlah: number;
   keterangan: string | null;
@@ -696,14 +697,14 @@ export interface InvoiceItem {
   /** Dihitung database (qty x harga_satuan), tidak pernah dikirim client. */
   subtotal: number;
   /** Ringkasan saja — kosong/null untuk baris tanpa job atau job tanpa data ini. */
-  uang_jalan_pagu?: number | null;
+  uang_jalan_total?: number | null;
   uang_jalan_cair?: number | null;
   surat_jalan_urls?: string[];
   /** Surat jalan per tahap: saat loading & saat unloading. */
   surat_jalan_loading_urls?: string[];
   surat_jalan_unloading_urls?: string[];
-  /** Rincian uang jalan: pagu awal + tiap pencairan / penambahan (dengan bukti transfer). */
-  uang_jalan_pagu_awal?: number | null;
+  /** Rincian uang jalan: uang jalan awal + tiap pencairan / tambahan (dengan bukti transfer). */
+  uang_jalan_awal?: number | null;
   uang_jalan_transaksi?: UangJalanTransaksi[];
 }
 
@@ -909,13 +910,13 @@ export interface JobBelumDitagihRow {
   etd: string;
   completed_at: string | null;
   /** Ringkasan saja — untuk konteks saat memilih job, bukan rincian transaksi. */
-  uang_jalan_pagu: number;
+  uang_jalan_total: number;
   uang_jalan_cair: number;
   surat_jalan_urls: string[];
   /** Surat jalan per tahap: saat loading & saat unloading. */
   surat_jalan_loading_urls: string[];
   surat_jalan_unloading_urls: string[];
-  uang_jalan_pagu_awal: number;
+  uang_jalan_awal: number;
   uang_jalan_transaksi: UangJalanTransaksi[];
 }
 

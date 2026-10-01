@@ -146,7 +146,7 @@ export function JobDetailView({
         <ValidationPanel
           job={job}
           uangJalan={{
-            pagu: uangJalanRingkasan.pagu,
+            total: uangJalanRingkasan.uang_jalan,
             cair: uangJalanRingkasan.cair,
             pending: uangJalanPengajuan.filter((r) => r.status === "diajukan").length
           }}

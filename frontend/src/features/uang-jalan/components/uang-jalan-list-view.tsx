@@ -8,14 +8,14 @@ import type { UangJalanJobRow, UangJalanRequest } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
 
-type Filter = "semua" | "pengajuan" | "berjalan" | "belum_cair" | "lewat_pagu";
+type Filter = "semua" | "pengajuan" | "berjalan" | "belum_cair" | "lebih_dari_uang_jalan";
 
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: "semua", label: "Semua" },
   { key: "pengajuan", label: "Ada pengajuan driver" },
   { key: "berjalan", label: "Masih jalan" },
   { key: "belum_cair", label: "Belum dikasih sama sekali" },
-  { key: "lewat_pagu", label: "Lebih dari uang jalan" }
+  { key: "lebih_dari_uang_jalan", label: "Lebih dari uang jalan" }
 ];
 
 interface Props {
@@ -34,7 +34,7 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
       if (filter === "pengajuan" && r.pengajuan_menunggu === 0) return false;
       if (filter === "berjalan" && r.status === "selesai") return false;
       if (filter === "belum_cair" && r.ringkasan.cair > 0) return false;
-      if (filter === "lewat_pagu" && r.ringkasan.sisa >= 0) return false;
+      if (filter === "lebih_dari_uang_jalan" && r.ringkasan.sisa >= 0) return false;
       if (!needle) return true;
       return (
         r.job_number.toLowerCase().includes(needle) ||
@@ -51,11 +51,11 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
     () =>
       tersaring.reduce(
         (a, r) => ({
-          pagu: a.pagu + r.ringkasan.pagu,
+          uang_jalan: a.uang_jalan + r.ringkasan.uang_jalan,
           cair: a.cair + r.ringkasan.cair,
           sisa: a.sisa + r.ringkasan.sisa
         }),
-        { pagu: 0, cair: 0, sisa: 0 }
+        { uang_jalan: 0, cair: 0, sisa: 0 }
       ),
     [tersaring]
   );
@@ -64,7 +64,7 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
     () => ({
       berjalan: rows.filter((r) => r.status !== "selesai").length,
       belum_cair: rows.filter((r) => r.ringkasan.cair === 0).length,
-      lewat_pagu: rows.filter((r) => r.ringkasan.sisa < 0).length
+      lebih_dari_uang_jalan: rows.filter((r) => r.ringkasan.sisa < 0).length
     }),
     [rows]
   );
@@ -203,21 +203,21 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
                         {r.asal} → {r.tujuan}
                       </td>
                       <td className="mono" style={{ textAlign: "right" }}>
-                        {r.ringkasan.pagu > 0
-                          ? formatRupiah(r.ringkasan.pagu)
+                        {r.ringkasan.uang_jalan > 0
+                          ? formatRupiah(r.ringkasan.uang_jalan)
                           : "—"}
-                        {r.ringkasan.penambahan > 0 && (
+                        {r.ringkasan.tambahan > 0 && (
                           <div
                             className="caption"
                             style={{ color: "#b45309" }}
                           >
-                            +{formatRupiah(r.ringkasan.penambahan)}
+                            +{formatRupiah(r.ringkasan.tambahan)}
                           </div>
                         )}
                       </td>
                       <td className="mono" style={{ textAlign: "right" }}>
                         {formatRupiah(r.ringkasan.cair)}
-                        {r.ringkasan.pagu > 0 && (
+                        {r.ringkasan.uang_jalan > 0 && (
                           <div className="caption">
                             {r.ringkasan.persen_cair}%
                           </div>
@@ -259,7 +259,7 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
                     {tersaring.length} job ditampilkan
                   </td>
                   <td className="mono" style={{ textAlign: "right", fontWeight: 700 }}>
-                    {formatRupiah(total.pagu)}
+                    {formatRupiah(total.uang_jalan)}
                   </td>
                   <td className="mono" style={{ textAlign: "right", fontWeight: 700 }}>
                     {formatRupiah(total.cair)}

@@ -160,7 +160,7 @@ async def job_uang_jalan(job_id: str, svc: DriverPortalService = Depends(get_ser
 async def request_uang_jalan(
     job_id: str, payload: DriverRequestInput, svc: DriverPortalService = Depends(get_service)
 ) -> UangJalanRequest:
-    """BR-05: ajukan uang jalan (nominal ≤ sisa pagu)."""
+    """BR-05: ajukan uang jalan (nominal ≤ sisa uang jalan)."""
     return await svc.request_uang_jalan(job_id, nominal=payload.nominal, catatan=payload.catatan)
 
 

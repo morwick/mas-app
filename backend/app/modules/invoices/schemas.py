@@ -17,7 +17,7 @@ StatusBayar = Literal["unpaid", "partial_paid", "completed"]
 class UangJalanTransaksi(BaseModel):
     """Satu transaksi uang jalan job — ditampilkan di form & detail tagihan."""
 
-    jenis: str  # pencairan / penambahan_pagu
+    jenis: str  # pencairan / tambahan
     tanggal: str
     jumlah: float
     keterangan: str | None = None
@@ -41,14 +41,14 @@ class InvoiceItem(BaseModel):
     subtotal: float
     # Ringkasan saja (untuk konteks di rincian tagihan) — None/kosong untuk
     # baris tanpa job atau job yang belum punya transaksi/foto surat jalan.
-    uang_jalan_pagu: float | None = None
+    uang_jalan_total: float | None = None
     uang_jalan_cair: float | None = None
     surat_jalan_urls: list[str] = []
     # Surat jalan per tahap: saat loading & saat unloading.
     surat_jalan_loading_urls: list[str] = []
     surat_jalan_unloading_urls: list[str] = []
-    # Rincian uang jalan: pagu awal + tiap pencairan / penambahan (dengan bukti transfer).
-    uang_jalan_pagu_awal: float | None = None
+    # Rincian uang jalan: uang jalan awal + tiap pencairan / tambahan (dengan bukti transfer).
+    uang_jalan_awal: float | None = None
     uang_jalan_transaksi: list[UangJalanTransaksi] = []
 
 
@@ -182,14 +182,14 @@ class JobBelumDitagihRow(BaseModel):
     etd: str
     completed_at: str | None
     # Ringkas saja — dipakai untuk konteks di layar pilih job, bukan rincian.
-    uang_jalan_pagu: float
+    uang_jalan_total: float
     uang_jalan_cair: float
     surat_jalan_urls: list[str] = []
     # Surat jalan per tahap: saat loading & saat unloading.
     surat_jalan_loading_urls: list[str] = []
     surat_jalan_unloading_urls: list[str] = []
-    # Rincian uang jalan: pagu awal + tiap pencairan / penambahan (dengan bukti transfer).
-    uang_jalan_pagu_awal: float | None = None
+    # Rincian uang jalan: uang jalan awal + tiap pencairan / tambahan (dengan bukti transfer).
+    uang_jalan_awal: float | None = None
     uang_jalan_transaksi: list[UangJalanTransaksi] = []
 
 

@@ -150,21 +150,21 @@ export function InvoiceForm({
     const dariTersedia = jobsTersedia.find((j) => j.id === jobId);
     if (dariTersedia) {
       return {
-        pagu: dariTersedia.uang_jalan_pagu,
+        total: dariTersedia.uang_jalan_total,
         cair: dariTersedia.uang_jalan_cair,
         loading: dariTersedia.surat_jalan_loading_urls,
         unloading: dariTersedia.surat_jalan_unloading_urls,
-        paguAwal: dariTersedia.uang_jalan_pagu_awal,
+        uangJalanAwal: dariTersedia.uang_jalan_awal,
         transaksi: dariTersedia.uang_jalan_transaksi
       };
     }
     const dariInvoice = invoice?.items.find((x) => x.job_id === jobId);
     return {
-      pagu: dariInvoice?.uang_jalan_pagu ?? null,
+      total: dariInvoice?.uang_jalan_total ?? null,
       cair: dariInvoice?.uang_jalan_cair ?? null,
       loading: dariInvoice?.surat_jalan_loading_urls ?? [],
       unloading: dariInvoice?.surat_jalan_unloading_urls ?? [],
-      paguAwal: dariInvoice?.uang_jalan_pagu_awal ?? null,
+      uangJalanAwal: dariInvoice?.uang_jalan_awal ?? null,
       transaksi: dariInvoice?.uang_jalan_transaksi ?? []
     };
   }
@@ -675,11 +675,11 @@ export function InvoiceForm({
                   return (
                     <div style={{ marginTop: -2, marginBottom: 4 }}>
                       <InfoUangJalanSurat
-                        uangJalanPagu={info.pagu}
+                        uangJalanTotal={info.total}
                         uangJalanCair={info.cair}
                         suratJalanLoadingUrls={info.loading}
                         suratJalanUnloadingUrls={info.unloading}
-                        uangJalanPaguAwal={info.paguAwal}
+                        uangJalanAwal={info.uangJalanAwal}
                         uangJalanTransaksi={info.transaksi}
                       />
                     </div>

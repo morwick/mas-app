@@ -48,7 +48,7 @@ class _Db:
 
 async def test_tambah_uang_jalan_ditolak_bila_job_sudah_ditagih() -> None:
     db = _Db([{"invoice": {"invoice_number": "0001/INV"}}])
-    payload = UangJalanInput(job_id="j1", jenis="penambahan_pagu", tanggal="2026-09-26", jumlah=100_000)
+    payload = UangJalanInput(job_id="j1", jenis="tambahan", tanggal="2026-09-26", jumlah=100_000)
     with pytest.raises(ValidationError, match="sudah ditagihkan di tagihan 0001/INV"):
         await UangJalanService(db).create(payload, created_by="u")  # type: ignore[arg-type]
     assert not db.ditulis
@@ -62,6 +62,6 @@ async def test_uang_jalan_dari_pengajuan_driver_terkunci(aksi: str) -> None:
         if aksi == "hapus":
             await svc.delete("uj-1")
         else:
-            payload = UangJalanInput(job_id="j1", jenis="penambahan_pagu", tanggal="2026-09-26", jumlah=100_000)
+            payload = UangJalanInput(job_id="j1", jenis="tambahan", tanggal="2026-09-26", jumlah=100_000)
             await svc.update("uj-1", payload)
     assert not db.ditulis

@@ -5,7 +5,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import type { UangJalan } from "@/types";
 import { UangJalanCard } from "./uang-jalan-card";
 
-const RINGKASAN = { pagu_awal: 1_000_000, penambahan: 0, pagu: 1_000_000, cair: 500_000, sisa: 500_000, persen_cair: 50 };
+const RINGKASAN = { uang_jalan_awal: 1_000_000, tambahan: 0, uang_jalan: 1_000_000, cair: 500_000, sisa: 500_000, persen_cair: 50 };
 
 function transaksi(id: string, request_id: string | null): UangJalan {
   return {

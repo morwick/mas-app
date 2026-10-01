@@ -20,7 +20,7 @@ import { UangJalanModal } from "./uang-jalan-modal";
 
 const KAS: SumberDana[] = [{ id: "s1", nama: "Kas Kantor" } as SumberDana];
 // Uang jalan 2 jt, sudah diberikan 1,5 jt → sisa 500 rb.
-const RINGKASAN = { pagu_awal: 2_000_000, penambahan: 0, pagu: 2_000_000, cair: 1_500_000, sisa: 500_000 } as UangJalanRingkasan;
+const RINGKASAN = { uang_jalan_awal: 2_000_000, tambahan: 0, uang_jalan: 2_000_000, cair: 1_500_000, sisa: 500_000 } as UangJalanRingkasan;
 
 function tampil(existing: UangJalan | null = null) {
   render(
@@ -71,7 +71,7 @@ describe("UangJalanModal — batas uang jalan", () => {
     expect(screen.getByText(/melebihi sisa uang jalan/)).toBeTruthy();
   });
 
-  it("tombol jenis tambahan memakai istilah uang jalan, bukan pagu", () => {
+  it("tombol jenis tambahan memakai istilah uang jalan", () => {
     tampil();
     expect(screen.getByRole("button", { name: "Tambah uang jalan" })).toBeTruthy();
     expect(screen.queryByText(/pagu/i)).toBeNull();

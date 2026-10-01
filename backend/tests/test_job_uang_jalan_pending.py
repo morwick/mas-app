@@ -87,9 +87,9 @@ def test_pencairan_dijumlahkan() -> None:
     assert j.uang_jalan_cair == 1_500_000
 
 
-def test_penambahan_pagu_bukan_pencairan() -> None:
-    # Menaikkan pagu tidak mengeluarkan uang, jadi job masih boleh dibatalkan.
-    j = job_uj([{"jenis": "penambahan_pagu", "jumlah": 3_000_000}])
+def test_tambahan_uang_jalan_bukan_pencairan() -> None:
+    # Menambah uang jalan tidak mengeluarkan uang, jadi job masih boleh dibatalkan.
+    j = job_uj([{"jenis": "tambahan", "jumlah": 3_000_000}])
     assert j.uang_jalan_cair == 0
 
 

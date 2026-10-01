@@ -28,7 +28,7 @@ _BASE_COLUMNS = """
 # `uang_jalan_requests` ikut supaya daftar job bisa menandai driver yang sedang
 # menunggu pencairan tanpa satu permintaan tambahan per baris.
 _INTERNAL_COLUMNS = """,
-  catatan, uang_jalan_pagu,
+  catatan, uang_jalan_awal,
   validated_at, validation_note,
   validator:profiles!jobs_validated_by_fkey(nama),
   quotation_id,
@@ -129,7 +129,7 @@ def to_job(row: dict[str, Any]) -> Job:
         route_polyline=row.get("route_polyline"),
         route_distance_km=num_or_none(row.get("route_distance_km")),
         route_duration_min=num_or_none(row.get("route_duration_min")),
-        uang_jalan_pagu=(num_or_none(row.get("uang_jalan_pagu")) or 0.0) if "uang_jalan_pagu" in row else None,
+        uang_jalan_awal=(num_or_none(row.get("uang_jalan_awal")) or 0.0) if "uang_jalan_awal" in row else None,
         unit_id=row["unit_id"],
         unit_trailer_id=row.get("unit_trailer_id"),
         unit_trailer_kode=(trailer or {}).get("kode_trailer"),

@@ -70,6 +70,6 @@ export function deleteUangJalan(id: string, _jobId?: string): Promise<ActionResu
   return mutate(api.delete(`/uang-jalan/${id}`));
 }
 
-export function setPagu(jobId: string, pagu: number): Promise<ActionResult<unknown>> {
-  return mutate(api.put(`/jobs/${jobId}/uang-jalan/pagu`, { pagu }));
+export function setUangJalanAwal(jobId: string, uangJalanAwal: number): Promise<ActionResult<unknown>> {
+  return mutate(api.put(`/jobs/${jobId}/uang-jalan/awal`, { uang_jalan_awal: uangJalanAwal }));
 }

@@ -9,7 +9,7 @@ import '../job_status.dart';
 import '../models.dart';
 import '../providers.dart';
 
-/// Kartu uang jalan: pagu, sudah cair, sisa, pengajuan menunggu, dan tombol
+/// Kartu uang jalan: uang jalan job, sudah cair, sisa, pengajuan menunggu, dan tombol
 /// **Ajukan Uang Jalan** (FR-UJ-02/03).
 class UangJalanCard extends ConsumerWidget {
   const UangJalanCard({super.key, required this.job});
@@ -132,14 +132,14 @@ class _BodyState extends ConsumerState<_Body> {
     return [
       const SizedBox(height: 10),
       if (posisi != null) ...[
-        _Row('Uang jalan job', formatRupiah(posisi.pagu)),
+        _Row('Uang jalan job', formatRupiah(posisi.uangJalan)),
         _Row('Sudah diterima', formatRupiah(posisi.cair)),
         _Row('Sisa uang jalan', formatRupiah(posisi.sisa), bold: true),
         const SizedBox(height: 6),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: posisi.pagu > 0 ? (posisi.cair / posisi.pagu).clamp(0.0, 1.0) : 0,
+            value: posisi.uangJalan > 0 ? (posisi.cair / posisi.uangJalan).clamp(0.0, 1.0) : 0,
             minHeight: 6,
             backgroundColor: MasColors.page,
           ),
@@ -213,7 +213,7 @@ class _BodyState extends ConsumerState<_Body> {
   }
 }
 
-/// Lembar isi nominal (≤ sisa pagu) + catatan, lalu alert konfirmasi persis
+/// Lembar isi nominal (≤ sisa uang jalan) + catatan, lalu alert konfirmasi persis
 /// sesuai PRD sebelum dikirim.
 class AjukanUangJalanSheet extends ConsumerStatefulWidget {
   const AjukanUangJalanSheet({super.key, required this.jobId, required this.sisa});

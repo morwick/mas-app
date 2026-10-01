@@ -83,7 +83,7 @@ def derive_tampil(stored: str, jatuh_tempo: str | None) -> tuple[str, int | None
     return "jatuh_tempo", terlambat
 
 
-# Transaksi uang jalan per job: untuk ringkasan (pagu & cair) dan rinciannya.
+# Transaksi uang jalan per job: untuk ringkasan (uang jalan & cair) dan rinciannya.
 _UANG_JALAN_EMBED = "uang_jalan(jenis, jumlah, tanggal, keperluan, catatan, bukti_transfer_path, created_at)"
 SIGNED_URL_BUKTI_TTL_S = 60 * 60
 
@@ -116,12 +116,12 @@ def _transaksi(transaksi: list[dict[str, Any]], bukti: dict[str, str]) -> list[U
     ]
 
 
-def _uang_jalan_ringkas(pagu: Any, transaksi: list[dict[str, Any]]) -> tuple[float, float]:
-    """Pagu efektif (awal + penambahan) & total pencairan dari transaksi uang_jalan job."""
-    pagu_awal = num(pagu)
-    penambahan = sum(num(t.get("jumlah")) for t in transaksi if t.get("jenis") == "penambahan_pagu")
+def _uang_jalan_ringkas(awal: Any, transaksi: list[dict[str, Any]]) -> tuple[float, float]:
+    """Uang jalan job (awal + tambahan) & total pencairan dari transaksi uang_jalan job."""
+    uang_jalan_awal = num(awal)
+    tambahan = sum(num(t.get("jumlah")) for t in transaksi if t.get("jenis") == "tambahan")
     cair = sum(num(t.get("jumlah")) for t in transaksi if t.get("jenis") == "pencairan")
-    return pagu_awal + penambahan, cair
+    return uang_jalan_awal + tambahan, cair
 
 
 def _to_item(r: dict[str, Any], uj: dict[str, Any] | None) -> InvoiceItem:
@@ -138,12 +138,12 @@ def _to_item(r: dict[str, Any], uj: dict[str, Any] | None) -> InvoiceItem:
         satuan=r["satuan"],
         harga_satuan=num(r.get("harga_satuan")),
         subtotal=num(r.get("subtotal")),
-        uang_jalan_pagu=(uj or {}).get("uang_jalan_pagu"),
+        uang_jalan_total=(uj or {}).get("uang_jalan_total"),
         uang_jalan_cair=(uj or {}).get("uang_jalan_cair"),
         surat_jalan_urls=(uj or {}).get("surat_jalan_urls") or [],
         surat_jalan_loading_urls=(uj or {}).get("surat_jalan_loading_urls") or [],
         surat_jalan_unloading_urls=(uj or {}).get("surat_jalan_unloading_urls") or [],
-        uang_jalan_pagu_awal=(uj or {}).get("uang_jalan_pagu_awal"),
+        uang_jalan_awal=(uj or {}).get("uang_jalan_awal"),
         uang_jalan_transaksi=(uj or {}).get("uang_jalan_transaksi") or [],
     )
 
@@ -382,7 +382,7 @@ class InvoiceService:
         """Ringkasan uang jalan & link surat jalan per job — untuk ditampilkan di rincian tagihan."""
         res = await (
             self._db.table("jobs")
-            .select(f"id, uang_jalan_pagu, {_UANG_JALAN_EMBED}, job_photos(file_path, slot, stage)")
+            .select(f"id, uang_jalan_awal, {_UANG_JALAN_EMBED}, job_photos(file_path, slot, stage)")
             .in_("id", job_ids)
             .eq("uang_jalan.status", AKTIF)
             .eq("job_photos.status", AKTIF)
@@ -393,11 +393,11 @@ class InvoiceService:
         bukti = await self._bukti_transfer_urls([t for r in data for t in (r.get("uang_jalan") or [])])
         out: dict[str, dict[str, Any]] = {}
         for r in data:
-            pagu, cair = _uang_jalan_ringkas(r.get("uang_jalan_pagu"), r.get("uang_jalan") or [])
+            total, cair = _uang_jalan_ringkas(r.get("uang_jalan_awal"), r.get("uang_jalan") or [])
             out[r["id"]] = {
-                "uang_jalan_pagu": pagu,
+                "uang_jalan_total": total,
                 "uang_jalan_cair": cair,
-                "uang_jalan_pagu_awal": num(r.get("uang_jalan_pagu")),
+                "uang_jalan_awal": num(r.get("uang_jalan_awal")),
                 "uang_jalan_transaksi": _transaksi(r.get("uang_jalan") or [], bukti),
                 **_surat_jalan(r.get("job_photos") or [], self._photos_bucket),
             }
@@ -450,7 +450,7 @@ class InvoiceService:
             self._db.table("jobs")
             .select(
                 "id, customer_id, job_number, asal, tujuan, alat_diangkut, etd, completed_at,"
-                f" uang_jalan_pagu, {_UANG_JALAN_EMBED},"
+                f" uang_jalan_awal, {_UANG_JALAN_EMBED},"
                 " job_photos(file_path, slot, stage)"
             )
             # Hanya job yang sudah divalidasi admin yang bisa ditagihkan.
@@ -470,15 +470,15 @@ class InvoiceService:
         for r in data:
             cid = r.pop("customer_id")
             foto = r.pop("job_photos") or []
-            pagu_awal = r.pop("uang_jalan_pagu")
+            uang_jalan_awal = r.pop("uang_jalan_awal")
             transaksi = r.pop("uang_jalan") or []
-            pagu, cair = _uang_jalan_ringkas(pagu_awal, transaksi)
+            total, cair = _uang_jalan_ringkas(uang_jalan_awal, transaksi)
             out.setdefault(cid, []).append(
                 JobBelumDitagihRow(
                     **r,
-                    uang_jalan_pagu=pagu,
+                    uang_jalan_total=total,
                     uang_jalan_cair=cair,
-                    uang_jalan_pagu_awal=num(pagu_awal),
+                    uang_jalan_awal=num(uang_jalan_awal),
                     uang_jalan_transaksi=_transaksi(transaksi, bukti),
                     **_surat_jalan(foto, self._photos_bucket),
                 )

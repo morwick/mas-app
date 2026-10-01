@@ -2,10 +2,10 @@ import { formatDate, formatRupiah } from "@/lib/utils";
 import type { UangJalanTransaksi } from "@/types";
 
 interface Props {
-  uangJalanPagu: number | null | undefined;
+  uangJalanTotal: number | null | undefined;
   uangJalanCair: number | null | undefined;
-  /** Pagu awal job (sebelum penambahan). */
-  uangJalanPaguAwal?: number | null;
+  /** Uang jalan awal job (sebelum tambahan). */
+  uangJalanAwal?: number | null;
   /** Tiap pencairan / penambahan uang jalan, dengan bukti transfer bila ada. */
   uangJalanTransaksi?: UangJalanTransaksi[] | null;
   /** Foto surat jalan saat loading & saat unloading. */
@@ -57,22 +57,22 @@ function SuratJalan({ label, urls }: { label: string; urls: string[] }) {
 
 /**
  * Konteks saat menagihkan sebuah job: foto surat jalan loading & unloading,
- * dan uang jalan — ringkasan, penambahan pagu, dan tiap pencairan beserta
+ * dan uang jalan — ringkasan, tambahan uang jalan, dan tiap pencairan beserta
  * foto bukti transfernya. Foto tampil kecil, diklik → tab baru.
  */
 export function InfoUangJalanSurat({
-  uangJalanPagu,
+  uangJalanTotal,
   uangJalanCair,
-  uangJalanPaguAwal,
+  uangJalanAwal,
   uangJalanTransaksi,
   suratJalanLoadingUrls,
   suratJalanUnloadingUrls
 }: Props) {
-  const pagu = uangJalanPagu ?? 0;
+  const total = uangJalanTotal ?? 0;
   const cair = uangJalanCair ?? 0;
-  const lunas = pagu > 0 && cair >= pagu;
+  const lunas = total > 0 && cair >= total;
   const transaksi = uangJalanTransaksi ?? [];
-  const penambahan = transaksi.filter((t) => t.jenis === "penambahan_pagu");
+  const penambahan = transaksi.filter((t) => t.jenis === "tambahan");
   const pencairan = transaksi.filter((t) => t.jenis === "pencairan");
 
   return (
@@ -96,7 +96,7 @@ export function InfoUangJalanSurat({
           className="mono"
           style={{ fontSize: 11.5, fontWeight: 600, color: lunas ? "var(--brand-primary-dark)" : "var(--text-primary)" }}
         >
-          Uang jalan {formatRupiah(cair)} / {formatRupiah(pagu)}
+          Uang jalan {formatRupiah(cair)} / {formatRupiah(total)}
         </span>
 
         {penambahan.length > 0 && (
@@ -109,7 +109,7 @@ export function InfoUangJalanSurat({
               color: "var(--status-perbaikan-text)"
             }}
           >
-            Ada penambahan uang jalan: uang jalan awal {formatRupiah(uangJalanPaguAwal ?? pagu)}
+            Ada penambahan uang jalan: uang jalan awal {formatRupiah(uangJalanAwal ?? total)}
             {penambahan.map((t, i) => (
               <div key={i}>
                 + {formatRupiah(t.jumlah)} ({formatDate(t.tanggal)}){t.keterangan ? ` — ${t.keterangan}` : ""}

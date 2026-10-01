@@ -66,7 +66,7 @@ class Job {
     this.tujuanLat,
     this.tujuanLng,
     this.routeDistanceKm,
-    this.uangJalanPagu,
+    this.uangJalanAwal,
     this.eta,
     this.etaIsEstimated = false,
     this.catatan,
@@ -92,7 +92,7 @@ class Job {
   final double? tujuanLat;
   final double? tujuanLng;
   final double? routeDistanceKm;
-  final double? uangJalanPagu;
+  final double? uangJalanAwal;
   final String etd;
   final String? eta;
   final bool etaIsEstimated;
@@ -138,7 +138,7 @@ class Job {
         tujuanLat: _toDouble(j['tujuan_lat']),
         tujuanLng: _toDouble(j['tujuan_lng']),
         routeDistanceKm: _toDouble(j['route_distance_km']),
-        uangJalanPagu: _toDouble(j['uang_jalan_pagu']),
+        uangJalanAwal: _toDouble(j['uang_jalan_awal']),
         etd: j['etd'] as String,
         eta: j['eta'] as String?,
         etaIsEstimated: (j['eta_is_estimated'] as bool?) ?? false,
@@ -161,25 +161,26 @@ class Job {
 /// Posisi uang jalan (hasil `job_uang_jalan_posisi`).
 class UangJalanPosisi {
   const UangJalanPosisi({
-    required this.pagu,
+    required this.uangJalan,
     required this.cair,
     required this.sisa,
     required this.adaBukti,
     required this.pendingRequest,
   });
 
-  final double pagu;
+  /// Uang jalan job (awal + tambahan).
+  final double uangJalan;
   final double cair;
   final double sisa;
   final bool adaBukti;
   final bool pendingRequest;
 
-  /// BR-05: boleh mengajukan selama total diterima < pagu dan tidak ada
+  /// BR-05: boleh mengajukan selama total diterima < uang jalan job dan tidak ada
   /// pengajuan yang masih menunggu.
   bool get canRequest => sisa > 0 && !pendingRequest;
 
   factory UangJalanPosisi.fromJson(Map<String, dynamic> j) => UangJalanPosisi(
-        pagu: _toDouble(j['pagu']) ?? 0,
+        uangJalan: _toDouble(j['uang_jalan']) ?? 0,
         cair: _toDouble(j['cair']) ?? 0,
         sisa: _toDouble(j['sisa']) ?? 0,
         adaBukti: (j['ada_bukti'] as bool?) ?? false,

@@ -13,7 +13,7 @@ Map<String, dynamic> _jobJson({String status = 'loading', List<Map<String, dynam
       'etd': '2026-09-22T01:00:00+00:00',
       'status': status,
       'created_at': '2026-09-21T10:00:00+00:00',
-      'uang_jalan_pagu': 1500000,
+      'uang_jalan_awal': 1500000,
       'accepted_at': status == 'ditugaskan' ? null : '2026-09-22T00:30:00+00:00',
       'photos': photos,
     };
@@ -104,7 +104,7 @@ void main() {
   group('Uang jalan (BR-05)', () {
     test('boleh mengajukan hanya bila sisa > 0 dan tidak ada pengajuan menunggu', () {
       UangJalanPosisi p({double sisa = 500000, bool pending = false}) => UangJalanPosisi(
-            pagu: 1500000,
+            uangJalan: 1500000,
             cair: 1500000 - sisa,
             sisa: sisa,
             adaBukti: true,
@@ -137,7 +137,7 @@ void main() {
             'requested_at': '2026-09-22T01:00:00Z',
           },
         ],
-        'posisi': {'pagu': 1500000, 'cair': 300000, 'sisa': 1200000, 'ada_bukti': true, 'pending_request': true},
+        'posisi': {'uang_jalan': 1500000, 'cair': 300000, 'sisa': 1200000, 'ada_bukti': true, 'pending_request': true},
       });
       expect(uj.pending?.id, 'r2');
       expect(uj.posisi?.canRequest, isFalse);

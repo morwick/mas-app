@@ -1,6 +1,6 @@
 """Nominal uang jalan yang masuk database wajib bilangan bulat.
 
-Kolomnya BIGINT (`uang_jalan.jumlah`, `jobs.uang_jalan_pagu`). Pecahan yang
+Kolomnya BIGINT (`uang_jalan.jumlah`, `jobs.uang_jalan_awal`). Pecahan yang
 lolos sampai Postgres akan dibulatkan diam-diam, sehingga angka tersimpan
 berbeda dari yang dikirim tanpa ada yang tahu — jadi ditolak di pintu masuk.
 """
@@ -8,7 +8,7 @@ berbeda dari yang dikirim tanpa ada yang tahu — jadi ditolak di pintu masuk.
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from app.modules.uang_jalan.schemas import DriverRequestInput, SetPaguRequest, UangJalanInput
+from app.modules.uang_jalan.schemas import DriverRequestInput, SetUangJalanAwalRequest, UangJalanInput
 from app.modules.uang_jalan.service import _clean, _validate
 
 BASE = {"job_id": "job-1", "jenis": "pencairan", "tanggal": "2026-09-23", "sumber_dana_id": "kas-1"}
@@ -47,13 +47,13 @@ def test_nol_dan_negatif_ditolak_dengan_pesan_indonesia() -> None:
             _validate(UangJalanInput(**BASE, jumlah=nilai))
 
 
-def test_pagu_hanya_bilangan_bulat_tak_negatif() -> None:
-    assert SetPaguRequest(pagu=0).pagu == 0
-    assert SetPaguRequest(pagu=12_000_000).pagu == 12_000_000
+def test_uang_jalan_awal_hanya_bilangan_bulat_tak_negatif() -> None:
+    assert SetUangJalanAwalRequest(uang_jalan_awal=0).uang_jalan_awal == 0
+    assert SetUangJalanAwalRequest(uang_jalan_awal=12_000_000).uang_jalan_awal == 12_000_000
     with pytest.raises(PydanticValidationError):
-        SetPaguRequest(pagu=12_000_000.5)
+        SetUangJalanAwalRequest(uang_jalan_awal=12_000_000.5)
     with pytest.raises(PydanticValidationError):
-        SetPaguRequest(pagu=-1)
+        SetUangJalanAwalRequest(uang_jalan_awal=-1)
 
 
 def test_pengajuan_driver_juga_bilangan_bulat() -> None:

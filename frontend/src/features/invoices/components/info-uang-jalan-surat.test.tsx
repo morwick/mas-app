@@ -5,9 +5,9 @@ describe("info uang jalan & surat jalan di form tagihan", () => {
   it("foto surat jalan & bukti transfer tampil kecil, diklik → tab baru; penambahan uang jalan terlihat", () => {
     render(
       <InfoUangJalanSurat
-        uangJalanPagu={2_500_000}
+        uangJalanTotal={2_500_000}
         uangJalanCair={1_500_000}
-        uangJalanPaguAwal={2_000_000}
+        uangJalanAwal={2_000_000}
         uangJalanTransaksi={[
           {
             jenis: "pencairan",
@@ -17,7 +17,7 @@ describe("info uang jalan & surat jalan di form tagihan", () => {
             bukti_url: "https://x/tf.jpg"
           },
           {
-            jenis: "penambahan_pagu",
+            jenis: "tambahan",
             tanggal: "2026-09-12",
             jumlah: 500_000,
             keterangan: "Tol tambahan",

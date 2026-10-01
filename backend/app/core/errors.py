@@ -98,7 +98,7 @@ def _postgrest_status(err: PostgrestError) -> int:
 _AKSI_UBAH = {
     "status", "validate", "return", "cancel", "accept", "deactivate", "pin",
     "resolve", "reset-password", "tolak", "read", "read-all", "password",
-    "calibrate", "sync-mileage", "active", "pagu", "ganti-truk",
+    "calibrate", "sync-mileage", "active", "awal", "ganti-truk",
 }  # fmt: skip
 # Bukan penyimpanan data: login/sesi, pengecekan, dan cron.
 _TANPA_AWALAN = ("/auth/", "/driver/login", "/driver/logout", "/cron/", "/check-conflicts")

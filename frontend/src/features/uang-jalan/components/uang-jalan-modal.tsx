@@ -169,7 +169,7 @@ export function UangJalanModal({
     >
       <Field label="Jenis" required>
         <div style={{ display: "flex", gap: 8 }}>
-          {(["pencairan", "penambahan_pagu"] as const).map((j) => (
+          {(["pencairan", "tambahan"] as const).map((j) => (
             <button
               key={j}
               type="button"

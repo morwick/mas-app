@@ -57,7 +57,8 @@ class UangJalanRequest(BaseModel):
 class UangJalanPosisi(BaseModel):
     """Posisi uang jalan sebuah job, dihitung database (job_uang_jalan_posisi)."""
 
-    pagu: float
+    # Uang jalan job (awal + tambahan).
+    uang_jalan: float
     cair: float
     sisa: float
     ada_bukti: bool
@@ -87,8 +88,8 @@ class UangJalanInput(BaseModel):
     catatan: str | None = None
 
 
-class SetPaguRequest(BaseModel):
-    pagu: int = Field(ge=0)
+class SetUangJalanAwalRequest(BaseModel):
+    uang_jalan_awal: int = Field(ge=0)
 
 
 class JobUangJalan(BaseModel):

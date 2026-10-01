@@ -8,7 +8,7 @@ from app.modules.auth.schemas import OkResponse
 from app.modules.uang_jalan.schemas import (
     JobUangJalan,
     RejectRequestInput,
-    SetPaguRequest,
+    SetUangJalanAwalRequest,
     SumberDana,
     UangJalan,
     UangJalanInput,
@@ -62,9 +62,11 @@ async def job_uang_jalan(job_id: str, svc: UangJalanService = Depends(get_servic
     return await svc.job_summary(job_id)
 
 
-@router.put("/jobs/{job_id}/uang-jalan/pagu", response_model=OkResponse)
-async def set_pagu(job_id: str, payload: SetPaguRequest, svc: UangJalanService = Depends(get_service)) -> OkResponse:
-    await svc.set_pagu(job_id, payload.pagu)
+@router.put("/jobs/{job_id}/uang-jalan/awal", response_model=OkResponse)
+async def set_uang_jalan_awal(
+    job_id: str, payload: SetUangJalanAwalRequest, svc: UangJalanService = Depends(get_service)
+) -> OkResponse:
+    await svc.set_uang_jalan_awal(job_id, payload.uang_jalan_awal)
     return OkResponse()
 
 
@@ -74,7 +76,7 @@ async def create_uang_jalan(
     auth: AuthContext = Depends(require_auth),
     svc: UangJalanService = Depends(get_service),
 ) -> UangJalan:
-    """Transaksi tanpa berkas — hanya untuk `penambahan_pagu`. Pencairan pakai endpoint multipart."""
+    """Transaksi tanpa berkas — hanya untuk `tambahan`. Pencairan pakai endpoint multipart."""
     return await svc.create(payload, created_by=auth.user.id)
 
 

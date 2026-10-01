@@ -126,7 +126,7 @@ async function parseError(res: Response): Promise<ApiError> {
 const AKSI_UBAH = new Set([
   "status", "validate", "return", "cancel", "accept", "deactivate", "pin",
   "resolve", "reset-password", "tolak", "read", "read-all", "password",
-  "calibrate", "sync-mileage", "active", "pagu"
+  "calibrate", "sync-mileage", "active", "awal"
 ]);
 
 /** "Gagal menambah/mengubah/menghapus data" untuk permintaan tulis. */

@@ -108,16 +108,16 @@ class TestUangJalan:
 
         tx = [
             UangJalan(id="1", job_id="j", jenis="pencairan", tanggal="2026-09-01", jumlah=500_000, created_at="x"),
-            UangJalan(id="2", job_id="j", jenis="penambahan_pagu", tanggal="2026-09-02", jumlah=200_000, created_at="x"),
+            UangJalan(id="2", job_id="j", jenis="tambahan", tanggal="2026-09-02", jumlah=200_000, created_at="x"),
             UangJalan(id="3", job_id="j", jenis="pencairan", tanggal="2026-09-03", jumlah=300_000, created_at="x"),
         ]
         r = hitung_ringkasan(1_000_000, tx)
-        assert r.pagu == 1_200_000
+        assert r.uang_jalan == 1_200_000
         assert r.cair == 800_000
         assert r.sisa == 400_000
         assert r.persen_cair == 67
 
-    def test_zero_pagu(self) -> None:
+    def test_zero_uang_jalan(self) -> None:
         assert hitung_ringkasan(0, []).persen_cair == 0
 
 
@@ -250,7 +250,7 @@ class TestStatusFlow:
     def test_public_select_hides_internal_columns(self) -> None:
         from app.modules.jobs.mappers import DRIVER_JOB_SELECT, PUBLIC_JOB_SELECT
 
-        for col in ("uang_jalan_pagu", "validator", "quotation", "  catatan"):
+        for col in ("uang_jalan_awal", "validator", "quotation", "  catatan"):
             assert col not in PUBLIC_JOB_SELECT
-        assert "uang_jalan_pagu" not in DRIVER_JOB_SELECT
+        assert "uang_jalan_awal" not in DRIVER_JOB_SELECT
         assert "unit:units" in DRIVER_JOB_SELECT

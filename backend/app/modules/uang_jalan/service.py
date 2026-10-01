@@ -1,8 +1,8 @@
-"""Uang jalan: pagu, pengajuan driver, pencairan berbukti, posisi per job.
+"""Uang jalan: uang jalan awal & tambahan, pengajuan driver, pencairan berbukti, posisi per job.
 
 Aturan (PRD v2 §7.2):
-- Pagu wajib diisi saat job dibuat; penambahan pagu tetap lewat transaksi.
-- Driver mengajukan nominal ≤ sisa pagu (ditegakkan RPC `driver_request_uang_jalan`).
+- Uang jalan awal wajib diisi saat job dibuat; tambahan uang jalan lewat transaksi.
+- Driver mengajukan nominal ≤ sisa uang jalan (ditegakkan RPC `driver_request_uang_jalan`).
 - Pencairan admin wajib menyertakan foto bukti transfer (trigger DB menolak
   tanpa bukti). Bukti disimpan di bucket privat dan dibaca lewat signed URL.
 """
@@ -95,7 +95,7 @@ def to_posisi(row: dict[str, Any] | None) -> UangJalanPosisi | None:
     if not row:
         return None
     return UangJalanPosisi(
-        pagu=num(row.get("pagu")),
+        uang_jalan=num(row.get("uang_jalan")),
         cair=num(row.get("cair")),
         sisa=num(row.get("sisa")),
         ada_bukti=bool(row.get("ada_bukti")),
@@ -108,12 +108,12 @@ def _rupiah(n: float) -> str:
 
 
 def _validate(payload: UangJalanInput) -> None:
-    """Pencairan wajib menyebut kasnya; penambahan pagu tidak boleh punya sumber."""
+    """Pencairan wajib menyebut kasnya; tambahan uang jalan tidak boleh punya sumber."""
     if payload.jumlah <= 0:
         raise ValidationError("Jumlah harus lebih dari nol")
     if payload.jenis == "pencairan" and not payload.sumber_dana_id:
         raise ValidationError("Uang yang dikasih harus menyebut dari kas mana")
-    if payload.jenis == "penambahan_pagu" and payload.sumber_dana_id:
+    if payload.jenis == "tambahan" and payload.sumber_dana_id:
         raise ValidationError("Tambahan uang jalan tidak memakai sumber dana — itu kesepakatan, bukan uang keluar")
 
 
@@ -200,11 +200,11 @@ class UangJalanService:
         return to_posisi(first(res.data))
 
     async def job_summary(self, job_id: str, *, with_bukti_url: bool = True) -> JobUangJalan:
-        job = single(await self._db.table("jobs").select("uang_jalan_pagu").eq("id", job_id).maybe_single().execute())
+        job = single(await self._db.table("jobs").select("uang_jalan_awal").eq("id", job_id).maybe_single().execute())
         transaksi = await self.list_by_job(job_id, with_bukti_url=with_bukti_url)
         return JobUangJalan(
             transaksi=transaksi,
-            ringkasan=hitung_ringkasan(num((job or {}).get("uang_jalan_pagu")), transaksi),  # type: ignore[arg-type]
+            ringkasan=hitung_ringkasan(num((job or {}).get("uang_jalan_awal")), transaksi),  # type: ignore[arg-type]
             pengajuan=await self.list_requests_by_job(job_id),
             posisi=await self.posisi(job_id),
         )
@@ -217,7 +217,7 @@ class UangJalanService:
         res = await (
             self._db.table("jobs")
             .select(
-                "id, job_number, status_job, asal, tujuan, etd, uang_jalan_pagu,"
+                "id, job_number, status_job, asal, tujuan, etd, uang_jalan_awal,"
                 " unit:units(kode_unit), driver:drivers(nama),"
                 " customer:customers(nama_perusahaan),"
                 " uang_jalan(id, jenis, jumlah, tanggal),"
@@ -242,7 +242,7 @@ class UangJalanService:
                 )
                 for t in (r.get("uang_jalan") or [])
             ]
-            ringkasan = hitung_ringkasan(num(r.get("uang_jalan_pagu")), transaksi)  # type: ignore[arg-type]
+            ringkasan = hitung_ringkasan(num(r.get("uang_jalan_awal")), transaksi)  # type: ignore[arg-type]
             pencairan = sorted(t.tanggal for t in transaksi if t.jenis == "pencairan")
             out.append(
                 UangJalanJobRow(
@@ -370,10 +370,10 @@ class UangJalanService:
         await self._tolak_bila_dari_pengajuan(uang_jalan_id, "dihapus")
         await self._db.table("uang_jalan").update({STATUS: DIHAPUS}).eq("id", uang_jalan_id).execute()
 
-    async def set_pagu(self, job_id: str, pagu: int) -> None:
-        """Pagu awal disimpan di job; kenaikan sesudahnya dicatat sebagai
-        transaksi 'penambahan_pagu' supaya ada jejaknya."""
-        await self._db.table("jobs").update({"uang_jalan_pagu": pagu}).eq("id", job_id).execute()
+    async def set_uang_jalan_awal(self, job_id: str, uang_jalan_awal: int) -> None:
+        """Uang jalan awal disimpan di job; kenaikan sesudahnya dicatat sebagai
+        transaksi 'tambahan' supaya ada jejaknya."""
+        await self._db.table("jobs").update({"uang_jalan_awal": uang_jalan_awal}).eq("id", job_id).execute()
 
     async def reject_request(self, request_id: str, *, alasan: str | None, decided_by: str) -> None:
         req = single(

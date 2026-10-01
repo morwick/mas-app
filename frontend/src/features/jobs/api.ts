@@ -30,8 +30,8 @@ export interface JobInput {
   driver_id: string;
   etd: string;
   eta?: string | null;
-  /** BR-04: pagu uang jalan, wajib saat membuat job. */
-  uang_jalan_pagu?: number;
+  /** BR-04: uang jalan awal, wajib saat membuat job. */
+  uang_jalan_awal?: number;
   catatan?: string | null;
   /** Diisi bila job lahir dari penawaran yang sudah deal. */
   quotation_id?: string | null;

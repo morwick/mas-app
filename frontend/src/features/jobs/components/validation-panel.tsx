@@ -16,8 +16,8 @@ import type { Job, PhotoStage } from "@/types";
 
 interface Props {
   job: Job;
-  /** Ringkasan uang jalan untuk ditampilkan (pagu, cair, pengajuan menunggu). */
-  uangJalan?: { pagu: number; cair: number; pending: number } | null;
+  /** Ringkasan uang jalan untuk ditampilkan (uang jalan job, cair, pengajuan menunggu). */
+  uangJalan?: { total: number; cair: number; pending: number } | null;
 }
 
 type ReturnTo = "loading" | "dalam_perjalanan" | "unloading" | "serah_terima_pool";
@@ -107,7 +107,7 @@ export function ValidationPanel({ job, uangJalan }: Props) {
             <div className="caption">Uang jalan</div>
             <div className="text-[13px]">
               Cair {new Intl.NumberFormat("id-ID").format(uangJalan.cair)} / uang jalan{" "}
-              {new Intl.NumberFormat("id-ID").format(uangJalan.pagu)}
+              {new Intl.NumberFormat("id-ID").format(uangJalan.total)}
               {uangJalan.pending > 0 && (
                 <span className="text-status-cancelled-fg"> · {uangJalan.pending} pengajuan menunggu</span>
               )}

@@ -129,7 +129,7 @@ export function NewJobView({
     etd: "",
     eta: "",
     // BR-04: uang jalan sudah diketahui sejak awal — wajib.
-    uang_jalan_pagu: "",
+    uang_jalan_awal: "",
     catatan: prefill?.catatan ?? ""
   });
   const [error, setError] = useState<Record<string, string>>({});
@@ -312,7 +312,7 @@ export function NewJobView({
     form.unit_id &&
     form.driver_id &&
     form.etd &&
-    Number(form.uang_jalan_pagu) > 0;
+    Number(form.uang_jalan_awal) > 0;
 
   async function doSubmit() {
     setLoading(true);
@@ -322,7 +322,7 @@ export function NewJobView({
         ...form,
         // Hanya dikirim bila unit ini memang memakai unit trailer.
         unit_trailer_id: trailerWajib ? form.unit_trailer_id || null : null,
-        uang_jalan_pagu: Math.round(Number(form.uang_jalan_pagu)),
+        uang_jalan_awal: Math.round(Number(form.uang_jalan_awal)),
         quotation_id: prefill?.quotation_id ?? null,
         quotation_item_id: prefill?.quotation_item_id ?? null
       }
@@ -357,7 +357,7 @@ export function NewJobView({
     Object.assign(errs, validateSchedule(form.etd, form.eta));
     // ETA kosong hanya boleh bila sistem bisa menghitungnya dari rute.
     if (!form.eta && estimasi.isError) errs.eta = ETA_TIDAK_TERHITUNG_MESSAGE;
-    //if (!(Number(form.uang_jalan_pagu) > 0)) errs.uang_jalan_pagu = "Uang jalan wajib diisi";
+    //if (!(Number(form.uang_jalan_awal) > 0)) errs.uang_jalan_awal = "Uang jalan wajib diisi";
     if (!form.pic_no_hp.trim()) errs.pic_no_hp = "No HP PIC wajib diisi";
     else if (!/^(08|\+628)\d{7,12}$/.test(form.pic_no_hp.trim()))
       errs.pic_no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
@@ -628,9 +628,9 @@ export function NewJobView({
             >
               <CurrencyInput
                 placeholder="2.500.000"
-                value={form.uang_jalan_pagu}
-                onChange={(v) => set("uang_jalan_pagu", v)}
-                error={error.uang_jalan_pagu}
+                value={form.uang_jalan_awal}
+                onChange={(v) => set("uang_jalan_awal", v)}
+                error={error.uang_jalan_awal}
               />
             </Field>
           </div>

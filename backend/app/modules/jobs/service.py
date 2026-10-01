@@ -511,7 +511,7 @@ class JobService:
             "etd": _to_iso(payload.etd),
             "eta": eta_iso,
             "eta_is_estimated": eta_is_estimated,
-            "uang_jalan_pagu": payload.uang_jalan_pagu,
+            "uang_jalan_awal": payload.uang_jalan_awal,
             "catatan": clean_text(payload.catatan),
             "quotation_id": quotation_id,
             "quotation_item_id": quotation_item_id,
