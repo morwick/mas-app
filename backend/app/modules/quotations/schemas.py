@@ -21,6 +21,11 @@ class QuotationItem(BaseModel):
     qty: int
     satuan: str
     nama_alat: str | None = None
+    # Rute (kode hr.kecamatan) & jenis unit — dasar rekomendasi harga terakhir.
+    # Item lama (sebelum migration 20261001000003) kosong: rutenya teks bebas.
+    dari_kecamatan_kode: str | None = None
+    tujuan_kecamatan_kode: str | None = None
+    jenis_unit_id: str | None = None
     # Harga awal penawaran — tidak pernah ditimpa oleh revisi.
     harga_satuan: float
     # Dihitung database (qty × harga_satuan).
@@ -125,12 +130,42 @@ class QuotationJobRef(BaseModel):
 
 
 class QuotationItemInput(BaseModel):
+    # Teks yang dicetak di surat.
     dari: str
     tujuan: str
+    # Wajib diisi (dijaga service) — opsional di skema supaya pesan galatnya jelas.
+    dari_kecamatan_kode: str | None = None
+    tujuan_kecamatan_kode: str | None = None
+    jenis_unit_id: str | None = None
     qty: float
     satuan: str = "Unit"
     nama_alat: str | None = None
     harga_satuan: float
+
+
+class RekomendasiHarga(BaseModel):
+    """Harga terakhir untuk rute + jenis unit yang sama (lihat
+    transport.rekomendasi_harga_penawaran, migration 20261001000003)."""
+
+    # customer = penawaran ke customer yang sama; semua = semua customer.
+    lingkup: Literal["customer", "semua"]
+    # deal = item disetujui (harga revisi bila ada); menunggu = belum diputuskan.
+    kategori: Literal["deal", "menunggu"]
+    quotation_id: str
+    quote_number: str
+    customer_nama: str
+    tanggal: str
+    berlaku_sampai: str | None = None
+    # Masa berlaku surat sudah lewat (hanya untuk kategori menunggu).
+    kedaluwarsa: bool = False
+    diputuskan_at: str | None = None
+    # Harga satuan yang berlaku (revisi bila ada).
+    harga: float
+    harga_satuan: float
+    harga_revisi: float | None = None
+    nama_alat: str | None = None
+    qty: int
+    satuan: str
 
 
 class QuotationInput(BaseModel):

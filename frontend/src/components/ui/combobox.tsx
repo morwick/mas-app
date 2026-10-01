@@ -44,6 +44,11 @@ interface ComboboxProps {
    * daftar nama orang: tidak semua nama langsung terpampang saat dibuka.
    */
   minQueryLength?: number;
+  /**
+   * Batas jumlah opsi yang dirender. Untuk daftar sangat panjang (mis. ribuan
+   * kecamatan) supaya popup tetap ringan; sisanya dicapai dengan mengetik.
+   */
+  maxResults?: number;
   className?: string;
   style?: React.CSSProperties;
   id?: string;
@@ -75,6 +80,7 @@ export function Combobox({
   clearable,
   emptyText = "Tidak ada hasil",
   minQueryLength = 0,
+  maxResults,
   className,
   style,
   id
@@ -104,11 +110,15 @@ export function Combobox({
 
   const queryTooShort = query.trim().length < minQueryLength;
 
-  const filtered = useMemo(() => {
-    if (queryTooShort) return [];
+  const { filtered, totalMatches } = useMemo(() => {
+    if (queryTooShort) return { filtered: [], totalMatches: 0 };
     const terms = normalize(query).split(/\s+/).filter(Boolean);
-    return options.filter((o) => matches(o, terms));
-  }, [options, query, queryTooShort]);
+    const all = options.filter((o) => matches(o, terms));
+    return {
+      filtered: maxResults && all.length > maxResults ? all.slice(0, maxResults) : all,
+      totalMatches: all.length
+    };
+  }, [options, query, queryTooShort, maxResults]);
 
   const reposition = useCallback(() => {
     const el = triggerRef.current;
@@ -331,6 +341,11 @@ export function Combobox({
                   {option.hint && <span className="combobox-hint">{option.hint}</span>}
                 </div>
               ))
+            )}
+            {totalMatches > filtered.length && (
+              <p className="combobox-empty">
+                Menampilkan {filtered.length} dari {totalMatches} — ketik lebih spesifik
+              </p>
             )}
           </div>
         </div>,

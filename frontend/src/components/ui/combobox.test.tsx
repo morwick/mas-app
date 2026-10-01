@@ -161,4 +161,27 @@ describe("Combobox", () => {
     fireEvent.change(search, { target: { value: "bumi" } });
     expect(screen.getAllByRole("option")).toHaveLength(1);
   });
+  it("maxResults membatasi opsi yang dirender dan memberi tahu sisanya", () => {
+    const banyak: ComboboxOption[] = Array.from({ length: 120 }, (_, i) => ({
+      value: `k${i}`,
+      label: `Kecamatan ${i}`,
+      hint: "Riau"
+    }));
+    render(
+      <Combobox value="" onChange={() => {}} options={banyak} minQueryLength={2} maxResults={50} />
+    );
+    openList();
+    // Belum mengetik minimal 2 huruf → belum ada opsi.
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+    const search = screen.getByPlaceholderText("Ketik untuk mencari…");
+    fireEvent.change(search, { target: { value: "riau" } });
+    expect(screen.getAllByRole("option")).toHaveLength(50);
+    expect(screen.getByText("Menampilkan 50 dari 120 — ketik lebih spesifik")).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: "kecamatan 11" } });
+    // "Kecamatan 11", "110"–"119" = 11 hasil → semuanya tampil, tanpa catatan.
+    expect(screen.getAllByRole("option")).toHaveLength(11);
+    expect(screen.queryByText(/ketik lebih spesifik/)).toBeNull();
+  });
 });

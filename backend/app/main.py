@@ -25,6 +25,7 @@ from app.modules.invoices.router import router as invoices_router
 from app.modules.jenis_unit.router import router as jenis_unit_router
 from app.modules.jobs.router import router as jobs_router
 from app.modules.karyawan.router import router as karyawan_router
+from app.modules.kecamatan.router import router as kecamatan_router
 from app.modules.log_sistem.router import router as log_sistem_router
 from app.modules.maintenance.router import router as maintenance_router
 from app.modules.mekanik.router import router as mekanik_router
@@ -51,6 +52,7 @@ def build_api_router() -> APIRouter:
         auth_router,
         users_router,
         jenis_unit_router,
+        kecamatan_router,
         units_router,
         unit_trailer_router,
         penjualan_unit_router,

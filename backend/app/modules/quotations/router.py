@@ -15,6 +15,7 @@ from app.modules.quotations.schemas import (
     QuotationJobRef,
     QuotationListRow,
     QuotationStatus,
+    RekomendasiHarga,
     SetQuotationStatusRequest,
     SimpanKeputusanRequest,
     SuratRevisiRequest,
@@ -47,6 +48,25 @@ async def list_quotations(
 @router.get("/next-number", response_model=NextNumberResponse)
 async def next_number(svc: QuotationService = Depends(get_service)) -> NextNumberResponse:
     return NextNumberResponse(nomor=await svc.peek_next_number())
+
+
+@router.get("/rekomendasi-harga", response_model=list[RekomendasiHarga])
+async def rekomendasi_harga(
+    dari_kecamatan_kode: str = Query(min_length=1),
+    tujuan_kecamatan_kode: str = Query(min_length=1),
+    jenis_unit_id: str = Query(min_length=1),
+    customer_id: str | None = Query(None),
+    kecuali_quotation_id: str | None = Query(None),
+    svc: QuotationService = Depends(get_service),
+) -> list[RekomendasiHarga]:
+    """Harga terakhir rute + jenis unit yang sama, untuk form penawaran."""
+    return await svc.rekomendasi_harga(
+        dari_kecamatan_kode=dari_kecamatan_kode,
+        tujuan_kecamatan_kode=tujuan_kecamatan_kode,
+        jenis_unit_id=jenis_unit_id,
+        customer_id=customer_id,
+        kecuali_quotation_id=kecuali_quotation_id,
+    )
 
 
 @router.get("/{quotation_id}", response_model=Quotation)

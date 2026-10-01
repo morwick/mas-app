@@ -99,13 +99,37 @@ describe("QuotationsListView — periode & kartu monitoring", () => {
     const deal = kartu(/Deal \(disetujui\)/);
     expect(within(deal).getByText("3 item")).toBeTruthy();
     // 12 jt + PPN (0840) + 1,5 jt tanpa PPN (0839).
-    expect(within(deal).getByText(/dari 2 surat · Rp\s?14\.820\.000 · 1 harga direvisi/)).toBeTruthy();
+    expect(within(deal).getByText(/^Rp\s?14\.820\.000 · 1 harga direvisi$/)).toBeTruthy();
 
     // Ditolak per item + item yang tidak sempat diputuskan saat kedaluwarsa.
     const tidak = kartu(/Ditolak \/ kedaluwarsa/);
     expect(within(tidak).getByText("2 item")).toBeTruthy();
     // (5 jt + 1 jt) + PPN — kedua suratnya ber-PPN.
-    expect(within(tidak).getByText(/dari 2 surat · Rp\s?6\.660\.000/)).toBeTruthy();
+    expect(within(tidak).getByText(/^Rp\s?6\.660\.000$/)).toBeTruthy();
+
+    // Menunggu keputusan: hanya item menunggu di surat TERKIRIM (0839), bukan
+    // yang kedaluwarsa (0838). 2 item · 4 jt tanpa PPN.
+    const menunggu = kartu(/^Menunggu keputusan$/);
+    expect(within(menunggu).getByText("2 item")).toBeTruthy();
+    expect(within(menunggu).getByText(/^Rp\s?4\.000\.000$/)).toBeTruthy();
+  });
+
+  it("kartu Menunggu keputusan menampilkan nilai draft secara terpisah", () => {
+    renderView({
+      quotations: [...DATA, row("0841", "2026-09-29", "draft", 2_000_000, { menunggu: 2, nilaiMenunggu: 2_000_000, ppn: true })]
+    });
+    const menunggu = kartu(/^Menunggu keputusan$/);
+    // Item tetap hanya dari surat terkirim; draft 2 jt + PPN 11% ditampilkan terpisah.
+    expect(within(menunggu).getByText("2 item")).toBeTruthy();
+    expect(within(menunggu).getByText(/^Rp\s?4\.000\.000 · \+ Rp\s?2\.220\.000 di draft$/)).toBeTruthy();
+  });
+
+  it("klik kartu Menunggu keputusan menyaring penawaran terkirim yang masih punya item menunggu", () => {
+    renderView();
+    fireEvent.click(kartu(/^Menunggu keputusan$/));
+    expect(screen.getAllByText("0839/SK/MAS").length).toBeGreaterThan(0);
+    expect(screen.queryByText("0838/SK/MAS")).toBeNull();
+    expect(screen.queryByText("0840/SK/MAS")).toBeNull();
   });
 
   it("klik kartu Deal menyaring penawaran yang punya item deal, walau masih terkirim", () => {
@@ -123,7 +147,7 @@ describe("QuotationsListView — periode & kartu monitoring", () => {
     expect(screen.queryByText("0839/SK/MAS")).toBeNull();
   });
 
-  it("hanya tiga kartu; chip Terkirim diberi label Butuh Follow up", () => {
+  it("tanpa kartu lama; chip Terkirim diberi label Butuh Follow up", () => {
     renderView();
     expect(screen.queryByText(/Menunggu respons/)).toBeNull();
     expect(screen.queryByText(/Akan kedaluwarsa \(/)).toBeNull();

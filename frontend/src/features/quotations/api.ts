@@ -6,12 +6,17 @@ import type {
   Quotation,
   QuotationJobRef,
   QuotationListRow,
-  QuotationStatus
+  QuotationStatus,
+  RekomendasiHarga
 } from "@/types";
 
 export interface QuotationItemInput {
+  /** Teks yang dicetak di surat. */
   dari: string;
   tujuan: string;
+  dari_kecamatan_kode: string;
+  tujuan_kecamatan_kode: string;
+  jenis_unit_id: string;
   qty: number;
   satuan: string;
   nama_alat?: string | null;
@@ -44,6 +49,24 @@ export const listQuotations = (opts?: { status?: QuotationStatus; customerId?: s
 
 export const getQuotation = (id: string) => api.get<Quotation>(`/quotations/${id}`);
 export const quotationJobs = (id: string) => api.get<QuotationJobRef[]>(`/quotations/${id}/jobs`);
+export interface RekomendasiHargaParams {
+  dariKecamatanKode: string;
+  tujuanKecamatanKode: string;
+  jenisUnitId: string;
+  customerId?: string;
+  /** Penawaran yang sedang diedit — tidak ikut jadi rekomendasi. */
+  kecualiQuotationId?: string;
+}
+
+export const rekomendasiHarga = (p: RekomendasiHargaParams) =>
+  api.get<RekomendasiHarga[]>("/quotations/rekomendasi-harga", {
+    dari_kecamatan_kode: p.dariKecamatanKode,
+    tujuan_kecamatan_kode: p.tujuanKecamatanKode,
+    jenis_unit_id: p.jenisUnitId,
+    customer_id: p.customerId || undefined,
+    kecuali_quotation_id: p.kecualiQuotationId || undefined
+  });
+
 export const peekNextQuotationNumber = () =>
   api.get<{ nomor: string }>("/quotations/next-number").then((r) => r.nomor);
 

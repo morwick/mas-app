@@ -20,6 +20,7 @@ from app.modules.quotations.schemas import (
     QuotationJobRef,
     QuotationListRow,
     QuotationStatus,
+    RekomendasiHarga,
     SetQuotationStatusRequest,
     SimpanKeputusanRequest,
     SuratRevisiRequest,
@@ -39,6 +40,7 @@ QUOTATION_SELECT = """
 ITEM_SELECT = """
   id, quotation_id, urutan, dari, tujuan, qty, satuan,
   nama_alat, harga_satuan, subtotal,
+  dari_kecamatan_kode, tujuan_kecamatan_kode, jenis_unit_id,
   keputusan, harga_revisi, subtotal_final, alasan_ditolak, diputuskan_at, diputuskan_oleh
 """
 
@@ -75,6 +77,9 @@ def _to_item(r: dict[str, Any], jumlah_job: int = 0, nama: dict[str, str] | None
         qty=int(r["qty"]),
         satuan=r["satuan"],
         nama_alat=r.get("nama_alat"),
+        dari_kecamatan_kode=r.get("dari_kecamatan_kode"),
+        tujuan_kecamatan_kode=r.get("tujuan_kecamatan_kode"),
+        jenis_unit_id=r.get("jenis_unit_id"),
         harga_satuan=harga_satuan,
         subtotal=num(r.get("subtotal")),
         keputusan=r.get("keputusan") or "menunggu",
@@ -149,6 +154,12 @@ def _validate(payload: QuotationInput) -> None:
             raise ValidationError(f'Baris {i}: kolom "Dari" wajib diisi')
         if not it.tujuan.strip():
             raise ValidationError(f'Baris {i}: kolom "Tujuan" wajib diisi')
+        if not (it.dari_kecamatan_kode or "").strip():
+            raise ValidationError(f'Baris {i}: kecamatan "Dari" wajib dipilih')
+        if not (it.tujuan_kecamatan_kode or "").strip():
+            raise ValidationError(f'Baris {i}: kecamatan "Tujuan" wajib dipilih')
+        if not (it.jenis_unit_id or "").strip():
+            raise ValidationError(f"Baris {i}: jenis unit wajib dipilih")
         if it.qty <= 0:
             raise ValidationError(f"Baris {i}: jumlah unit harus lebih dari 0")
         if it.harga_satuan < 0:
@@ -164,6 +175,9 @@ def _item_rows(quotation_id: str, items: list[QuotationItemInput]) -> list[dict[
             "urutan": idx,
             "dari": it.dari.strip(),
             "tujuan": it.tujuan.strip(),
+            "dari_kecamatan_kode": (it.dari_kecamatan_kode or "").strip(),
+            "tujuan_kecamatan_kode": (it.tujuan_kecamatan_kode or "").strip(),
+            "jenis_unit_id": (it.jenis_unit_id or "").strip(),
             "qty": int(it.qty),
             "satuan": it.satuan.strip() or "Unit",
             "nama_alat": clean_text(it.nama_alat),
@@ -295,6 +309,53 @@ class QuotationService:
             return {}
         res = await self._db.rpc("nama_karyawan", {"p_ids": unik}).execute()
         return {r["id"]: r["nama"] for r in rows(res)}
+
+    async def rekomendasi_harga(
+        self,
+        *,
+        dari_kecamatan_kode: str,
+        tujuan_kecamatan_kode: str,
+        jenis_unit_id: str,
+        customer_id: str | None = None,
+        kecuali_quotation_id: str | None = None,
+    ) -> list[RekomendasiHarga]:
+        """Harga terakhir rute + jenis unit yang sama: {customer ini, semua} ×
+        {deal, menunggu}. Penawaran yang sedang diedit dikecualikan."""
+        res = await self._db.rpc(
+            "rekomendasi_harga_penawaran",
+            {
+                "p_dari_kecamatan_kode": dari_kecamatan_kode,
+                "p_tujuan_kecamatan_kode": tujuan_kecamatan_kode,
+                "p_jenis_unit_id": jenis_unit_id,
+                "p_customer_id": customer_id or None,
+                "p_kecuali_quotation_id": kecuali_quotation_id or None,
+            },
+        ).execute()
+        hari_ini = today_wib_str()
+        out = []
+        for r in rows(res):
+            berlaku = r.get("berlaku_sampai")
+            revisi = r.get("harga_revisi")
+            out.append(
+                RekomendasiHarga(
+                    lingkup=r["lingkup"],
+                    kategori=r["kategori"],
+                    quotation_id=r["quotation_id"],
+                    quote_number=r["quote_number"],
+                    customer_nama=r["customer_nama"],
+                    tanggal=r["tanggal"],
+                    berlaku_sampai=berlaku,
+                    kedaluwarsa=r["kategori"] == "menunggu" and bool(berlaku) and str(berlaku)[:10] < hari_ini,
+                    diputuskan_at=r.get("diputuskan_at"),
+                    harga=num(r.get("harga")),
+                    harga_satuan=num(r.get("harga_satuan")),
+                    harga_revisi=None if revisi is None else num(revisi),
+                    nama_alat=r.get("nama_alat"),
+                    qty=int(r.get("qty") or 1),
+                    satuan=r.get("satuan") or "Unit",
+                )
+            )
+        return out
 
     async def catat_cetak(self, quotation_id: str, versi: str) -> None:
         """Setiap cetak surat penawaran tercatat di log sistem (karyawan, waktu, IP)."""

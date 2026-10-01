@@ -393,6 +393,11 @@ export interface QuotationItem {
   qty: number;
   satuan: string;
   nama_alat?: string | null;
+  /** Rute (kode kecamatan) & jenis unit — dasar rekomendasi harga terakhir.
+   *  Kosong di item lama (rutenya masih teks bebas). */
+  dari_kecamatan_kode?: string | null;
+  tujuan_kecamatan_kode?: string | null;
+  jenis_unit_id?: string | null;
   /** Harga awal penawaran — tidak pernah ditimpa oleh revisi. */
   harga_satuan: number;
   /** Dihitung database (qty x harga_satuan), tidak pernah dikirim client. */
@@ -413,6 +418,39 @@ export interface QuotationItem {
 }
 
 export type KeputusanItem = "menunggu" | "deal" | "ditolak";
+
+/** Kecamatan (kode wilayah Kemendagri), untuk rute item penawaran. */
+export interface Kecamatan {
+  kode: string;
+  nama: string;
+  /** Ringkas, mis. "Pekanbaru" / "Jakarta Pusat". */
+  kab_kota: string;
+  /** Resmi, mis. "Kota Pekanbaru" — membedakan Kota & Kabupaten bernama sama. */
+  kab_kota_resmi: string;
+  provinsi: string;
+}
+
+/** Harga terakhir untuk rute + jenis unit yang sama. */
+export interface RekomendasiHarga {
+  /** customer = penawaran ke customer yang sama; semua = semua customer. */
+  lingkup: "customer" | "semua";
+  /** deal = item disetujui (harga revisi bila ada); menunggu = belum diputuskan. */
+  kategori: "deal" | "menunggu";
+  quotation_id: string;
+  quote_number: string;
+  customer_nama: string;
+  tanggal: string;
+  berlaku_sampai?: string | null;
+  kedaluwarsa: boolean;
+  diputuskan_at?: string | null;
+  /** Harga satuan yang berlaku (revisi bila ada). */
+  harga: number;
+  harga_satuan: number;
+  harga_revisi?: number | null;
+  nama_alat?: string | null;
+  qty: number;
+  satuan: string;
+}
 
 export const keputusanItemLabel: Record<KeputusanItem, string> = {
   menunggu: "Menunggu",

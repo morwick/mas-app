@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { getQuotation, listQuotations, peekNextQuotationNumber, quotationJobs } from "./api";
+import {
+  getQuotation,
+  listQuotations,
+  peekNextQuotationNumber,
+  quotationJobs,
+  rekomendasiHarga,
+  type RekomendasiHargaParams
+} from "./api";
 
 export const useQuotations = () =>
   useQuery({ queryKey: ["quotations", "list"], queryFn: () => listQuotations() });
@@ -9,6 +16,15 @@ export const useQuotation = (id: string | undefined) =>
 
 export const useQuotationJobs = (id: string | undefined) =>
   useQuery({ queryKey: ["quotations", "jobs", id], queryFn: () => quotationJobs(id!), enabled: !!id });
+
+/** `null` = rute / jenis unit belum lengkap → tidak memanggil server. */
+export const useRekomendasiHarga = (params: RekomendasiHargaParams | null) =>
+  useQuery({
+    queryKey: ["quotations", "rekomendasi-harga", params],
+    queryFn: () => rekomendasiHarga(params!),
+    enabled: !!params,
+    staleTime: 60_000
+  });
 
 export const useNextQuotationNumber = () =>
   useQuery({ queryKey: ["quotations", "next-number"], queryFn: peekNextQuotationNumber, staleTime: 0 });

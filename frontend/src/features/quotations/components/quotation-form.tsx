@@ -2,17 +2,22 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DateInput } from "@/components/ui/date-input";
 import { Link } from "react-router-dom";
-import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { Combobox } from "@/components/ui/combobox";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import {
   createQuotation,
   updateQuotation,
   type QuotationInput
 } from "@/features/quotations/api";
-import type { Customer, Quotation } from "@/types";
+import { useCustomerQuotationCounts } from "@/features/customers/queries";
+import { teksKecamatan } from "@/features/kecamatan/api";
+import { useKecamatan } from "@/features/kecamatan/queries";
+import { useJenisUnit } from "@/features/settings/queries";
+import { RekomendasiHargaPanel } from "./rekomendasi-harga-panel";
+import type { Customer, Kecamatan, Quotation } from "@/types";
 import { formatRupiah, hariIniWIB, tambahHari } from "@/lib/utils";
 
 interface Props {
@@ -26,8 +31,12 @@ interface Props {
 
 interface ItemForm {
   key: string;
+  /** Teks yang dicetak di surat — otomatis dari kecamatan, boleh diubah. */
   dari: string;
   tujuan: string;
+  dari_kecamatan_kode: string;
+  tujuan_kecamatan_kode: string;
+  jenis_unit_id: string;
   qty: string;
   satuan: string;
   nama_alat: string;
@@ -41,6 +50,9 @@ function newItem(): ItemForm {
     key: `it-${keySeq}`,
     dari: "",
     tujuan: "",
+    dari_kecamatan_kode: "",
+    tujuan_kecamatan_kode: "",
+    jenis_unit_id: "",
     qty: "1",
     satuan: "Unit",
     nama_alat: "",
@@ -57,6 +69,49 @@ function parseRupiah(s: string): number {
 function displayRupiah(s: string): string {
   const n = parseRupiah(s);
   return n ? new Intl.NumberFormat("id-ID").format(n) : "";
+}
+
+/**
+ * Teks rute yang dicetak di surat. Otomatis mengikuti kecamatan; kolom isian
+ * baru muncul kalau admin ingin mengubahnya (mis. menulis nama site).
+ */
+function TeksSurat({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [ubah, setUbah] = useState(false);
+  if (ubah) {
+    return (
+      <div style={{ marginTop: 6 }}>
+        <Input
+          autoFocus
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setUbah(false)}
+          placeholder="Teks di surat, mis. Site PT X, Kec. Tampan"
+        />
+      </div>
+    );
+  }
+  if (!value) return null;
+  return (
+    <p className="field-helper" style={{ marginTop: 4 }}>
+      Di surat: <span style={{ color: "var(--text-primary)" }}>{value}</span> ·{" "}
+      <button
+        type="button"
+        onClick={() => setUbah(true)}
+        style={{
+          border: "none",
+          background: "none",
+          padding: 0,
+          cursor: "pointer",
+          color: "var(--brand-primary-dark)",
+          textDecoration: "underline",
+          textUnderlineOffset: 2,
+          font: "inherit"
+        }}
+      >
+        ubah
+      </button>
+    </p>
+  );
 }
 
 /** Tanggal + 1 hari — batas minimum "Berlaku sampai" di date picker. */
@@ -102,6 +157,9 @@ export function QuotationForm({
           key: `it-${keySeq}`,
           dari: it.dari,
           tujuan: it.tujuan,
+          dari_kecamatan_kode: it.dari_kecamatan_kode ?? "",
+          tujuan_kecamatan_kode: it.tujuan_kecamatan_kode ?? "",
+          jenis_unit_id: it.jenis_unit_id ?? "",
           qty: String(it.qty),
           satuan: it.satuan,
           nama_alat: it.nama_alat ?? "",
@@ -111,6 +169,39 @@ export function QuotationForm({
     }
     return [newItem()];
   });
+
+  const quotationCounts = useCustomerQuotationCounts();
+  const jumlahPenawaranCustomer = form.customer_id
+    ? (quotationCounts.data?.[form.customer_id] ?? 0)
+    : 0;
+
+  const kecamatan = useKecamatan();
+  const jenisUnit = useJenisUnit();
+
+  const kecamatanByKode = useMemo(() => {
+    const m = new Map<string, Kecamatan>();
+    for (const k of kecamatan.data ?? []) m.set(k.kode, k);
+    return m;
+  }, [kecamatan.data]);
+
+  const kecamatanOptions = useMemo<ComboboxOption[]>(
+    () =>
+      (kecamatan.data ?? []).map((k) => ({
+        value: k.kode,
+        label: teksKecamatan(k),
+        // Nama resmi ikut dicari: "kota bogor" vs "kabupaten bogor".
+        hint: `${k.kab_kota_resmi}, ${k.provinsi}`
+      })),
+    [kecamatan.data]
+  );
+
+  // Jenis unit nonaktif tetap muncul kalau sudah terpilih di item (edit).
+  const jenisUnitOptions = useMemo<ComboboxOption[]>(() => {
+    const dipakai = new Set(items.map((it) => it.jenis_unit_id));
+    return (jenisUnit.data ?? [])
+      .filter((j) => j.is_active || dipakai.has(j.id))
+      .map((j) => ({ value: j.id, label: j.nama }));
+  }, [jenisUnit.data, items]);
 
   const selectedCustomer = useMemo(
     () => customers.find((c) => c.id === form.customer_id) ?? null,
@@ -138,6 +229,13 @@ export function QuotationForm({
     setItems((rows) =>
       rows.map((r) => (r.key === key ? { ...r, ...patch } : r))
     );
+  }
+
+  /** Pilih kecamatan; teks di surat selalu ikut kecamatan yang baru dipilih. */
+  function pilihKecamatan(key: string, sisi: "dari" | "tujuan", kode: string) {
+    const kodeField = sisi === "dari" ? "dari_kecamatan_kode" : "tujuan_kecamatan_kode";
+    const baru = kecamatanByKode.get(kode);
+    setItem(key, { [kodeField]: kode, [sisi]: baru ? teksKecamatan(baru) : "" });
   }
 
   function addItem() {
@@ -191,6 +289,9 @@ export function QuotationForm({
       items: items.map((it) => ({
         dari: it.dari,
         tujuan: it.tujuan,
+        dari_kecamatan_kode: it.dari_kecamatan_kode,
+        tujuan_kecamatan_kode: it.tujuan_kecamatan_kode,
+        jenis_unit_id: it.jenis_unit_id,
         qty: Number(it.qty) || 0,
         satuan: it.satuan,
         nama_alat: it.nama_alat,
@@ -278,6 +379,33 @@ export function QuotationForm({
               placeholder="— pilih customer —"
               searchPlaceholder="Cari nama customer…"
             />
+            {/* Riwayat penawaran customer terpilih — dibuka di tab baru supaya
+                isian form ini tidak hilang. */}
+            {form.customer_id && !quotationCounts.isLoading && (
+              <p className="field-helper">
+                {jumlahPenawaranCustomer > 0 ? (
+                  <a
+                    href={`/quotations?customer_id=${form.customer_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontWeight: 600,
+                      color: "var(--brand-primary-dark)",
+                      textDecoration: "underline",
+                      textUnderlineOffset: 2
+                    }}
+                  >
+                    Lihat {jumlahPenawaranCustomer} penawaran customer ini
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  "Belum pernah ada penawaran untuk customer ini"
+                )}
+              </p>
+            )}
           </Field>
 
           <Field
@@ -438,20 +566,42 @@ export function QuotationForm({
               </div>
 
               <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-                <Field label="Dari" required>
-                  <Input
-                    value={it.dari}
-                    onChange={(e) => setItem(it.key, { dari: e.target.value })}
-                    placeholder="mis. Pekanbaru"
+                <Field label="Jenis unit" required>
+                  <Combobox
+                    value={it.jenis_unit_id}
+                    onChange={(v) => setItem(it.key, { jenis_unit_id: v })}
+                    options={jenisUnitOptions}
+                    placeholder="— pilih jenis unit —"
+                    searchPlaceholder="Cari jenis unit…"
                   />
                 </Field>
-                <Field label="Tujuan" required>
-                  <Input
-                    value={it.tujuan}
-                    onChange={(e) => setItem(it.key, { tujuan: e.target.value })}
-                    placeholder="mis. Desa Pangkalan Baru, Siak Hulu"
+                <Field label="Dari (kecamatan)" required>
+                  <Combobox
+                    value={it.dari_kecamatan_kode}
+                    onChange={(v) => pilihKecamatan(it.key, "dari", v)}
+                    options={kecamatanOptions}
+                    placeholder={kecamatan.isLoading ? "Memuat kecamatan…" : "— pilih kecamatan —"}
+                    searchPlaceholder="Ketik kecamatan / kota…"
+                    minQueryLength={2}
+                    maxResults={50}
                   />
+                  <TeksSurat value={it.dari} onChange={(v) => setItem(it.key, { dari: v })} />
                 </Field>
+                <Field label="Tujuan (kecamatan)" required>
+                  <Combobox
+                    value={it.tujuan_kecamatan_kode}
+                    onChange={(v) => pilihKecamatan(it.key, "tujuan", v)}
+                    options={kecamatanOptions}
+                    placeholder={kecamatan.isLoading ? "Memuat kecamatan…" : "— pilih kecamatan —"}
+                    searchPlaceholder="Ketik kecamatan / kota…"
+                    minQueryLength={2}
+                    maxResults={50}
+                  />
+                  <TeksSurat value={it.tujuan} onChange={(v) => setItem(it.key, { tujuan: v })} />
+                </Field>
+              </div>
+
+              <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", marginTop: 10 }}>
                 <Field label="Jumlah" required>
                   <Input
                     type="number"
@@ -486,6 +636,16 @@ export function QuotationForm({
                   />
                 </Field>
               </div>
+
+              <RekomendasiHargaPanel
+                dariKecamatanKode={it.dari_kecamatan_kode}
+                tujuanKecamatanKode={it.tujuan_kecamatan_kode}
+                jenisUnitId={it.jenis_unit_id}
+                jenisUnitNama={jenisUnit.data?.find((j) => j.id === it.jenis_unit_id)?.nama}
+                customerId={form.customer_id}
+                kecualiQuotationId={quotation?.id}
+                onPakai={(harga) => setItem(it.key, { harga_satuan: String(harga) })}
+              />
 
               <div
                 style={{

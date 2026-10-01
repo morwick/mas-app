@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, ChevronRight, FileText, Handshake, Plus, Search, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, FileText, Handshake, Hourglass, Plus, Search, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
@@ -30,13 +30,15 @@ interface Props {
 // daftar kerja admin: penawaran yang sudah disetujui tapi belum dijadwalkan.
 // Dari kartu monitoring: "ada_item_deal" = punya item disetujui (status
 // penawarannya bisa masih terkirim bila item lain belum diputuskan);
-// "tidak_deal" = ditolak + kedaluwarsa.
+// "tidak_deal" = ditolak + kedaluwarsa; "ada_item_menunggu" = terkirim & masih
+// ada item yang belum diputuskan customer (peluang yang akan datang).
 type FilterKey =
   | "all"
   | QuotationStatus
   | "deal_pending"
   | "akan_kedaluwarsa"
   | "ada_item_deal"
+  | "ada_item_menunggu"
   | "tidak_deal";
 
 /** Terkirim & masa berlakunya habis dalam sekian hari (sama dengan dashboard). */
@@ -77,6 +79,13 @@ function denganPpn(row: QuotationListRow, nilai: number): number {
   return row.ppn_aktif ? nilai + Math.round((nilai * Number(row.ppn_persen)) / 100) : nilai;
 }
 
+/** Item yang masih menunggu keputusan customer di penawaran terkirim (belum
+ *  kedaluwarsa) — peluang nominal yang akan datang. Draft belum ditawarkan. */
+function itemMenunggu(row: QuotationListRow): { item: number; nilai: number } {
+  if (row.status !== "terkirim") return { item: 0, nilai: 0 };
+  return { item: row.jumlah_item_menunggu ?? 0, nilai: row.nilai_item_menunggu ?? 0 };
+}
+
 /** Item ditolak, ditambah item yang belum diputuskan saat penawarannya kedaluwarsa. */
 function itemTidakDeal(row: QuotationListRow): { item: number; nilai: number } {
   const lewat = row.status === "kedaluwarsa";
@@ -114,6 +123,65 @@ function pelaksanaan(row: QuotationListRow): Pelaksanaan {
     label: `${jumlah_job_selesai} dari ${jumlah_job} job selesai`,
     tone: "jalan"
   };
+}
+
+interface BagianItem {
+  teks: string;
+  warna: string;
+}
+
+const WARNA_ITEM = {
+  tindakan: "var(--status-pickup-text)",
+  deal: "var(--status-standby-text)",
+  ditolak: "var(--status-cancelled-text)",
+  netral: "var(--text-tertiary)"
+};
+
+/**
+ * Ringkasan item di bawah nama customer — apa yang perlu dilakukan / hasilnya:
+ * draft → "3 item perlu dikirim"; terkirim → "3 item perlu follow up";
+ * sudah ada keputusan → "2 deal · 1 ditolak" (+ sisa yang masih menunggu).
+ */
+export function ringkasanItem(row: QuotationListRow): BagianItem[] {
+  if (row.status === "draft") {
+    return [{ teks: `${row.jumlah_item} item perlu dikirim`, warna: WARNA_ITEM.tindakan }];
+  }
+  const deal = row.jumlah_item_deal ?? 0;
+  const ditolak = row.jumlah_item_ditolak ?? 0;
+  const menunggu = row.jumlah_item_menunggu ?? 0;
+  const lewat = row.status === "kedaluwarsa";
+  if (deal === 0 && ditolak === 0) {
+    return [
+      lewat
+        ? { teks: `${menunggu} item kedaluwarsa`, warna: WARNA_ITEM.netral }
+        : { teks: `${menunggu} item perlu follow up`, warna: WARNA_ITEM.tindakan }
+    ];
+  }
+  const out: BagianItem[] = [];
+  if (deal) out.push({ teks: `${deal} deal`, warna: WARNA_ITEM.deal });
+  if (ditolak) out.push({ teks: `${ditolak} ditolak`, warna: WARNA_ITEM.ditolak });
+  if (menunggu) {
+    out.push(
+      lewat
+        ? { teks: `${menunggu} kedaluwarsa`, warna: WARNA_ITEM.netral }
+        : { teks: `${menunggu} perlu follow up`, warna: WARNA_ITEM.tindakan }
+    );
+  }
+  return out;
+}
+
+function RingkasanItem({ row }: { row: QuotationListRow }) {
+  const bagian = ringkasanItem(row);
+  return (
+    <div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      {bagian.map((b, i) => (
+        <span key={b.teks}>
+          {i > 0 && <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}> · </span>}
+          <span style={{ color: b.warna }}>{b.teks}</span>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 const toneColor: Record<Pelaksanaan["tone"], string> = {
@@ -216,6 +284,9 @@ export function QuotationsListView({
         ...ringkas((r) => ({ item: r.jumlah_item_deal ?? 0, nilai: r.nilai_deal })),
         revisi: periode.reduce((sum, r) => sum + (r.jumlah_item_deal_revisi ?? 0), 0)
       },
+      menunggu: ringkas(itemMenunggu),
+      // Draft belum ditawarkan — ditampilkan terpisah sebagai peluang tambahan.
+      draft: ringkas((r) => (r.status === "draft" ? { item: r.jumlah_item, nilai: r.subtotal } : { item: 0, nilai: 0 })),
       tidakDeal: ringkas(itemTidakDeal)
     };
   }, [periode]);
@@ -229,6 +300,8 @@ export function QuotationsListView({
         if (!akanKedaluwarsa(row, hariIni, batasKedaluwarsa)) return false;
       } else if (filter === "ada_item_deal") {
         if (!(row.jumlah_item_deal ?? 0)) return false;
+      } else if (filter === "ada_item_menunggu") {
+        if (itemMenunggu(row).item === 0) return false;
       } else if (filter === "tidak_deal") {
         if (itemTidakDeal(row).item === 0) return false;
       } else if (filter !== "all" && row.status !== filter) {
@@ -324,7 +397,7 @@ export function QuotationsListView({
       {/* Kartu monitoring — mengikuti periode & customer terpilih. Klik kartu
           = saring tabel ke status itu (klik lagi untuk melepas). */}
       <div className="flex flex-col" style={{ gap: 6 }}>
-        <div className="stat-grid stat-grid-3">
+        <div className="stat-grid">
           <StatCard
             label={`Total penawaran · ${labelPeriode}`}
             value={`${periode.length} surat`}
@@ -334,10 +407,23 @@ export function QuotationsListView({
             onClick={() => setFilter("all")}
           />
           <StatCard
+            label="Menunggu keputusan"
+            value={`${monitor.menunggu.item} item`}
+            sublabel={[
+              formatRupiah(monitor.menunggu.nilai),
+              monitor.draft.item > 0 ? `+ ${formatRupiah(monitor.draft.nilai)} di draft` : null
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            icon={Hourglass}
+            tone="bertugas"
+            active={filter === "ada_item_menunggu"}
+            onClick={() => pilihChip("ada_item_menunggu")}
+          />
+          <StatCard
             label="Deal (disetujui)"
             value={`${monitor.deal.item} item`}
             sublabel={[
-              `dari ${monitor.deal.surat} surat`,
               formatRupiah(monitor.deal.nilai),
               monitor.deal.revisi > 0 ? `${monitor.deal.revisi} harga direvisi` : null
             ]
@@ -351,7 +437,7 @@ export function QuotationsListView({
           <StatCard
             label="Ditolak / kedaluwarsa"
             value={`${monitor.tidakDeal.item} item`}
-            sublabel={`dari ${monitor.tidakDeal.surat} surat · ${formatRupiah(monitor.tidakDeal.nilai)}`}
+            sublabel={formatRupiah(monitor.tidakDeal.nilai)}
             icon={XCircle}
             active={filter === "tidak_deal"}
             onClick={() => pilihChip("tidak_deal")}
@@ -359,7 +445,8 @@ export function QuotationsListView({
         </div>
         <p className="caption">
           1 surat penawaran bisa berisi beberapa item (rute). Nilai dihitung seperti kolom Nilai di tabel: sudah
-          termasuk PPN bila suratnya memakai PPN. Item deal memakai harga setelah revisi.
+          termasuk PPN bila suratnya memakai PPN. Item deal memakai harga setelah revisi. Menunggu keputusan =
+          item di penawaran terkirim yang belum dijawab customer; nilai draft (belum dikirim) ditampilkan terpisah.
           Klik kartu untuk menyaring tabel.
         </p>
       </div>
@@ -450,20 +537,10 @@ export function QuotationsListView({
                       </Link>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13.5 }} title={row.objek ?? undefined}>
                         {row.customer_nama}
                       </div>
-                      <div
-                        style={{
-                          fontSize: 11.5,
-                          color: "var(--text-tertiary)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap"
-                        }}
-                      >
-                        {row.objek || `${row.jumlah_item} baris rincian`}
-                      </div>
+                      <RingkasanItem row={row} />
                     </td>
                     <td className="muted" style={{ fontSize: 12.5 }}>
                       {formatDate(row.tanggal)}
@@ -558,11 +635,7 @@ export function QuotationsListView({
                 <div style={{ fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
                   {row.customer_nama}
                 </div>
-                {row.objek && (
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                    {row.objek}
-                  </div>
-                )}
+                <RingkasanItem row={row} />
                 <div
                   style={{
                     display: "flex",
