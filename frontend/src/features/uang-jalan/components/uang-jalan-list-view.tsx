@@ -15,7 +15,7 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: "pengajuan", label: "Ada pengajuan driver" },
   { key: "berjalan", label: "Masih jalan" },
   { key: "belum_cair", label: "Belum dikasih sama sekali" },
-  { key: "lewat_pagu", label: "Lebih dari pagu" }
+  { key: "lewat_pagu", label: "Lebih dari uang jalan" }
 ];
 
 interface Props {
@@ -166,7 +166,7 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
                   <th>Job</th>
                   <th>Unit / Supir</th>
                   <th>Rute</th>
-                  <th style={{ textAlign: "right" }}>Pagu</th>
+                  <th style={{ textAlign: "right" }}>Uang jalan</th>
                   <th style={{ textAlign: "right" }}>Dikasih</th>
                   <th style={{ textAlign: "right" }}>Belum dikasih</th>
                   <th style={{ textAlign: "right" }}>Terakhir</th>

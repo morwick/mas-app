@@ -63,7 +63,7 @@ class _BodyState extends ConsumerState<_Body> {
     } else if (pending != null) {
       hint = 'Pengajuan ${formatRupiah(pending.nominal)} menunggu pencairan admin.';
     } else if (posisi != null && posisi.sisa <= 0) {
-      hint = 'Pagu uang jalan sudah cair seluruhnya.';
+      hint = 'Uang jalan sudah cair seluruhnya.';
     }
 
     return Column(
@@ -132,9 +132,9 @@ class _BodyState extends ConsumerState<_Body> {
     return [
       const SizedBox(height: 10),
       if (posisi != null) ...[
-        _Row('Pagu job', formatRupiah(posisi.pagu)),
+        _Row('Uang jalan job', formatRupiah(posisi.pagu)),
         _Row('Sudah diterima', formatRupiah(posisi.cair)),
-        _Row('Sisa pagu', formatRupiah(posisi.sisa), bold: true),
+        _Row('Sisa uang jalan', formatRupiah(posisi.sisa), bold: true),
         const SizedBox(height: 6),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
@@ -288,7 +288,7 @@ class _AjukanUangJalanSheetState extends ConsumerState<AjukanUangJalanSheet> {
           children: [
             const Text('Ajukan Uang Jalan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text('Sisa pagu: ${formatRupiah(widget.sisa)}', style: const TextStyle(color: MasColors.muted)),
+            Text('Sisa uang jalan: ${formatRupiah(widget.sisa)}', style: const TextStyle(color: MasColors.muted)),
             const SizedBox(height: 16),
             TextFormField(
               controller: _nominal,
@@ -299,7 +299,7 @@ class _AjukanUangJalanSheetState extends ConsumerState<AjukanUangJalanSheet> {
               validator: (v) {
                 final n = parseRupiah(v ?? '');
                 if (n == null || n <= 0) return 'Nominal wajib diisi';
-                if (n > widget.sisa) return 'Melebihi sisa pagu (${formatRupiah(widget.sisa)})';
+                if (n > widget.sisa) return 'Melebihi sisa uang jalan (${formatRupiah(widget.sisa)})';
                 return null;
               },
             ),

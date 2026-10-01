@@ -83,13 +83,22 @@ export function UangJalanModal({
   const angka = Number(jumlah.replace(/[^\d]/g, "")) || 0;
   const pencairan = jenis === "pencairan";
 
-  // Ditampilkan sebagai peringatan, bukan penghalang: pencairan melebihi pagu
-  // memang terjadi di lapangan dan justru itu yang perlu terlihat.
-  const lewatPagu = pencairan && angka > ringkasan.sisa && ringkasan.pagu > 0;
+  // BATASAN: uang yang diberikan ke driver tidak boleh melebihi uang jalan job
+  // (awal + tambahan). Saat mengubah pencairan lama, nominal lamanya ikut
+  // dihitung sebagai sisa. Dijaga juga di database (migration 20261001000007).
+  const batasPemberian =
+    ringkasan.sisa + (existing?.jenis === "pencairan" ? Math.round(existing.jumlah) : 0);
+  const melebihiUangJalan = pencairan && angka > batasPemberian;
 
   async function submit() {
     if (angka <= 0) {
       toast.error("Jumlah harus diisi");
+      return;
+    }
+    if (melebihiUangJalan) {
+      toast.error(
+        `Melebihi sisa uang jalan ${formatRupiah(Math.max(batasPemberian, 0))}. Catat tambahan uang jalan dulu bila memang perlu lebih.`
+      );
       return;
     }
     if (pencairan && !existing && !bukti) {
@@ -129,7 +138,7 @@ export function UangJalanModal({
         ? "Perubahan tersimpan"
         : pencairan
           ? "Sudah dicatat"
-          : "Pagu dinaikkan"
+          : "Uang jalan ditambah"
     );
     onSaved();
     onClose();
@@ -145,7 +154,7 @@ export function UangJalanModal({
       description={
         pencairan
           ? "Uang yang benar-benar keluar dari kas ke supir — wajib dengan foto bukti transfer."
-          : "Kesepakatan menaikkan pagu — belum ada uang yang berpindah."
+          : "Kesepakatan menambah uang jalan — belum ada uang yang berpindah."
       }
       footer={
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -176,7 +185,7 @@ export function UangJalanModal({
                 fontWeight: 600
               }}
             >
-              {j === "pencairan" ? "Kasih uang" : "Tambah pagu"}
+              {j === "pencairan" ? "Kasih uang" : "Tambah uang jalan"}
             </button>
           ))}
         </div>
@@ -215,7 +224,7 @@ export function UangJalanModal({
         hint={
           pencairan
             ? "Boleh dikosongkan"
-            : "Ini yang nanti menjelaskan kenapa pagu membengkak"
+            : "Ini yang nanti menjelaskan kenapa uang jalan bertambah"
         }
       >
         <Input
@@ -282,20 +291,19 @@ export function UangJalanModal({
         />
       </Field>
 
-      {lewatPagu && (
+      {melebihiUangJalan && (
         <div
           style={{
-            background: "#fff7ed",
-            border: "1px solid #fed7aa",
+            background: "#fdf1f1",
+            border: "1px solid #f5c2c2",
             borderRadius: 8,
             padding: "9px 11px",
             fontSize: 12.5,
-            color: "#9a3412"
+            color: "#a32b2b"
           }}
         >
-          Jumlah ini melebihi sisa pagu {formatRupiah(ringkasan.sisa)}. Tetap
-          bisa disimpan — kalau memang pagunya naik, catat dulu sebagai tambah
-          pagu supaya sisanya tidak minus.
+          Jumlah ini melebihi sisa uang jalan {formatRupiah(Math.max(batasPemberian, 0))} dan tidak bisa
+          disimpan. Bila memang perlu lebih, catat dulu sebagai tambah uang jalan.
         </div>
       )}
     </Modal>

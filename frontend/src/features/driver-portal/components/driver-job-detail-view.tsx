@@ -272,7 +272,7 @@ export function DriverJobDetailView({ job, backTo }: Props) {
           {posisi ? (
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-md bg-page p-2">
-                <div className="text-[11px] text-text-muted">Pagu</div>
+                <div className="text-[11px] text-text-muted">Uang jalan</div>
                 <div className="font-semibold text-[13px]">{formatRupiah(posisi.pagu)}</div>
               </div>
               <div className="rounded-md bg-page p-2">
@@ -475,7 +475,7 @@ export function DriverJobDetailView({ job, backTo }: Props) {
         open={ajukanOpen}
         onClose={() => setAjukanOpen(false)}
         title="Ajukan uang jalan"
-        description={posisi ? `Sisa pagu ${formatRupiah(posisi.sisa)}` : undefined}
+        description={posisi ? `Sisa uang jalan ${formatRupiah(posisi.sisa)}` : undefined}
         footer={
           <>
             <Button variant="secondary" onClick={() => setAjukanOpen(false)}>

@@ -228,7 +228,7 @@ class JobCreate(_JobFields):
     driver_id: str = Field(min_length=1)
     etd: str = Field(min_length=1)
     # BR-04: uang jalan sudah diketahui sejak awal — wajib.
-    uang_jalan_pagu: int = Field(gt=0, description="Pagu uang jalan (rupiah)")
+    uang_jalan_pagu: int = Field(gt=0, description="Uang jalan job (rupiah)")
     # Diisi bila job lahir dari penawaran yang sudah deal.
     quotation_id: str | None = None
     # Wajib bila quotation_id diisi dan penawarannya punya lebih dari satu item deal.

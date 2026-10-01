@@ -567,7 +567,7 @@ export type UangJalanJenis = "pencairan" | "penambahan_pagu";
 
 export const uangJalanJenisLabel: Record<UangJalanJenis, string> = {
   pencairan: "Dikasih",
-  penambahan_pagu: "Tambah pagu"
+  penambahan_pagu: "Tambah uang jalan"
 };
 
 export interface UangJalan {

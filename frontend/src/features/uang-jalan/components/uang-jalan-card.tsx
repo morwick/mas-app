@@ -93,11 +93,20 @@ export function UangJalanCard({
   const minus = ringkasan.sisa < 0;
 
   async function simpanPagu() {
+    // BATASAN: uang jalan awal tidak boleh diturunkan di bawah uang yang sudah
+    // diberikan (dijaga juga di database, migration 20261001000007).
+    const baru = Number(paguDraft) || 0;
+    if (baru + ringkasan.penambahan < ringkasan.cair) {
+      toast.error(
+        `Uang jalan awal terlalu kecil: sudah diberikan ${formatRupiah(ringkasan.cair)} ke driver.`
+      );
+      return;
+    }
     setSaving(true);
     const res = await setPagu(jobId, Number(paguDraft) || 0);
     setSaving(false);
     if (!res.ok) return toast.error(res.error);
-    toast.success("Pagu tersimpan");
+    toast.success("Uang jalan tersimpan");
     setEditPagu(false);
   }
 
@@ -152,7 +161,7 @@ export function UangJalanCard({
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
             <div className="eyebrow" style={{ marginBottom: 4 }}>
-              Pagu borongan
+              Uang jalan awal
             </div>
             <CurrencyInput
               autoFocus
@@ -187,7 +196,7 @@ export function UangJalanCard({
           }}
         >
           <div>
-            <Angka label="Pagu" value={formatRupiah(ringkasan.pagu)} />
+            <Angka label="Uang jalan" value={formatRupiah(ringkasan.pagu)} />
             {ringkasan.penambahan > 0 && (
               <div className="caption" style={{ marginTop: 2 }}>
                 {formatRupiah(ringkasan.pagu_awal)} + tambahan{" "}
@@ -204,7 +213,7 @@ export function UangJalanCard({
                 setEditPagu(true);
               }}
             >
-              Ubah pagu awal
+              Ubah uang jalan awal
             </button>
             )}
           </div>
@@ -220,7 +229,7 @@ export function UangJalanCard({
 
       {belumAdaPagu && !editPagu && (
         <p className="caption" style={{ marginTop: -6, marginBottom: 12 }}>
-          Pagu borongan belum diisi. Sisanya belum bisa dihitung sebelum angkanya
+          Uang jalan job belum diisi. Sisanya belum bisa dihitung sebelum angkanya
           ada.
         </p>
       )}
@@ -310,7 +319,7 @@ export function UangJalanCard({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>
                     {tambah ? (
-                      <span style={{ color: "#b45309" }}>Tambah pagu</span>
+                      <span style={{ color: "#b45309" }}>Tambah uang jalan</span>
                     ) : (
                       t.sumber_dana_nama ?? "—"
                     )}
@@ -418,7 +427,7 @@ export function UangJalanCard({
         title="Hapus catatan uang jalan?"
         body={
           hapus
-            ? `${formatDate(hapus.tanggal)} — ${formatRupiah(hapus.jumlah)}. Sisa pagu akan dihitung ulang.`
+            ? `${formatDate(hapus.tanggal)} — ${formatRupiah(hapus.jumlah)}. Sisa uang jalan akan dihitung ulang.`
             : ""
         }
         confirmText="Hapus"

@@ -109,7 +109,7 @@ export function InfoUangJalanSurat({
               color: "var(--status-perbaikan-text)"
             }}
           >
-            Ada penambahan uang jalan: pagu awal {formatRupiah(uangJalanPaguAwal ?? pagu)}
+            Ada penambahan uang jalan: uang jalan awal {formatRupiah(uangJalanPaguAwal ?? pagu)}
             {penambahan.map((t, i) => (
               <div key={i}>
                 + {formatRupiah(t.jumlah)} ({formatDate(t.tanggal)}){t.keterangan ? ` — ${t.keterangan}` : ""}

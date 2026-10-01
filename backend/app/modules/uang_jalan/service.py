@@ -114,7 +114,7 @@ def _validate(payload: UangJalanInput) -> None:
     if payload.jenis == "pencairan" and not payload.sumber_dana_id:
         raise ValidationError("Uang yang dikasih harus menyebut dari kas mana")
     if payload.jenis == "penambahan_pagu" and payload.sumber_dana_id:
-        raise ValidationError("Penambahan pagu tidak memakai sumber dana — itu kesepakatan, bukan uang keluar")
+        raise ValidationError("Tambahan uang jalan tidak memakai sumber dana — itu kesepakatan, bukan uang keluar")
 
 
 def _clean(payload: UangJalanInput) -> dict[str, Any]:

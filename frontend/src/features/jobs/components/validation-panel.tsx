@@ -106,7 +106,7 @@ export function ValidationPanel({ job, uangJalan }: Props) {
           <div className="rounded-md bg-white border border-border px-3 py-2">
             <div className="caption">Uang jalan</div>
             <div className="text-[13px]">
-              Cair {new Intl.NumberFormat("id-ID").format(uangJalan.cair)} / pagu{" "}
+              Cair {new Intl.NumberFormat("id-ID").format(uangJalan.cair)} / uang jalan{" "}
               {new Intl.NumberFormat("id-ID").format(uangJalan.pagu)}
               {uangJalan.pending > 0 && (
                 <span className="text-status-cancelled-fg"> · {uangJalan.pending} pengajuan menunggu</span>
