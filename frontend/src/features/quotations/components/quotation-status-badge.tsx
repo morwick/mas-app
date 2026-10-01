@@ -6,8 +6,7 @@ import { quotationStatusLabel, type QuotationStatus } from "@/types";
 const statusClass: Record<QuotationStatus, string> = {
   draft: "",
   terkirim: "badge-pickup",
-  deal: "badge-selesai",
-  ditolak: "badge-cancelled",
+  completed: "badge-selesai",
   kedaluwarsa: "badge-perbaikan"
 };
 

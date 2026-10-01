@@ -200,9 +200,7 @@ class JobService:
             return jobs
         res = await (
             self._db.table("invoice_items")
-            .select(
-                "job_id, invoice:invoices!inner(id, invoice_number, total, dibayar, status_tagihan, jatuh_tempo)"
-            )
+            .select("job_id, invoice:invoices!inner(id, invoice_number, total, dibayar, status_tagihan, jatuh_tempo)")
             .in_("job_id", ids)
             .eq("status", AKTIF)
             .eq("invoice.status", AKTIF)
@@ -463,7 +461,9 @@ class JobService:
         )
         if q is None:
             raise NotFoundError("Penawaran tidak ditemukan")
-        if q["status_penawaran"] != "deal" or not deal:
+        # Yang menentukan adalah keputusan ITEM (deal), bukan status surat:
+        # item deal boleh dibuatkan job walau item lain masih menunggu.
+        if not deal:
             raise ValidationError(
                 f"Job hanya bisa dibuat dari item penawaran {q['quote_number']} yang disetujui (deal)."
             )

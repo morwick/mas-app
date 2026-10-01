@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field, model_validator
 from app.modules.customers.schemas import Sapaan
 from app.modules.jobs.schemas import JobStatus
 
-QuotationStatus = Literal["draft", "terkirim", "deal", "ditolak", "kedaluwarsa"]
+# Tahap surat (migration 20261001000006). Deal / ditolak adalah keputusan per
+# ITEM (KeputusanItem); completed = semua item sudah diputuskan. kedaluwarsa
+# tidak disimpan — dihitung dari tanggal berlaku saat dibaca.
+QuotationStatus = Literal["draft", "terkirim", "completed", "kedaluwarsa"]
 KeputusanItem = Literal["menunggu", "deal", "ditolak"]
 
 

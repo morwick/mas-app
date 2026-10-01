@@ -374,18 +374,14 @@ export type UnitWithService = Unit & {
 // Menggantikan alur ketik-manual di Word. Nomor surat mengikuti format arsip
 // berjalan: 0018/SK/MAS/VIII/2026.
 
-export type QuotationStatus =
-  | "draft"
-  | "terkirim"
-  | "deal"
-  | "ditolak"
-  | "kedaluwarsa";
+/** Tahap surat. Deal / ditolak adalah keputusan per ITEM (KeputusanItem);
+ *  completed = semua item sudah diputuskan; kedaluwarsa dihitung dari tanggal. */
+export type QuotationStatus = "draft" | "terkirim" | "completed" | "kedaluwarsa";
 
 export const quotationStatusLabel: Record<QuotationStatus, string> = {
   draft: "Draft",
   terkirim: "Terkirim",
-  deal: "Deal",
-  ditolak: "Ditolak",
+  completed: "Completed",
   kedaluwarsa: "Kedaluwarsa"
 };
 

@@ -76,7 +76,7 @@ describe("QuotationDetailView — kedaluwarsa", () => {
     );
     renderView({
       ...penawaran(false),
-      status: "deal",
+      status: "completed",
       items: [{ id: "i1", harga_revisi: 7_000_000, keputusan: "deal", diputuskan_at: "2026-09-20T03:00:00Z" }]
     } as unknown as Quotation);
     fireEvent.click(screen.getByRole("button", { name: "Cetak versi revisi" }));
@@ -95,7 +95,7 @@ describe("QuotationDetailView — kedaluwarsa", () => {
   it("surat revisi sudah pernah dicetak → langsung ke halaman cetak, tanpa pilih tanggal", () => {
     renderView({
       ...penawaran(false),
-      status: "deal",
+      status: "completed",
       tanggal_revisi: "2026-09-20",
       items: [{ id: "i1", harga_revisi: 7_000_000, keputusan: "deal" }]
     } as unknown as Quotation);
@@ -113,7 +113,7 @@ describe("QuotationDetailView — kedaluwarsa", () => {
   it("menampilkan pemutus item", () => {
     renderView({
       ...penawaran(false),
-      status: "deal",
+      status: "completed",
       items: [{ id: "i1", keputusan: "deal", diputuskan_oleh_nama: "Mega", dari: "Pekanbaru", tujuan: "Dumai" }]
     } as unknown as Quotation);
     expect(screen.getAllByText(/oleh Mega/).length).toBeGreaterThan(0);
@@ -122,7 +122,7 @@ describe("QuotationDetailView — kedaluwarsa", () => {
   it("panel biru revisi: tanggal surat revisi, berlaku sampai, dibuat oleh", () => {
     renderView({
       ...penawaran(false),
-      status: "deal",
+      status: "completed",
       berlaku_sampai: "2026-10-20",
       berlaku_sampai_asli: "2026-09-15",
       tanggal_revisi: "2026-10-05",
@@ -141,7 +141,7 @@ describe("QuotationDetailView — kedaluwarsa", () => {
   it("ada harga revisi tapi surat revisi belum dikeluarkan", () => {
     renderView({
       ...penawaran(false),
-      status: "deal",
+      status: "completed",
       items: [{ id: "i1", keputusan: "deal", harga_revisi: 7_000_000 }]
     } as unknown as Quotation);
     expect(screen.getByRole("note", { name: "Revisi penawaran" }).textContent).toContain("belum dikeluarkan");

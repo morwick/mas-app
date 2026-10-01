@@ -32,9 +32,9 @@ describe("ringkasanItem", () => {
 
   it("semua diputuskan → deal & ditolak", () => {
     expect(
-      teks(baris({ status: "deal", jumlah_item_deal: 2, jumlah_item_ditolak: 1, jumlah_item_menunggu: 0 }))
+      teks(baris({ status: "completed", jumlah_item_deal: 2, jumlah_item_ditolak: 1, jumlah_item_menunggu: 0 }))
     ).toBe("2 deal · 1 ditolak");
-    expect(teks(baris({ status: "ditolak", jumlah_item_ditolak: 3, jumlah_item_menunggu: 0 }))).toBe("3 ditolak");
+    expect(teks(baris({ status: "completed", jumlah_item_ditolak: 3, jumlah_item_menunggu: 0 }))).toBe("3 ditolak");
   });
 
   it("kedaluwarsa → sisa item ditandai kedaluwarsa, bukan follow up", () => {

@@ -25,9 +25,11 @@ interface Props {
   hanyaLihat?: boolean;
 }
 
-// "deal_pending" bukan status di database — ia turunan dari status deal yang
-// belum punya job sama sekali. Dipisah sebagai chip sendiri karena itulah
-// daftar kerja admin: penawaran yang sudah disetujui tapi belum dijadwalkan.
+// Status surat hanya draft / terkirim / completed / kedaluwarsa. Deal &
+// ditolak adalah keputusan per ITEM, jadi chip Deal / Ditolak menyaring surat
+// yang punya minimal satu item deal / ditolak ("ada_item_deal" /
+// "ada_item_ditolak"). "deal_pending" = masih ada item deal tanpa job —
+// daftar kerja admin.
 // Dari kartu monitoring: "ada_item_deal" = punya item disetujui (status
 // penawarannya bisa masih terkirim bila item lain belum diputuskan);
 // "tidak_deal" = ditolak + kedaluwarsa; "ada_item_menunggu" = terkirim & masih
@@ -38,6 +40,7 @@ type FilterKey =
   | "deal_pending"
   | "akan_kedaluwarsa"
   | "ada_item_deal"
+  | "ada_item_ditolak"
   | "ada_item_menunggu"
   | "tidak_deal";
 
@@ -51,10 +54,9 @@ function akanKedaluwarsa(row: QuotationListRow, hariIni: string, batas: string):
   return t >= hariIni && t <= batas;
 }
 
-/** Deal yang masih punya item deal belum dibuatkan job. */
+/** Masih punya item deal yang belum dibuatkan job (apa pun status suratnya). */
 function dealBelumJob(row: QuotationListRow): boolean {
-  if (row.status !== "deal") return false;
-  return row.jumlah_item_deal_belum_job != null ? row.jumlah_item_deal_belum_job > 0 : row.jumlah_job === 0;
+  return (row.jumlah_item_deal_belum_job ?? 0) > 0;
 }
 
 const NAMA_BULAN = [
@@ -95,7 +97,11 @@ function itemTidakDeal(row: QuotationListRow): { item: number; nilai: number } {
   };
 }
 
-const FILTER_URL: FilterKey[] = ["all", "draft", "terkirim", "deal", "deal_pending", "akan_kedaluwarsa", "ditolak", "kedaluwarsa"];
+const FILTER_URL: FilterKey[] = [
+  "all", "draft", "terkirim", "ada_item_deal", "deal_pending", "akan_kedaluwarsa", "ada_item_ditolak", "kedaluwarsa"
+];
+/** Alamat lama (?filter=deal / ditolak — dulu status surat) → filter per item. */
+const FILTER_LAMA: Record<string, FilterKey> = { deal: "ada_item_deal", ditolak: "ada_item_ditolak" };
 
 interface Pelaksanaan {
   label: string;
@@ -109,7 +115,7 @@ interface Pelaksanaan {
  * boleh ada job, jadi menampilkan "belum ada job" justru menyesatkan.
  */
 function pelaksanaan(row: QuotationListRow): Pelaksanaan {
-  if (row.status !== "deal") return { label: "—", tone: "netral" };
+  if (!(row.jumlah_item_deal ?? 0)) return { label: "—", tone: "netral" };
   if (row.jumlah_job === 0) return { label: "Belum ada job", tone: "belum" };
 
   const { jumlah_job, jumlah_job_selesai, jumlah_item } = row;
@@ -200,7 +206,8 @@ export function QuotationsListView({
 }: Props) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<FilterKey>(
-    FILTER_URL.includes(initialFilter as FilterKey) ? (initialFilter as FilterKey) : "all"
+    FILTER_LAMA[initialFilter ?? ""] ??
+      (FILTER_URL.includes(initialFilter as FilterKey) ? (initialFilter as FilterKey) : "all")
   );
   const { hariIni, batasKedaluwarsa } = useMemo(() => {
     const hariIni = hariIniWIB();
@@ -253,12 +260,16 @@ export function QuotationsListView({
     const c: Record<QuotationStatus, number> = {
       draft: 0,
       terkirim: 0,
-      deal: 0,
-      ditolak: 0,
+      completed: 0,
       kedaluwarsa: 0
     };
     for (const row of periode) c[row.status] += 1;
-    return c;
+    // Deal / ditolak per item: jumlah surat yang punya minimal satu item itu.
+    return {
+      ...c,
+      adaItemDeal: periode.filter((r) => (r.jumlah_item_deal ?? 0) > 0).length,
+      adaItemDitolak: periode.filter((r) => (r.jumlah_item_ditolak ?? 0) > 0).length
+    };
   }, [periode]);
 
   // Kartu monitoring: jumlah surat (penawaran) & item (baris rincian).
@@ -300,6 +311,8 @@ export function QuotationsListView({
         if (!akanKedaluwarsa(row, hariIni, batasKedaluwarsa)) return false;
       } else if (filter === "ada_item_deal") {
         if (!(row.jumlah_item_deal ?? 0)) return false;
+      } else if (filter === "ada_item_ditolak") {
+        if (!(row.jumlah_item_ditolak ?? 0)) return false;
       } else if (filter === "ada_item_menunggu") {
         if (itemMenunggu(row).item === 0) return false;
       } else if (filter === "tidak_deal") {
@@ -459,7 +472,8 @@ export function QuotationsListView({
           { key: "draft", label: "Draft", count: counts.draft },
           // Terkirim = belum dijawab customer → daftar kerja admin untuk follow up.
           { key: "terkirim", label: "Terkirim (Butuh Follow up)", count: counts.terkirim },
-          { key: "deal", label: "Deal", count: counts.deal },
+          // Deal / Ditolak = keputusan per item (surat yang punya item itu).
+          { key: "ada_item_deal", label: "Deal", count: counts.adaItemDeal },
           {
             key: "deal_pending",
             label: "Deal — belum ada job",
@@ -470,7 +484,7 @@ export function QuotationsListView({
             label: "Akan kedaluwarsa",
             count: jumlahAkanKedaluwarsa
           },
-          { key: "ditolak", label: "Ditolak", count: counts.ditolak },
+          { key: "ada_item_ditolak", label: "Ditolak", count: counts.adaItemDitolak },
           {
             key: "kedaluwarsa",
             label: "Kedaluwarsa",
@@ -668,7 +682,7 @@ export function QuotationsListView({
                     {formatRupiah(row.total)}
                   </span>
                 </div>
-                {row.status === "deal" && (
+                {(row.jumlah_item_deal ?? 0) > 0 && (
                   <div
                     style={{
                       fontSize: 12,

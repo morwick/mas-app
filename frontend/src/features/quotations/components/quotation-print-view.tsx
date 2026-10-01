@@ -9,6 +9,11 @@ import { rp, tanggalPanjang } from "@/lib/surat";
 import type { Quotation } from "@/types";
 import { catatCetakPenawaran } from "../api";
 
+/** Semua item sudah diputuskan dan tidak ada satu pun yang deal. */
+function semuaDitolak(q: Quotation): boolean {
+  return q.status === "completed" && !(q.items ?? []).some((it) => it.keputusan === "deal");
+}
+
 interface Props {
   quotation: Quotation;
   /** Versi revisi (harga hasil negosiasi) — isi sudah disiapkan suratRevisi(). */
@@ -72,7 +77,7 @@ export function QuotationPrintView({ quotation: q, revisi = false }: Props) {
           {revisi && (
             <span className="badge badge-pickup">Versi revisi — harga hasil negosiasi</span>
           )}
-          <PeringatanBatal aktif={q.status === "ditolak"} teks="Penawaran ini ditolak / dibatalkan" />
+          <PeringatanBatal aktif={semuaDitolak(q)} teks="Penawaran ini ditolak / dibatalkan" />
           <PeringatanBatal aktif={q.status === "kedaluwarsa"} teks="Penawaran ini sudah kedaluwarsa" tanda="EXPIRED" />
           <div className="flex items-center gap-2">
             {/* Dialog cetak dimiliki browser dan tidak bisa dilewati dari kode,
@@ -95,7 +100,7 @@ export function QuotationPrintView({ quotation: q, revisi = false }: Props) {
 
       {/* Surat */}
       <div className="surat-page surat-penawaran relative max-w-[820px] mx-auto my-6 bg-white border border-border print:border-0 print:my-0 print:max-w-none">
-        <WatermarkBatal aktif={q.status === "ditolak"} />
+        <WatermarkBatal aktif={semuaDitolak(q)} />
         <WatermarkBatal aktif={q.status === "kedaluwarsa"} teks="EXPIRED" />
         <div className="px-8 sm:px-12 py-8 print:px-10 print:py-6">
           {/* Kop — sama dengan header template Word */}

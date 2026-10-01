@@ -73,9 +73,12 @@ export function QuotationDetailView({
   const draftKedaluwarsa = q.status === "kedaluwarsa" && Boolean(q.belum_dikirim);
 
   // Sekali terkirim, penawaran tidak boleh diubah lagi — hanya draft yang
-  // bisa diedit (satu-satunya jalan merevisi yang sudah ditolak: "Buka
-  // kembali" ke draft dulu).
+  // bisa diedit (satu-satunya jalan merevisi yang semua itemnya ditolak:
+  // "Buka kembali" ke draft dulu).
   const isLocked = q.status !== "draft" && !draftKedaluwarsa;
+  // Keputusan per item — yang menentukan job & tombol, bukan status surat.
+  const adaItemDeal = (q.items ?? []).some((it) => it.keputusan === "deal");
+  const semuaDitolak = q.status === "completed" && !adaItemDeal;
 
   async function changeStatus(status: QuotationStatus) {
     setLoading(true);
@@ -220,7 +223,7 @@ export function QuotationDetailView({
           </p>
         )}
 
-        {q.status === "ditolak" && q.alasan_ditolak && (
+        {semuaDitolak && q.alasan_ditolak && (
           <p
             style={{
               marginTop: 12,
@@ -307,17 +310,17 @@ export function QuotationDetailView({
 
           {/* Deal / tolak ditentukan per item. Kedaluwarsa ikut: customer
               kadang baru menjawab setelah masa berlaku lewat. */}
-          {(q.status === "terkirim" || (q.status === "kedaluwarsa" && !draftKedaluwarsa) || q.status === "deal") && (
+          {(q.status === "terkirim" || (q.status === "kedaluwarsa" && !draftKedaluwarsa) || q.status === "completed") && (
             <Button
-              variant={q.status === "deal" ? "secondary" : "primary"}
+              variant={q.status === "completed" ? "secondary" : "primary"}
               leftIcon={<ListChecks style={{ width: 15, height: 15 }} />}
               onClick={() => setKeputusanOpen(true)}
             >
-              {q.status === "deal" ? "Ubah keputusan item" : "Keputusan per item"}
+              {q.status === "completed" ? "Ubah keputusan item" : "Keputusan per item"}
             </Button>
           )}
 
-          {q.status === "ditolak" && (
+          {semuaDitolak && (
             <Button
               variant="secondary"
               leftIcon={<RotateCcw style={{ width: 15, height: 15 }} />}
@@ -379,7 +382,7 @@ export function QuotationDetailView({
                 <th style={{ width: 150, textAlign: "right" }}>@ Price</th>
                 <th style={{ width: 150, textAlign: "right" }}>Total</th>
                 <th style={{ width: 150 }}>Keputusan</th>
-                {!hanyaLihat && q.status === "deal" && <th style={{ width: 150 }}>Job</th>}
+                {!hanyaLihat && adaItemDeal && <th style={{ width: 150 }}>Job</th>}
               </tr>
             </thead>
             <tbody>
@@ -425,8 +428,8 @@ export function QuotationDetailView({
                       </div>
                     )}
                   </td>
-                  {/* Kolom tombol job — hanya saat penawaran deal. */}
-                  {!hanyaLihat && q.status === "deal" && (
+                  {/* Kolom tombol job — untuk item deal, apa pun status suratnya. */}
+                  {!hanyaLihat && adaItemDeal && (
                     <td>
                       {it.keputusan === "deal" ? (
                         <>

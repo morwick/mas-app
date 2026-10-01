@@ -20,9 +20,10 @@ export function NewJobPage() {
   const units = useUnits();
   const activeJobs = useJobs({ status: "active" });
   const quotation = useQuotation(quotationId);
-  // Hanya penawaran yang sudah deal yang boleh naik jadi job. Kalau statusnya
-  // lain (atau id-nya ngawur), form dibuka kosong seperti biasa.
-  const dealQuotation = quotation.data?.status === "deal" ? quotation.data : undefined;
+  // Hanya penawaran yang punya item deal yang boleh naik jadi job — yang
+  // menentukan keputusan item, bukan status surat. Kalau tidak ada (atau id-nya
+  // ngawur), form dibuka kosong seperti biasa.
+  const dealQuotation = quotation.data?.items?.some((it) => it.keputusan === "deal") ? quotation.data : undefined;
   const customer = useCustomer(dealQuotation?.customer_id);
 
   // Satu job = satu item penawaran yang deal.

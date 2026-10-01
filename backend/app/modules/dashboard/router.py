@@ -101,11 +101,12 @@ async def _jobs_belum_konfirmasi(client: AsyncClient) -> list[JobBelumKonfirmasi
 
 
 async def penawaran_deal_tanpa_job(client: AsyncClient) -> int:
-    """Jumlah penawaran deal yang masih punya item deal belum dibuatkan job."""
+    """Jumlah penawaran yang masih punya item deal belum dibuatkan job (status
+    surat tidak menentukan — item deal bisa ada di surat terkirim maupun completed)."""
     res = await (
         client.table("quotations")
         .select("id, quotation_items(id, keputusan), jobs(quotation_item_id, status_job)")
-        .eq("status_penawaran", "deal")
+        .in_("status_penawaran", ["terkirim", "completed"])
         .eq("quotation_items.status", AKTIF)
         .eq("jobs.status", AKTIF)
         .execute()

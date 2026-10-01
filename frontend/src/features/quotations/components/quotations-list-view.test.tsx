@@ -48,14 +48,14 @@ const row = (id: string, tanggal: string, status: QuotationListRow["status"], su
 
 const DATA = [
   // 2 item deal (1 direvisi) + 1 item ditolak.
-  row("0840", "2026-09-30", "deal", 18_000_000, {
+  row("0840", "2026-09-30", "completed", 18_000_000, {
     deal: 2, revisi: 1, nilaiDeal: 12_000_000, ditolak: 1, nilaiDitolak: 5_000_000, ppn: true
   }),
   // Masih terkirim: 1 item sudah deal, 2 item menunggu. Tanpa PPN.
   row("0839", "2026-09-10", "terkirim", 6_000_000, { deal: 1, nilaiDeal: 1_500_000, menunggu: 2, nilaiMenunggu: 4_000_000 }),
   // Kedaluwarsa: item yang belum diputuskan ikut dihitung tidak deal.
   row("0838", "2026-09-05", "kedaluwarsa", 1_000_000, { menunggu: 1, nilaiMenunggu: 1_000_000, ppn: true }),
-  row("0700", "2026-08-20", "deal", 9_000_000, { deal: 1, nilaiDeal: 9_000_000 }),
+  row("0700", "2026-08-20", "completed", 9_000_000, { deal: 1, nilaiDeal: 9_000_000 }),
   // Bulan lalu, terkirim, habis 3 Oktober (akan kedaluwarsa).
   { ...row("0701", "2026-08-25", "terkirim", 2_000_000, { menunggu: 1, nilaiMenunggu: 2_000_000 }), berlaku_sampai: "2026-10-03" },
   row("0001", "2025-12-01", "draft", 500_000, { menunggu: 1, nilaiMenunggu: 500_000 })
@@ -154,6 +154,33 @@ describe("QuotationsListView — periode & kartu monitoring", () => {
     fireEvent.click(screen.getByRole("button", { name: /Terkirim \(Butuh Follow up\)/ }));
     expect(screen.getAllByText("0839/SK/MAS").length).toBeGreaterThan(0);
     expect(screen.queryByText("0840/SK/MAS")).toBeNull();
+  });
+
+  it("chip Ditolak = surat yang punya item ditolak, walau item lain deal", () => {
+    renderView();
+    // 0840: 2 item deal + 1 item ditolak → status surat completed, tetap muncul.
+    fireEvent.click(screen.getByRole("button", { name: /^Ditolak\s*\d/ }));
+    expect(screen.getAllByText("0840/SK/MAS").length).toBeGreaterThan(0);
+    expect(screen.queryByText("0839/SK/MAS")).toBeNull();
+  });
+
+  it("chip Deal = surat yang punya item deal, termasuk yang masih terkirim", () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /^Deal\s*\d/ }));
+    expect(screen.getAllByText("0840/SK/MAS").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0839/SK/MAS").length).toBeGreaterThan(0);
+    expect(screen.queryByText("0838/SK/MAS")).toBeNull();
+  });
+
+  it("tidak ada chip Completed", () => {
+    renderView();
+    expect(screen.queryByRole("button", { name: /^Completed/ })).toBeNull();
+  });
+
+  it("alamat lama ?filter=ditolak diarahkan ke filter item ditolak", () => {
+    renderView({ initialFilter: "ditolak" });
+    expect(screen.getAllByText("0840/SK/MAS").length).toBeGreaterThan(0);
+    expect(screen.queryByText("0700/SK/MAS")).toBeNull();
   });
 
   it("Semua bulan → setahun penuh; Semua tahun → seluruh data", () => {

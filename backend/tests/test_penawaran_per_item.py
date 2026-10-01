@@ -80,8 +80,9 @@ def _items() -> list[dict[str, Any]]:
 
 def test_status_dari_keputusan() -> None:
     assert status_dari_keputusan(["deal", "menunggu"]) == "terkirim"
-    assert status_dari_keputusan(["deal", "ditolak", "deal"]) == "deal"
-    assert status_dari_keputusan(["ditolak", "ditolak"]) == "ditolak"
+    # Semua item sudah diputuskan (deal maupun ditolak) → completed.
+    assert status_dari_keputusan(["deal", "ditolak", "deal"]) == "completed"
+    assert status_dari_keputusan(["ditolak", "ditolak"]) == "completed"
 
 
 async def test_dua_dari_tiga_item_deal_dengan_revisi_harga() -> None:
@@ -96,22 +97,22 @@ async def test_dua_dari_tiga_item_deal_dengan_revisi_harga() -> None:
             ]
         ),
     )
-    assert status == "deal"
+    assert status == "completed"
     ubah_item = [lg for lg in db.langkah if lg["tabel"] == "quotation_items"]
     assert ubah_item[0]["data"]["harga_revisi"] == 4_500_000  # harga awal tidak disentuh
     assert "harga_satuan" not in ubah_item[0]["data"]
     assert ubah_item[2]["data"]["alasan_ditolak"] == "Harga terlalu tinggi"
     header = next(lg for lg in db.langkah if lg["tabel"] == "quotations")
-    assert header["data"]["status_penawaran"] == "deal"
+    assert header["data"]["status_penawaran"] == "completed"
 
 
-async def test_semua_item_ditolak_penawaran_ditolak() -> None:
+async def test_semua_item_ditolak_penawaran_completed() -> None:
     db = _Db({"quotations": {"status_penawaran": "terkirim"}, "quotation_items": _items()})
     status = await QuotationService(db).simpan_keputusan(  # type: ignore[arg-type]
         "q1",
         SimpanKeputusanRequest(items=[KeputusanItemInput(item_id=f"i{n}", keputusan="ditolak") for n in (1, 2, 3)]),
     )
-    assert status == "ditolak"
+    assert status == "completed"
 
 
 async def test_sebagian_diputuskan_tetap_terkirim() -> None:
@@ -122,6 +123,47 @@ async def test_sebagian_diputuskan_tetap_terkirim() -> None:
     assert status == "terkirim"
 
 
+def _item_deal_dengan_job() -> _Db:
+    items = _items()
+    items[0].update({"keputusan": "deal", "harga_revisi": 4_500_000})
+    return _Db(
+        {
+            "quotations": {"status_penawaran": "completed"},
+            "quotation_items": items,
+            "jobs": [{"quotation_item_id": "i1", "status_job": "dalam_perjalanan"}],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "keputusan",
+    [
+        KeputusanItemInput(item_id="i1", keputusan="menunggu"),
+        KeputusanItemInput(item_id="i1", keputusan="ditolak", alasan="Batal"),
+        KeputusanItemInput(item_id="i1", keputusan="deal", harga_revisi=4_000_000),
+    ],
+)
+async def test_item_deal_yang_sudah_ada_job_terkunci(keputusan: KeputusanItemInput) -> None:
+    db = _item_deal_dengan_job()
+    with pytest.raises(ValidationError, match="Baris 1 sudah dibuatkan job"):
+        await QuotationService(db).simpan_keputusan("q1", SimpanKeputusanRequest(items=[keputusan]))  # type: ignore[arg-type]
+    assert db.langkah == []  # tidak ada yang dikirim ke database
+
+
+async def test_item_deal_yang_sudah_ada_job_boleh_dikirim_ulang_tanpa_perubahan() -> None:
+    db = _item_deal_dengan_job()
+    status = await QuotationService(db).simpan_keputusan(  # type: ignore[arg-type]
+        "q1",
+        SimpanKeputusanRequest(
+            items=[
+                KeputusanItemInput(item_id="i1", keputusan="deal", harga_revisi=4_500_000),
+                KeputusanItemInput(item_id="i2", keputusan="ditolak"),
+            ]
+        ),
+    )
+    assert status == "terkirim"  # i3 masih menunggu
+
+
 async def test_keputusan_draft_ditolak() -> None:
     db = _Db({"quotations": {"status_penawaran": "draft"}, "quotation_items": _items()})
     with pytest.raises(ValidationError, match="ditandai terkirim"):
@@ -130,9 +172,9 @@ async def test_keputusan_draft_ditolak() -> None:
         )
 
 
-async def test_deal_langsung_di_level_penawaran_ditolak() -> None:
-    with pytest.raises(ValidationError, match="per item"):
-        await QuotationService(_Db({})).set_status("q1", SetQuotationStatusRequest(status="deal"))  # type: ignore[arg-type]
+async def test_completed_langsung_di_level_penawaran_ditolak() -> None:
+    with pytest.raises(ValidationError, match="keputusan item"):
+        await QuotationService(_Db({})).set_status("q1", SetQuotationStatusRequest(status="completed"))
 
 
 def _job(**kw: Any) -> JobCreate:
@@ -144,7 +186,7 @@ async def test_job_dari_item_ditolak_tidak_boleh() -> None:
     db = _Db(
         {
             "quotation_items": {"id": "i3", "quotation_id": "q1", "keputusan": "ditolak"},
-            "quotations": {"status_penawaran": "deal", "quote_number": "0001/SK"},
+            "quotations": {"status_penawaran": "completed", "quote_number": "0001/SK"},
         }
     )
     with pytest.raises(ValidationError, match="disetujui"):
@@ -155,7 +197,18 @@ async def test_job_dari_item_deal_menyimpan_item_id() -> None:
     db = _Db(
         {
             "quotation_items": {"id": "i1", "quotation_id": "q1", "keputusan": "deal"},
-            "quotations": {"status_penawaran": "deal", "quote_number": "0001/SK"},
+            "quotations": {"status_penawaran": "completed", "quote_number": "0001/SK"},
+        }
+    )
+    assert await JobService(db)._item_penawaran(_job(quotation_item_id="i1")) == ("q1", "i1")  # type: ignore[arg-type]
+
+
+async def test_job_dari_item_deal_walau_surat_masih_terkirim() -> None:
+    """Yang menentukan keputusan item, bukan status surat: item lain boleh masih menunggu."""
+    db = _Db(
+        {
+            "quotation_items": {"id": "i1", "quotation_id": "q1", "keputusan": "deal"},
+            "quotations": {"status_penawaran": "terkirim", "quote_number": "0001/SK"},
         }
     )
     assert await JobService(db)._item_penawaran(_job(quotation_item_id="i1")) == ("q1", "i1")  # type: ignore[arg-type]
@@ -178,7 +231,7 @@ async def test_daftar_menghitung_item_deal_termasuk_revisi() -> None:
         "kota_terbit": "Pekanbaru",
         "tanggal": "2026-09-30",
         "perihal": "Surat Penawaran",
-        "status_penawaran": "deal",
+        "status_penawaran": "completed",
         "created_at": "2026-09-30T00:00:00+00:00",
         "updated_at": "2026-09-30T00:00:00+00:00",
         "quotation_items": [
@@ -221,7 +274,11 @@ def _revisi(tanggal: str = "2026-10-01", berlaku: str = "2026-10-15") -> SuratRe
 async def test_surat_revisi_menyimpan_tanggal_dan_masa_berlaku_asli() -> None:
     db = _Db(
         {
-            "quotations": {"status_penawaran": "deal", "berlaku_sampai": "2026-09-15", "berlaku_sampai_asli": None},
+            "quotations": {
+                "status_penawaran": "completed",
+                "berlaku_sampai": "2026-09-15",
+                "berlaku_sampai_asli": None,
+            },
             "quotation_items": [{"id": "i1"}],
         }
     )
@@ -239,7 +296,7 @@ async def test_surat_revisi_kedua_kali_tidak_menimpa_masa_berlaku_asli() -> None
     db = _Db(
         {
             "quotations": {
-                "status_penawaran": "deal",
+                "status_penawaran": "completed",
                 "berlaku_sampai": "2026-10-15",
                 "berlaku_sampai_asli": "2026-09-15",
             },
@@ -252,14 +309,14 @@ async def test_surat_revisi_kedua_kali_tidak_menimpa_masa_berlaku_asli() -> None
 
 async def test_surat_revisi_ditolak_tanpa_harga_revisi_atau_saat_draft() -> None:
     tanpa_revisi = _Db(
-        {"quotations": {"status_penawaran": "deal", "berlaku_sampai": "2026-09-15"}, "quotation_items": []}
+        {"quotations": {"status_penawaran": "completed", "berlaku_sampai": "2026-09-15"}, "quotation_items": []}
     )
     with pytest.raises(ValidationError, match="Belum ada harga item yang direvisi"):
         await QuotationService(tanpa_revisi).simpan_surat_revisi("q1", _revisi())  # type: ignore[arg-type]
     draft = _Db(
         {"quotations": {"status_penawaran": "draft", "berlaku_sampai": "2026-09-15"}, "quotation_items": [{"id": "i1"}]}
     )
-    with pytest.raises(ValidationError, match="sudah terkirim atau deal"):
+    with pytest.raises(ValidationError, match="sudah terkirim atau completed"):
         await QuotationService(draft).simpan_surat_revisi("q1", _revisi())  # type: ignore[arg-type]
 
 
@@ -289,7 +346,7 @@ async def test_detail_menyertakan_nama_pemutus_item_dan_pengatur_berlaku() -> No
         "tanggal": "2026-09-01",
         "berlaku_sampai": "2026-10-15",
         "perihal": "Surat Penawaran",
-        "status_penawaran": "deal",
+        "status_penawaran": "completed",
         "berlaku_diatur_oleh": k2,
         "berlaku_diatur_at": "2026-10-01T02:00:00+00:00",
         "tanggal_revisi": "2026-10-01",

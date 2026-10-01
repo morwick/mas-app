@@ -44,24 +44,26 @@ ITEM_SELECT = """
   keputusan, harga_revisi, subtotal_final, alasan_ditolak, diputuskan_at, diputuskan_oleh
 """
 
-# Penawaran yang sudah `deal` dikunci: job (dan invoice) menggantungkan harga ke sana.
+# Hanya draft yang bisa diedit: job (dan invoice) menggantungkan harga ke item penawaran.
 EDITABLE_STATUSES: tuple[QuotationStatus, ...] = ("draft",)
 
 
 def derive_status(stored: str, berlaku_sampai: str | None) -> QuotationStatus:
     """Kedaluwarsa diturunkan dari tanggal saat dibaca, bukan disimpan — tidak
     perlu cron, dan perpanjangan masa berlaku langsung mengaktifkan lagi.
-    Berlaku untuk draft maupun terkirim; deal / ditolak tidak pernah kedaluwarsa."""
+    Berlaku untuk draft maupun terkirim; completed (semua item sudah diputuskan)
+    tidak pernah kedaluwarsa."""
     if stored not in ("draft", "terkirim") or not berlaku_sampai:
         return stored  # type: ignore[return-value]
     return "kedaluwarsa" if berlaku_sampai[:10] < today_wib_str() else stored  # type: ignore[return-value]
 
 
 def status_dari_keputusan(keputusan: list[str]) -> QuotationStatus:
-    """Masih ada yang menunggu → terkirim; ada yang deal → deal; semua ditolak → ditolak."""
+    """Masih ada item yang menunggu → terkirim; semua sudah diputuskan (deal
+    maupun ditolak) → completed."""
     if not keputusan or "menunggu" in keputusan:
         return "terkirim"
-    return "deal" if "deal" in keputusan else "ditolak"
+    return "completed"
 
 
 def _to_item(r: dict[str, Any], jumlah_job: int = 0, nama: dict[str, str] | None = None) -> QuotationItem:
@@ -279,17 +281,7 @@ class QuotationService:
             .execute()
         )
         # Job aktif per item — untuk tombol "Buat job" & hitungannya.
-        job_rows = rows(
-            await self._db.table("jobs")
-            .select("quotation_item_id, status_job")
-            .eq("quotation_id", quotation_id)
-            .neq("status_job", "cancelled")
-            .execute()
-        )
-        per_item: dict[str, int] = {}
-        for j in job_rows:
-            if j.get("quotation_item_id"):
-                per_item[j["quotation_item_id"]] = per_item.get(j["quotation_item_id"], 0) + 1
+        per_item = await self._jumlah_job_per_item(quotation_id)
         nama = await self._nama_karyawan(
             [row.get("berlaku_diatur_oleh"), row.get("revisi_dibuat_oleh"), *(i.get("diputuskan_oleh") for i in items)]
         )
@@ -301,6 +293,21 @@ class QuotationService:
             items=hasil,
             nilai_deal=sum(i.subtotal_final for i in hasil if i.keputusan == "deal"),
         )
+
+    async def _jumlah_job_per_item(self, quotation_id: str) -> dict[str, int]:
+        """quotation_item_id → jumlah job aktif (yang tidak dibatalkan)."""
+        job_rows = rows(
+            await self._db.table("jobs")
+            .select("quotation_item_id, status_job")
+            .eq("quotation_id", quotation_id)
+            .neq("status_job", "cancelled")
+            .execute()
+        )
+        per_item: dict[str, int] = {}
+        for j in job_rows:
+            if j.get("quotation_item_id"):
+                per_item[j["quotation_item_id"]] = per_item.get(j["quotation_item_id"], 0) + 1
+        return per_item
 
     async def _nama_karyawan(self, ids: list[str | None]) -> dict[str, str]:
         """Nama karyawan pelaku (hr.karyawan ada di schema lain → lewat fungsi DB)."""
@@ -482,12 +489,8 @@ class QuotationService:
         )
         if q is None:
             raise NotFoundError("Penawaran tidak ditemukan")
-        if q["status_penawaran"] not in ("terkirim", "deal"):
-            raise ValidationError(
-                "Keputusan item hanya bisa diisi setelah penawaran ditandai terkirim."
-                if q["status_penawaran"] == "draft"
-                else "Penawaran yang ditolak tidak bisa diubah keputusannya — buka kembali dulu."
-            )
+        if q["status_penawaran"] not in ("terkirim", "completed"):
+            raise ValidationError("Keputusan item hanya bisa diisi setelah penawaran ditandai terkirim.")
         items = {
             r["id"]: r
             for r in rows(
@@ -497,6 +500,12 @@ class QuotationService:
                 .execute()
             )
         }
+        # BATASAN: item deal yang sudah dibuatkan job (tidak dibatalkan) terkunci —
+        # keputusannya tidak boleh kembali ke menunggu / ditolak dan harga
+        # revisinya tidak boleh diubah, karena job & tagihannya memakai harga itu.
+        # Database menjaga hal yang sama (trigger quotation_item_cek_keputusan);
+        # pemeriksaan di sini memberi pesan yang menyebut barisnya.
+        punya_job = await self._jumlah_job_per_item(quotation_id)
         now = iso_utc()
         tx = Transaksi(self._db)
         akhir = {i: r["keputusan"] for i, r in items.items()}
@@ -517,17 +526,20 @@ class QuotationService:
             }
             akhir[k.item_id] = k.keputusan
             if all(lama.get(f) == v for f, v in data.items()):
-                continue  # tidak berubah — jangan sentuh (item yang sudah dipakai job terkunci)
+                continue  # tidak berubah — jangan sentuh
+            berubah_kunci = (lama.get("keputusan"), lama.get("harga_revisi")) != (k.keputusan, data["harga_revisi"])
+            if punya_job.get(k.item_id) and berubah_kunci:
+                raise ValidationError(
+                    f"Baris {lama['urutan']} sudah dibuatkan job — keputusan dan harganya tidak bisa diubah."
+                )
             data["diputuskan_at"] = None if k.keputusan == "menunggu" else now
             tx.update("quotation_items", data, {"id": k.item_id, "quotation_id": quotation_id})
 
         status = status_dari_keputusan(list(akhir.values()))
         header: dict[str, Any] = {"status_penawaran": status}
-        if status == "terkirim":
-            header.update({"decided_at": None, "alasan_ditolak": None})
-        else:
-            header["decided_at"] = now
-            header["alasan_ditolak"] = "Semua item ditolak" if status == "ditolak" else None
+        # Alasan ditolak kini per item; kolom header lama dikosongkan.
+        header["alasan_ditolak"] = None
+        header["decided_at"] = None if status == "terkirim" else now
         tx.update("quotations", header, {"id": quotation_id})
         await tx.jalankan()
         return status
@@ -547,8 +559,8 @@ class QuotationService:
         )
         if q is None:
             raise NotFoundError("Penawaran tidak ditemukan")
-        if q["status_penawaran"] not in ("terkirim", "deal"):
-            raise ValidationError("Surat revisi hanya untuk penawaran yang sudah terkirim atau deal.")
+        if q["status_penawaran"] not in ("terkirim", "completed"):
+            raise ValidationError("Surat revisi hanya untuk penawaran yang sudah terkirim atau completed.")
         revisi = rows(
             await self._db.table("quotation_items")
             .select("id")
@@ -572,8 +584,8 @@ class QuotationService:
         await tx.jalankan()
 
     async def set_status(self, quotation_id: str, payload: SetQuotationStatusRequest) -> None:
-        if payload.status in ("deal", "ditolak"):
-            raise ValidationError("Deal / tolak ditentukan per item penawaran — isi lewat keputusan item.")
+        if payload.status == "completed":
+            raise ValidationError("Completed otomatis setelah semua item diputuskan — isi lewat keputusan item.")
         if payload.status == "kedaluwarsa":
             raise ValidationError("Status kedaluwarsa dihitung otomatis dari tanggal berlaku.")
         if payload.status == "terkirim":
@@ -593,10 +605,6 @@ class QuotationService:
         now = iso_utc()
         if payload.status == "terkirim":
             data["sent_at"] = now
-        if payload.status in ("deal", "ditolak"):
-            data["decided_at"] = now
-        if payload.status == "ditolak":
-            data["alasan_ditolak"] = clean_text(payload.alasan)
         if payload.status == "draft":
             # Dibuka kembali → jejak keputusan sebelumnya (termasuk per item)
             # dibersihkan, dalam satu transaksi.
