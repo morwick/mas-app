@@ -21,7 +21,9 @@ from app.core.pg import rows
 
 router = APIRouter(prefix="/log-sistem", tags=["log-sistem"])
 
-AksiLog = Literal["Login", "Logout", "Tambah Data", "Update Data", "Hapus Data", "Cetak Dokumen"]
+AksiLog = Literal[
+    "Login", "Logout", "Tambah Data", "Update Data", "Hapus Data", "Cetak Dokumen", "Blacklist", "Cabut Blacklist"
+]
 
 
 class LogSistem(BaseModel):

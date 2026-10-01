@@ -42,6 +42,30 @@ class DriverService:
             q = q.in_("driver_id", driver_ids)
         return {r["driver_id"]: r for r in rows(await q.execute())}
 
+    async def _with_blacklist(self, drivers: list[Driver]) -> list[Driver]:
+        """Tandai driver yang karyawannya di-blacklist (hr.karyawan → lewat fungsi DB)."""
+        ids = sorted({d.karyawan_id for d in drivers if d.karyawan_id})
+        if not ids:
+            return drivers
+        res = await self._db.rpc("info_blacklist_karyawan", {"p_ids": ids}).execute()
+        info = {str(r["karyawan_id"]): r for r in rows(res)}
+        out = []
+        for d in drivers:
+            r = info.get(d.karyawan_id or "")
+            out.append(
+                d
+                if r is None
+                else d.model_copy(
+                    update={
+                        "is_blacklist": True,
+                        "blacklist_alasan": r.get("blacklist_alasan"),
+                        "blacklist_at": r.get("blacklist_at"),
+                        "blacklist_oleh_nama": r.get("blacklist_oleh_nama"),
+                    }
+                )
+            )
+        return out
+
     @staticmethod
     def _with_status(driver: Driver, active: dict[str, Any] | None) -> Driver:
         if active:
@@ -64,7 +88,7 @@ class DriverService:
         if q and q.strip():
             query = query.or_(ilike_any(self._SEARCH_COLUMNS, q))
         res = await apply_window(query.order("nama"), params).execute()
-        drivers = [_to_driver(r) for r in rows(res)]
+        drivers = await self._with_blacklist([_to_driver(r) for r in rows(res)])
         active = await self._active_jobs_by_driver()
         return build_page([self._with_status(d, active.get(d.id)) for d in drivers], res.count, params)
 
@@ -83,7 +107,7 @@ class DriverService:
         q = self._db.table("drivers").select("*").order("nama")
         if not include_inactive:
             q = q.eq("is_active", True)
-        drivers = [_to_driver(r) for r in rows(await q.execute())]
+        drivers = await self._with_blacklist([_to_driver(r) for r in rows(await q.execute())])
         active = await self._active_jobs_by_driver()
         out = [self._with_status(d, active.get(d.id)) for d in drivers]
         if only_stand_by:
@@ -95,7 +119,8 @@ class DriverService:
         if row is None:
             raise NotFoundError("Driver tidak ditemukan")
         active = await self._active_jobs_by_driver([driver_id])
-        driver = _to_driver(row).model_copy(update={"sim_url": await signed_url_dokumen(self._db, row.get("sim_path"))})
+        [driver] = await self._with_blacklist([_to_driver(row)])
+        driver = driver.model_copy(update={"sim_url": await signed_url_dokumen(self._db, row.get("sim_path"))})
         return self._with_status(driver, active.get(driver_id))
 
     async def count_active(self) -> int:

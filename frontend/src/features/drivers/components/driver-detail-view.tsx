@@ -33,6 +33,17 @@ export function initialsDriver(nama: string) {
 }
 
 export function DriverStatusBadge({ driver }: { driver: Driver }) {
+  if (driver.is_blacklist) {
+    return (
+      <span
+      className="badge"
+      style={{ background: "#b91c1c", color: "#fff" }}
+      title={driver.blacklist_alasan ? `Alasan: ${driver.blacklist_alasan}` : undefined}
+    >
+      Blacklist
+    </span>
+    );
+  }
   if (!driver.is_active) return <span className="badge">Nonaktif</span>;
   return driver.status === "in_job" ? (
     <span className="badge badge-status-bertugas">
@@ -116,6 +127,24 @@ export function DriverDetailView({ driver, jobs, unitTetap }: Props) {
               </Link>
             )}
           </div>
+
+          {driver.is_blacklist && (
+            <div
+              className="card card-pad"
+              style={{
+                background: "var(--status-cancelled-bg)",
+                color: "var(--status-cancelled-text)",
+                fontSize: 13,
+                marginBottom: 14
+              }}
+            >
+              <strong>Driver ini di-blacklist</strong>
+              {driver.blacklist_at ? ` sejak ${formatDate(driver.blacklist_at)}` : ""}
+              {driver.blacklist_oleh_nama ? ` oleh ${driver.blacklist_oleh_nama}` : ""}. Alasan:{" "}
+              {driver.blacklist_alasan ?? "-"}. Driver nonaktif, tidak bisa login ke aplikasi, dan tidak bisa
+              ditugaskan ke job. Blacklist hanya bisa dicabut di menu Karyawan.
+            </div>
+          )}
 
           <div className="divider" style={{ marginBottom: 14 }} />
           <div className="grid grid-cols-2 sm:grid-cols-3" style={{ gap: 16 }}>

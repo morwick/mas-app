@@ -3,6 +3,9 @@
 Schema `hr` tidak dibuka di Data API; semua lewat fungsi database
 (migration 20260924000020) yang sekaligus menyaring status = 1, paging
 LIMIT/OFFSET, dan mencatat log sistem. Hapus = soft delete (status 2).
+
+Blacklist (migration 20261001000004): karyawan nonaktif + driver/mekaniknya
+nonaktif + sesi login web & mobile dicabut, hanya bila tidak sedang bertugas.
 """
 
 from __future__ import annotations
@@ -34,6 +37,10 @@ class DriverKaryawanInfo(BaseModel):
     no_hp: str | None = None
 
 
+class MekanikKaryawanInfo(BaseModel):
+    id: str
+
+
 class Karyawan(BaseModel):
     id: str
     nama: str
@@ -42,6 +49,27 @@ class Karyawan(BaseModel):
     is_active: bool
     akun: list[AkunKaryawanInfo] = []
     driver: DriverKaryawanInfo | None = None
+    mekanik: MekanikKaryawanInfo | None = None
+    is_blacklist: bool = False
+    blacklist_alasan: str | None = None
+    blacklist_at: str | None = None
+    blacklist_oleh_nama: str | None = None
+
+
+class BlacklistInput(BaseModel):
+    alasan: str = Field(min_length=1, max_length=500)
+
+    @field_validator("alasan")
+    @classmethod
+    def _alasan(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Alasan blacklist wajib diisi")
+        return v
+
+
+class CabutBlacklistInput(BaseModel):
+    alasan: str | None = Field(default=None, max_length=500)
 
 
 class KaryawanInput(BaseModel):
@@ -84,7 +112,8 @@ def _params(payload: KaryawanInput, karyawan_id: str | None) -> dict[str, object
 async def daftar_karyawan(
     params: PageParams = Depends(page_params),
     q: Annotated[str | None, Query(max_length=100, description="Cari nama atau alamat")] = None,
-    aktif: Literal["aktif", "nonaktif"] | None = None,
+    # nonaktif = semua yang tidak aktif (termasuk blacklist); blacklist = hanya blacklist.
+    aktif: Literal["aktif", "nonaktif", "blacklist"] | None = None,
     client: AsyncClient = Depends(superadmin_client),
 ) -> Page[Karyawan]:
     limit = params.last_index - params.offset + 1
@@ -92,9 +121,10 @@ async def daftar_karyawan(
         "daftar_karyawan",
         {
             "p_q": (q or "").strip() or None,
-            "p_aktif": None if aktif is None else aktif == "aktif",
+            "p_aktif": None if aktif in (None, "blacklist") else aktif == "aktif",
             "p_limit": limit,
             "p_offset": params.offset,
+            "p_blacklist": True if aktif == "blacklist" else None,
         },
     ).execute()
     data = rows(res)
@@ -108,6 +138,11 @@ async def daftar_karyawan(
                 is_active=bool(r["is_active"]),
                 akun=r.get("akun") or [],
                 driver=r.get("driver"),
+                mekanik=r.get("mekanik"),
+                is_blacklist=bool(r.get("is_blacklist")),
+                blacklist_alasan=r.get("blacklist_alasan"),
+                blacklist_at=r.get("blacklist_at"),
+                blacklist_oleh_nama=r.get("blacklist_oleh_nama"),
             )
             for r in data
         ],
@@ -139,4 +174,25 @@ async def ubah_karyawan(
 async def hapus_karyawan(karyawan_id: str, client: AsyncClient = Depends(superadmin_client)) -> OkResponse:
     """Soft delete: UPDATE hr.karyawan SET status = 2 (bukan DELETE)."""
     await client.rpc("hapus_karyawan", {"p_id": karyawan_id}).execute()
+    return OkResponse()
+
+
+@router.post("/{karyawan_id}/blacklist", response_model=OkResponse)
+async def blacklist_karyawan(
+    karyawan_id: str, payload: BlacklistInput, client: AsyncClient = Depends(superadmin_client)
+) -> OkResponse:
+    """Satu fungsi database = satu transaksi: cek tidak bertugas, blacklist +
+    nonaktifkan karyawan/driver/mekanik, cabut sesi login, catat log."""
+    await client.rpc("blacklist_karyawan", {"p_id": karyawan_id, "p_alasan": payload.alasan}).execute()
+    return OkResponse()
+
+
+@router.post("/{karyawan_id}/cabut-blacklist", response_model=OkResponse)
+async def cabut_blacklist_karyawan(
+    karyawan_id: str, payload: CabutBlacklistInput, client: AsyncClient = Depends(superadmin_client)
+) -> OkResponse:
+    """Karyawan aktif lagi; driver/mekanik/akun diaktifkan sendiri di menunya."""
+    await client.rpc(
+        "cabut_blacklist_karyawan", {"p_id": karyawan_id, "p_alasan": (payload.alasan or "").strip() or None}
+    ).execute()
     return OkResponse()

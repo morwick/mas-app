@@ -172,8 +172,17 @@ export function DriversListView({ drivers }: Props) {
                   >
                     {d.no_hp}
                   </div>
+                  {d.is_blacklist && (
+                    <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 2 }}>
+                      Blacklist: {d.blacklist_alasan ?? "-"}
+                    </div>
+                  )}
                 </div>
-                {d.is_active ? (
+                {d.is_blacklist ? (
+                  <span className="badge" style={{ background: "#b91c1c", color: "#fff" }}>
+                    Blacklist
+                  </span>
+                ) : d.is_active ? (
                   d.status === "in_job" ? (
                     <span className="badge badge-status-bertugas" title={d.active_job_number ?? undefined}>
                       <span className="badge-dot" />

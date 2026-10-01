@@ -32,6 +32,11 @@ class Driver(BaseModel):
     status: DriverStatus = "stand_by"
     active_job_id: str | None = None
     active_job_number: str | None = None
+    # Karyawan pemilik data driver ini di-blacklist (migration 20261001000004).
+    is_blacklist: bool = False
+    blacklist_alasan: str | None = None
+    blacklist_at: str | None = None
+    blacklist_oleh_nama: str | None = None
 
 
 class DriverCreate(BaseModel):

@@ -90,6 +90,11 @@ export interface Driver {
   status: DriverStatus;
   active_job_id?: string | null;
   active_job_number?: string | null;
+  /** Karyawan pemilik data driver ini di-blacklist (diatur di menu Karyawan). */
+  is_blacklist?: boolean;
+  blacklist_alasan?: string | null;
+  blacklist_at?: string | null;
+  blacklist_oleh_nama?: string | null;
 }
 
 export interface Customer {

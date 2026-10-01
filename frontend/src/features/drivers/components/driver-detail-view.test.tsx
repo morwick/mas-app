@@ -90,4 +90,21 @@ describe("DriverDetailView", () => {
     expect(screen.queryByText("Edit")).toBeNull();
     bolehKelola = true;
   });
+  it("driver yang karyawannya di-blacklist menampilkan badge dan alasannya", () => {
+    tampil({
+      ...DRIVER,
+      is_active: false,
+      status: "stand_by",
+      active_job_id: null,
+      active_job_number: null,
+      is_blacklist: true,
+      blacklist_alasan: "Membawa kabur solar",
+      blacklist_at: "2026-10-01T01:00:00Z",
+      blacklist_oleh_nama: "Super Admin"
+    });
+    expect(screen.getByText("Blacklist")).toBeTruthy();
+    expect(screen.getByText("Driver ini di-blacklist")).toBeTruthy();
+    expect(screen.getByText(/Membawa kabur solar/)).toBeTruthy();
+    expect(screen.getByText(/oleh Super Admin/)).toBeTruthy();
+  });
 });

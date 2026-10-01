@@ -54,7 +54,47 @@ def test_daftar_paging_cari_filter_diteruskan(client: TestClient, db: _FakeDb) -
     assert res.status_code == 200
     body = res.json()
     assert body["total"] == 31 and body["items"][0]["nama"] == "Budi"
-    assert db.panggilan == [("daftar_karyawan", {"p_q": "bud", "p_aktif": False, "p_limit": 10, "p_offset": 10})]
+    assert db.panggilan == [
+        ("daftar_karyawan", {"p_q": "bud", "p_aktif": False, "p_limit": 10, "p_offset": 10, "p_blacklist": None})
+    ]
+
+
+def test_filter_blacklist_dan_info_blacklist(client: TestClient, db: _FakeDb) -> None:
+    db.data = [
+        {
+            "id": "k1",
+            "nama": "Budi",
+            "is_active": False,
+            "akun": [],
+            "driver": {"id": "d1", "no_hp": "0812"},
+            "mekanik": None,
+            "is_blacklist": True,
+            "blacklist_alasan": "Membawa kabur solar",
+            "blacklist_at": "2026-10-01T01:00:00+00:00",
+            "blacklist_oleh_nama": "Super Admin",
+            "total": 1,
+        }
+    ]
+    res = client.get("/api/karyawan", params={"aktif": "blacklist"})
+    assert res.status_code == 200
+    item = res.json()["items"][0]
+    assert item["is_blacklist"] is True and item["blacklist_alasan"] == "Membawa kabur solar"
+    assert item["blacklist_oleh_nama"] == "Super Admin"
+    assert db.panggilan[-1][1]["p_aktif"] is None and db.panggilan[-1][1]["p_blacklist"] is True
+
+
+def test_blacklist_dan_cabut_lewat_fungsi_database(client: TestClient, db: _FakeDb) -> None:
+    db.data = None
+    assert client.post("/api/karyawan/k1/blacklist", json={"alasan": "  Membawa kabur solar "}).status_code == 200
+    assert db.panggilan[-1] == ("blacklist_karyawan", {"p_id": "k1", "p_alasan": "Membawa kabur solar"})
+    assert client.post("/api/karyawan/k1/cabut-blacklist", json={"alasan": "  "}).status_code == 200
+    assert db.panggilan[-1] == ("cabut_blacklist_karyawan", {"p_id": "k1", "p_alasan": None})
+
+
+def test_blacklist_tanpa_alasan_ditolak(client: TestClient, db: _FakeDb) -> None:
+    assert client.post("/api/karyawan/k1/blacklist", json={"alasan": "   "}).status_code == 422
+    assert client.post("/api/karyawan/k1/blacklist", json={}).status_code == 422
+    assert db.panggilan == []
 
 
 def test_tambah_ubah_hapus_lewat_fungsi_database(client: TestClient, db: _FakeDb) -> None:
@@ -98,3 +138,26 @@ async def test_karyawan_yang_sudah_driver_ditolak() -> None:
 async def test_karyawan_nonaktif_ditolak() -> None:
     with pytest.raises(ValidationError, match="nonaktif"):
         await DriverService(_FakeDb(PILIHAN)).create(DriverCreate(karyawan_id="k-x", no_hp="081234567890"))  # type: ignore[arg-type]
+
+
+async def test_driver_karyawan_blacklist_ditandai() -> None:
+    from app.modules.drivers.schemas import Driver
+    from app.modules.drivers.service import DriverService
+
+    fake = _FakeDb(
+        [
+            {
+                "karyawan_id": "k1",
+                "blacklist_alasan": "Membawa kabur solar",
+                "blacklist_at": "2026-10-01T01:00:00+00:00",
+                "blacklist_oleh_nama": "Super Admin",
+            }
+        ]
+    )
+    dasar = {"no_hp": "0812", "is_active": False, "created_at": "2026-09-01T00:00:00Z"}
+    budi = Driver(id="d1", nama="Budi", karyawan_id="k1", **dasar)
+    andi = Driver(id="d2", nama="Andi", karyawan_id="k2", **dasar)
+    hasil = await DriverService(fake)._with_blacklist([budi, andi])  # type: ignore[arg-type]
+    assert fake.panggilan == [("info_blacklist_karyawan", {"p_ids": ["k1", "k2"]})]
+    assert hasil[0].is_blacklist and hasil[0].blacklist_alasan == "Membawa kabur solar"
+    assert not hasil[1].is_blacklist and hasil[1].blacklist_alasan is None

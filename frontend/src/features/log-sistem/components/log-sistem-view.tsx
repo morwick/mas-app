@@ -24,7 +24,9 @@ const WARNA_AKSI: Record<AksiLog, { bg: string; fg: string }> = {
   "Tambah Data": { bg: "var(--status-standby-bg)", fg: "var(--status-standby-text)" },
   "Update Data": { bg: "var(--status-perjalanan-bg)", fg: "var(--status-perjalanan-text)" },
   "Hapus Data": { bg: "var(--status-cancelled-bg)", fg: "var(--status-cancelled-text)" },
-  "Cetak Dokumen": { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" }
+  "Cetak Dokumen": { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" },
+  Blacklist: { bg: "#b91c1c", fg: "#fff" },
+  "Cabut Blacklist": { bg: "var(--status-standby-bg)", fg: "var(--status-standby-text)" }
 };
 
 function AksiBadge({ aksi }: { aksi: AksiLog }) {

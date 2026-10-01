@@ -1,5 +1,5 @@
 import { useDeferredValue, useState } from "react";
-import { IdCard, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Ban, IdCard, Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/pagination";
 import { formatDate } from "@/lib/utils";
 import {
+  blacklistKaryawan,
+  cabutBlacklistKaryawan,
   createKaryawan,
   deleteKaryawan,
   updateKaryawan,
@@ -27,7 +29,12 @@ import {
 } from "../api";
 import { useKaryawanList } from "../queries";
 
-const LABEL_ROLE = { superadmin: "Super Admin", operator: "Operator" } as const;
+const LABEL_ROLE = {
+  superadmin: "Super Admin",
+  operator: "Operator",
+  finance: "Finance",
+  admin: "Admin"
+} as const;
 
 type FormState = {
   id: string | null;
@@ -45,10 +52,44 @@ const hariIni = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/J
 function keterhubungan(k: Karyawan): string {
   const bagian: string[] = k.akun.map((a) => LABEL_ROLE[a.role] ?? a.role);
   if (k.driver) bagian.push("Driver");
+  if (k.mekanik) bagian.push("Mekanik");
   return bagian.length ? bagian.join(", ") : "—";
 }
 
-function StatusBadge({ aktif }: { aktif: boolean }) {
+/** Alasan blacklist + kapan & oleh siapa — tampil di bawah nama. */
+function InfoBlacklist({ k }: { k: Karyawan }) {
+  if (!k.is_blacklist) return null;
+  return (
+    <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 2 }}>
+      Alasan: {k.blacklist_alasan}
+      <span style={{ color: "var(--text-tertiary)" }}>
+        {" "}
+        · {formatDate(k.blacklist_at)}
+        {k.blacklist_oleh_nama ? ` oleh ${k.blacklist_oleh_nama}` : ""}
+      </span>
+    </div>
+  );
+}
+
+function StatusBadge({ aktif, blacklist }: { aktif: boolean; blacklist?: boolean }) {
+  if (blacklist) {
+    return (
+      <span
+        style={{
+          display: "inline-block",
+          fontSize: 11,
+          fontWeight: 700,
+          padding: "3px 8px",
+          borderRadius: 4,
+          whiteSpace: "nowrap",
+          background: "#b91c1c",
+          color: "#fff"
+        }}
+      >
+        Blacklist
+      </span>
+    );
+  }
   return (
     <span
       style={{
@@ -77,6 +118,8 @@ export function KaryawanView() {
 
   const [form, setForm] = useState<FormState | null>(null);
   const [hapus, setHapus] = useState<Karyawan | null>(null);
+  const [blacklist, setBlacklist] = useState<{ k: Karyawan; alasan: string } | null>(null);
+  const [cabut, setCabut] = useState<{ k: Karyawan; alasan: string } | null>(null);
   // Popup loading selama aksi berjalan — mencegah klik beruntun.
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -162,12 +205,47 @@ export function KaryawanView() {
     setHapus(null);
   }
 
+  async function simpanBlacklist(e: React.FormEvent) {
+    e.preventDefault();
+    if (!blacklist || busy) return;
+    const { k } = blacklist;
+    const alasan = blacklist.alasan.trim();
+    if (!alasan) {
+      toast.error("Alasan blacklist wajib diisi.");
+      return;
+    }
+    setBusy(`Mem-blacklist ${k.nama}…`);
+    const res = await blacklistKaryawan(k.id, alasan);
+    setBusy(null);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`${k.nama} di-blacklist. Sesi login web & mobile-nya sudah dicabut.`);
+    setBlacklist(null);
+  }
+
+  async function simpanCabut(e: React.FormEvent) {
+    e.preventDefault();
+    if (!cabut || busy) return;
+    const { k } = cabut;
+    setBusy(`Mencabut blacklist ${k.nama}…`);
+    const res = await cabutBlacklistKaryawan(k.id, cabut.alasan.trim() || null);
+    setBusy(null);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`Blacklist ${k.nama} dicabut. Karyawan aktif kembali.`);
+    setCabut(null);
+  }
+
   const adaFilter = Boolean(q || aktif);
   const akanDinonaktifkan =
     form?.asal && form.asal.is_active && !form.aktif && (form.asal.akun.length > 0 || form.asal.driver);
 
   const tombolAksi = (k: Karyawan) => (
-    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
       <Button
         variant="secondary"
         size="sm"
@@ -177,6 +255,28 @@ export function KaryawanView() {
       >
         Edit
       </Button>
+      {k.is_blacklist ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<ShieldCheck style={{ width: 14, height: 14 }} />}
+          onClick={() => setCabut({ k, alasan: "" })}
+          disabled={busy !== null}
+        >
+          Cabut blacklist
+        </Button>
+      ) : (
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<Ban style={{ width: 14, height: 14 }} />}
+          onClick={() => setBlacklist({ k, alasan: "" })}
+          disabled={busy !== null}
+          style={{ color: "#b91c1c" }}
+        >
+          Blacklist
+        </Button>
+      )}
       <Button
         variant="danger"
         size="sm"
@@ -219,7 +319,8 @@ export function KaryawanView() {
         items={[
           { key: "semua", label: "Semua" },
           { key: "aktif", label: "Aktif" },
-          { key: "nonaktif", label: "Nonaktif" }
+          { key: "nonaktif", label: "Nonaktif" },
+          { key: "blacklist", label: "Blacklist" }
         ]}
       />
 
@@ -244,18 +345,21 @@ export function KaryawanView() {
                   <th>Alamat</th>
                   <th style={{ width: 170 }}>Terhubung ke</th>
                   <th style={{ width: 100 }}>Status</th>
-                  <th style={{ width: 190 }}></th>
+                  <th style={{ width: 330 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((k) => (
                   <tr key={k.id}>
-                    <td style={{ fontWeight: 500 }}>{k.nama}</td>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{k.nama}</div>
+                      <InfoBlacklist k={k} />
+                    </td>
                     <td>{k.tanggal_lahir ? formatDate(k.tanggal_lahir) : "—"}</td>
                     <td style={{ wordBreak: "break-word" }}>{k.alamat ?? "—"}</td>
                     <td className="caption">{keterhubungan(k)}</td>
                     <td>
-                      <StatusBadge aktif={k.is_active} />
+                      <StatusBadge aktif={k.is_active} blacklist={k.is_blacklist} />
                     </td>
                     <td>{tombolAksi(k)}</td>
                   </tr>
@@ -270,8 +374,9 @@ export function KaryawanView() {
               <div key={k.id} className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
                   <span style={{ fontWeight: 600 }}>{k.nama}</span>
-                  <StatusBadge aktif={k.is_active} />
+                  <StatusBadge aktif={k.is_active} blacklist={k.is_blacklist} />
                 </div>
+                <InfoBlacklist k={k} />
                 <div className="caption">
                   {k.tanggal_lahir ? `Lahir ${formatDate(k.tanggal_lahir)} · ` : ""}
                   Terhubung: {keterhubungan(k)}
@@ -331,9 +436,14 @@ export function KaryawanView() {
             <Field
               label="Status"
               required
-              hint="Karyawan nonaktif: akun pengguna & driver miliknya tidak bisa login dan tidak muncul di pilihan."
+              hint={
+                form.asal?.is_blacklist
+                  ? "Karyawan sedang di-blacklist — cabut blacklist dulu untuk mengaktifkannya."
+                  : "Karyawan nonaktif: akun pengguna & driver miliknya tidak bisa login dan tidak muncul di pilihan. Sesi login yang sedang berjalan langsung dicabut."
+              }
             >
               <Select
+                disabled={Boolean(form.asal?.is_blacklist)}
                 value={form.aktif ? "aktif" : "nonaktif"}
                 onChange={(e) => setForm((p) => (p ? { ...p, aktif: e.target.value === "aktif" } : p))}
               >
@@ -350,6 +460,85 @@ export function KaryawanView() {
                 login sampai karyawan diaktifkan kembali.
               </div>
             )}
+          </form>
+        </Modal>
+      )}
+
+      {blacklist && (
+        <Modal
+          open
+          onClose={busy ? () => {} : () => setBlacklist(null)}
+          title={`Blacklist karyawan — ${blacklist.k.nama}`}
+          description="Hanya untuk karyawan yang sedang tidak bertugas (tidak ada job atau perintah kerja yang belum selesai)."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setBlacklist(null)} disabled={busy !== null}>
+                Batal
+              </Button>
+              <Button type="submit" form="blacklist-form" variant="danger" loading={busy !== null}>
+                Blacklist
+              </Button>
+            </>
+          }
+        >
+          <form id="blacklist-form" onSubmit={simpanBlacklist} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div
+              className="card card-pad"
+              style={{ background: "var(--status-cancelled-bg)", color: "var(--status-cancelled-text)", fontSize: 13 }}
+            >
+              Setelah di-blacklist:
+              <ul style={{ margin: "6px 0 0 18px", listStyle: "disc" }}>
+                <li>karyawan menjadi nonaktif dan tidak bisa login ke web maupun aplikasi mobile;</li>
+                <li>sesi login yang sedang berjalan langsung dicabut (PIN driver tidak diubah);</li>
+                <li>data driver / mekaniknya menjadi nonaktif dan tidak bisa ditugaskan.</li>
+              </ul>
+              {(blacklist.k.akun.length > 0 || blacklist.k.driver || blacklist.k.mekanik) && (
+                <div style={{ marginTop: 6 }}>Terhubung ke: {keterhubungan(blacklist.k)}.</div>
+              )}
+            </div>
+            <Field label="Alasan blacklist" required>
+              <Textarea
+                value={blacklist.alasan}
+                autoFocus
+                maxLength={500}
+                onChange={(e) => setBlacklist((p) => (p ? { ...p, alasan: e.target.value } : p))}
+                placeholder="mis. Membawa kabur solar perusahaan"
+              />
+            </Field>
+          </form>
+        </Modal>
+      )}
+
+      {cabut && (
+        <Modal
+          open
+          onClose={busy ? () => {} : () => setCabut(null)}
+          title={`Cabut blacklist — ${cabut.k.nama}`}
+          description={`Alasan blacklist: ${cabut.k.blacklist_alasan ?? "-"}`}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setCabut(null)} disabled={busy !== null}>
+                Batal
+              </Button>
+              <Button type="submit" form="cabut-blacklist-form" loading={busy !== null}>
+                Cabut blacklist
+              </Button>
+            </>
+          }
+        >
+          <form id="cabut-blacklist-form" onSubmit={simpanCabut} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <p style={{ fontSize: 13 }}>
+              Karyawan akan aktif kembali dan bisa login lagi. Data driver / mekanik / akun pengguna miliknya{" "}
+              <strong>tidak</strong> otomatis aktif — aktifkan sendiri di menunya masing-masing bila perlu.
+            </p>
+            <Field label="Alasan dicabut">
+              <Textarea
+                value={cabut.alasan}
+                maxLength={500}
+                onChange={(e) => setCabut((p) => (p ? { ...p, alasan: e.target.value } : p))}
+                placeholder="Opsional"
+              />
+            </Field>
           </form>
         </Modal>
       )}
