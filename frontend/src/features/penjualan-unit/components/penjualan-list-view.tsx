@@ -2,7 +2,6 @@ import { useDeferredValue, useState } from "react";
 import { BadgeDollarSign, Eye, FileDown, Pencil, Plus, Search, Undo2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { DokumenSiapModal } from "@/components/surat/dokumen-siap-modal";
 import { UnggahDokumenModal } from "@/components/surat/unggah-dokumen-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,6 +27,7 @@ import {
 import { usePenjualanList } from "../queries";
 import { PenjualanFormModal } from "./penjualan-form-modal";
 import { StatusDokumen } from "./status-dokumen";
+import { StatusApprovalBadge } from "@/features/approval/components/status-approval-badge";
 
 const LABEL_JENIS: Record<JenisAset, string> = { unit: "Unit", unit_trailer: "Unit Trailer" };
 const LABEL_DOKUMEN: Record<DokumenTtd, string> = { surat: "Surat penjualan", bast: "BAST" };
@@ -54,8 +54,6 @@ export function PenjualanListView() {
   const [form, setForm] = useState<{ penjualan: PenjualanUnit | null } | null>(null);
   const [batal, setBatal] = useState<PenjualanUnit | null>(null);
   const [unggah, setUnggah] = useState<PenjualanUnit | null>(null);
-  // Penjualan yang baru tersimpan — tawarkan unduh dokumennya.
-  const [dokumenBaru, setDokumenBaru] = useState<string | null>(null);
   // Pesan popup loading; null = tidak ada proses yang berjalan.
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -96,8 +94,8 @@ export function PenjualanListView() {
       toast.error(res.error);
       return false;
     }
-    toast.success(`Penjualan ke ${input.nama_pembeli} tercatat`);
-    setDokumenBaru(res.data.id);
+    // Status aset & dokumen menunggu approval (lihat Approval → Penjualan).
+    toast.success(`Penjualan ke ${input.nama_pembeli} diajukan — menunggu approval`);
     return true;
   }
 
@@ -147,7 +145,9 @@ export function PenjualanListView() {
       toast.error(res.error);
       return;
     }
-    toast.success(`Penjualan ${p.kode_aset} dibatalkan`);
+    toast.success(
+      p.status_approval === "disetujui" ? `Penjualan ${p.kode_aset} dibatalkan` : `Pengajuan penjualan ${p.kode_aset} dibatalkan`
+    );
   }
 
   const total = data.data?.total ?? 0;
@@ -167,19 +167,26 @@ export function PenjualanListView() {
 
   function Aksi({ p }: { p: PenjualanUnit }) {
     const terkunci = penjualanTerkunci(p);
+    // BATASAN: dokumen baru ada setelah disetujui; yang ditolak tidak bisa diedit.
+    const disetujui = p.status_approval === "disetujui";
+    const ditolak = p.status_approval === "ditolak";
     const ikon = (I: typeof FileDown) => <I style={{ width: 14, height: 14 }} />;
     return (
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ActionMenu
           items={[
-            { label: "Unduh surat penjualan", icon: ikon(FileDown), href: dokumenPenjualan(p.id)[0].href },
-            { label: "Unduh BAST", icon: ikon(FileDown), href: dokumenPenjualan(p.id)[1].href },
-            {
-              label: "Unggah dokumen bertanda tangan",
-              icon: ikon(Upload),
-              onSelect: () => setUnggah(p),
-              disabled: busy !== null
-            },
+            ...(disetujui
+              ? [
+                  { label: "Unduh surat penjualan", icon: ikon(FileDown), href: dokumenPenjualan(p.id)[0].href },
+                  { label: "Unduh BAST", icon: ikon(FileDown), href: dokumenPenjualan(p.id)[1].href },
+                  {
+                    label: "Unggah dokumen bertanda tangan",
+                    icon: ikon(Upload),
+                    onSelect: () => setUnggah(p),
+                    disabled: busy !== null
+                  }
+                ]
+              : []),
             ...(p.bukti_uploaded_at
               ? [{ label: "Lihat surat bertanda tangan", icon: ikon(Eye), onSelect: () => lihatDokumen(p, "surat") }]
               : []),
@@ -190,11 +197,11 @@ export function PenjualanListView() {
               label: "Edit",
               icon: ikon(Pencil),
               onSelect: () => setForm({ penjualan: p }),
-              disabled: terkunci || busy !== null,
-              hint: terkunci ? KUNCI : undefined
+              disabled: terkunci || ditolak || busy !== null,
+              hint: terkunci ? KUNCI : ditolak ? "Ditolak approver — catat penjualan baru" : undefined
             },
             {
-              label: "Batalkan penjualan",
+              label: disetujui ? "Batalkan penjualan" : ditolak ? "Hapus dari daftar" : "Batalkan pengajuan",
               icon: ikon(Undo2),
               onSelect: () => setBatal(p),
               danger: true,
@@ -266,48 +273,50 @@ export function PenjualanListView() {
         <div style={{ opacity: data.isPlaceholderData ? 0.6 : 1, transition: "opacity 120ms" }}>
           {/* Desktop: tabel */}
           <div className="card hidden lg:block" style={{ overflow: "hidden" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 190 }}>No. penjualan / tanggal</th>
-                  <th>Aset</th>
-                  <th>Pembeli</th>
-                  <th style={{ width: 160, textAlign: "right" }}>Harga jual</th>
-                  <th style={{ width: 150 }}>Dokumen TTD</th>
-                  <th style={{ width: 100 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
-                        {p.nomor_surat ?? "—"}
-                      </div>
-                      <div className="caption">{formatDate(p.tanggal_jual)}</div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{p.kode_aset}</div>
-                      <div className="caption">{LABEL_JENIS[p.jenis_aset]}</div>
-                    </td>
-                    <td>
-                      <div>{p.nama_pembeli}</div>
-                      {p.no_hp_pembeli && <div className="caption">{p.no_hp_pembeli}</div>}
-                      {p.email_pembeli && <div className="caption">{p.email_pembeli}</div>}
-                    </td>
-                    <td className="mono" style={{ textAlign: "right", fontWeight: 600 }}>
-                      {formatRupiah(p.harga_jual)}
-                    </td>
-                    <td>
-                      <StatusTtd p={p} />
-                    </td>
-                    <td>
-                      <Aksi p={p} />
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 190 }}>No. penjualan / tanggal</th>
+                    <th>Aset</th>
+                    <th>Pembeli</th>
+                    <th style={{ width: 160, textAlign: "right" }}>Harga jual</th>
+                    <th style={{ width: 150 }}>Dokumen TTD</th>
+                    <th style={{ width: 100 }}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
+                          {p.nomor_surat ?? "—"}
+                        </div>
+                        <div className="caption">{formatDate(p.tanggal_jual)}</div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{p.kode_aset}</div>
+                        <div className="caption">{LABEL_JENIS[p.jenis_aset]}</div>
+                      </td>
+                      <td>
+                        <div>{p.nama_pembeli}</div>
+                        {p.no_hp_pembeli && <div className="caption">{p.no_hp_pembeli}</div>}
+                        {p.email_pembeli && <div className="caption">{p.email_pembeli}</div>}
+                      </td>
+                      <td className="mono" style={{ textAlign: "right", fontWeight: 600 }}>
+                        {formatRupiah(p.harga_jual)}
+                      </td>
+                      <td>
+                        <StatusTtd p={p} />
+                      </td>
+                      <td>
+                        <Aksi p={p} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pagination state={pg} label="penjualan" attached />
           </div>
 
@@ -365,28 +374,26 @@ export function PenjualanListView() {
           open
           onClose={() => setBatal(null)}
           title={`Batalkan penjualan ${batal.kode_aset}?`}
-          body={`Catatan penjualan ke ${batal.nama_pembeli} dihapus dan ${LABEL_JENIS[batal.jenis_aset].toLowerCase()} ini kembali ke status sebelum dijual. Insiden yang ditutup saat dijual dibuka lagi.`}
+          body={
+            batal.status_approval === "disetujui"
+              ? `Catatan penjualan ke ${batal.nama_pembeli} dihapus dan ${LABEL_JENIS[batal.jenis_aset].toLowerCase()} ini kembali ke status sebelum dijual. Insiden yang ditutup saat dijual dibuka lagi.`
+              : `Catatan penjualan ke ${batal.nama_pembeli} dihapus. Status ${LABEL_JENIS[batal.jenis_aset].toLowerCase()} tidak berubah karena penjualan belum disetujui.`
+          }
           confirmText="Ya, batalkan"
           variant="danger"
           onConfirm={konfirmasiBatal}
         />
       )}
 
-      <DokumenSiapModal
-        open={dokumenBaru !== null}
-        onClose={() => setDokumenBaru(null)}
-        judul="Penjualan tercatat"
-        keterangan="Unduh dokumennya sekarang, atau nanti lewat tombol Surat / BAST di daftar."
-        dokumen={dokumenBaru ? dokumenPenjualan(dokumenBaru) : []}
-      />
 
       <LoadingOverlay message={busy} />
     </div>
   );
 }
 
-/** Status dokumen bertanda tangan di baris daftar. */
+/** Status dokumen bertanda tangan di baris daftar — atau status approval-nya bila belum disetujui. */
 function StatusTtd({ p }: { p: PenjualanUnit }) {
+  if (p.status_approval !== "disetujui") return <StatusApprovalBadge status={p.status_approval} />;
   return (
     <StatusDokumen
       dokumen={[

@@ -103,6 +103,10 @@ class _DbJob(_Db):
     def maybe_single(self) -> "_DbJob":
         return self
 
+    def or_(self, *_: object) -> "_DbJob":
+        # Tautan job pengganti (ganti unit) diambil dari tabel jobs juga.
+        return self
+
 
 async def test_operator_tidak_menerima_info_tagihan() -> None:
     row = {

@@ -3,20 +3,15 @@ import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useCustomers } from "@/features/customers/queries";
 import { QuotationForm } from "../components/quotation-form";
-import { useNextQuotationNumber, useQuotation } from "../queries";
+import { useQuotation } from "../queries";
 
 export function NewQuotationPage() {
   const user = useCurrentUser();
   const customers = useCustomers();
-  const nextNumber = useNextQuotationNumber();
-  if (customers.isPending || nextNumber.isPending) return <PageLoading />;
+  if (customers.isPending) return <PageLoading />;
   if (customers.isError) return <PageError error={customers.error} onRetry={customers.refetch} />;
   return (
-    <QuotationForm
-      customers={customers.data}
-      nextNumber={nextNumber.data ?? ""}
-      defaultTtdNama={user.nama}
-    />
+    <QuotationForm customers={customers.data} defaultTtdNama={user.nama} />
   );
 }
 

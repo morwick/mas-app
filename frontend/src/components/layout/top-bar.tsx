@@ -13,15 +13,21 @@ function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
   const crumbs: { label: string; href?: string }[] = [];
   if (root) crumbs.push({ label: root.label, href: root.href });
 
-  const sub = segments.slice(1);
+  // /approval/:fitur — kode fitur bagian dari menu, bukan halaman detail.
+  const sub = segments[0] === "approval" ? segments.slice(2) : segments.slice(1);
   for (let i = 0; i < sub.length; i++) {
     const seg = sub[i];
     if (seg === "new") crumbs.push({ label: "Baru" });
     else if (seg === "edit") crumbs.push({ label: "Edit" });
     else if (seg === "confirmation") crumbs.push({ label: "Konfirmasi" });
     else if (seg === "utilisasi") crumbs.push({ label: "Utilisasi armada" });
+    else if (seg === "per-unit" && segments[0] === "proyek") crumbs.push({ label: "Proyek per unit" });
     else if (seg === "customers" && segments[0] === "reports")
       crumbs.push({ label: "Riwayat customer" });
+    // Halaman job di bawah menu Job: /jobs/:id → "Job › Detail job" (tautan ke
+    // detail job itu, dipakai halaman edit job).
+    else if (seg.length > 8 && /[0-9a-f-]/i.test(seg) && segments[0] === "jobs")
+      crumbs.push({ label: "Detail job", href: `/jobs/${seg}` });
     else if (seg.length > 8 && /[0-9a-f-]/i.test(seg))
       crumbs.push({ label: "Detail" });
   }
@@ -35,7 +41,8 @@ function getPageTitle(pathname: string): string {
   if (crumbs.length === 1) return last.label;
   const root = crumbs[0].label;
   if (last.label === "Baru") return `${root} baru`;
-  if (last.label === "Edit") return `Edit ${root.toLowerCase()}`;
+  if (last.label === "Edit")
+    return crumbs[crumbs.length - 2]?.label === "Detail job" ? "Edit job" : `Edit ${root.toLowerCase()}`;
   if (last.label === "Konfirmasi") return "Konfirmasi job";
   if (last.label === "Detail") return `Detail ${root.toLowerCase()}`;
   return last.label;

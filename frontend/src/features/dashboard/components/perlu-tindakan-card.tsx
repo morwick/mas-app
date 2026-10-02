@@ -29,7 +29,34 @@ export interface TindakanItem {
   onClick?: () => void;
   judul: string;
   keterangan: string;
+  /** Kunci warna & ikon di NADA bila berbeda dari `key` (mis. beberapa item sejenis). */
+  nada?: string;
 }
+
+/** Warna kartu: merah untuk "Perlu tindakan", ungu untuk "Perlu approval". */
+interface TemaKartu {
+  warna: string;
+  warnaTerang: string;
+  border: string;
+  latar: string;
+  bayangan: string;
+}
+
+const TEMA_TINDAKAN: TemaKartu = {
+  warna: "#DC2626",
+  warnaTerang: "#EF4444",
+  border: "#FCA5A5",
+  latar: "#FFF5F5",
+  bayangan: "rgba(220, 38, 38, 0.12)"
+};
+
+export const TEMA_APPROVAL: TemaKartu = {
+  warna: "#7C3AED",
+  warnaTerang: "#8B5CF6",
+  border: "#C4B5FD",
+  latar: "#F7F3FF",
+  bayangan: "rgba(124, 58, 237, 0.12)"
+};
 
 /** Warna & ikon per jenis tindakan — supaya tiap kotak mudah dibedakan sekilas. */
 const NADA: Record<string, { warna: string; lembut: string; Ikon: LucideIcon }> = {
@@ -42,7 +69,8 @@ const NADA: Record<string, { warna: string; lembut: string; Ikon: LucideIcon }> 
   invoice: { warna: "#16A34A", lembut: "#DCFCE7", Ikon: Receipt },
   dokumen: { warna: "#DB2777", lembut: "#FCE7F3", Ikon: FileText },
   "servis-lewat": { warna: "#B91C1C", lembut: "#FEE2E2", Ikon: Wrench },
-  "servis-mendekati": { warna: "#CA8A04", lembut: "#FEF9C3", Ikon: Wrench }
+  "servis-mendekati": { warna: "#CA8A04", lembut: "#FEF9C3", Ikon: Wrench },
+  approval: { warna: "#7C3AED", lembut: "#EDE9FE", Ikon: ClipboardCheck }
 };
 const NADA_BAWAAN = { warna: "#DC2626", lembut: "#FEE2E2", Ikon: AlertTriangle };
 
@@ -52,17 +80,28 @@ const NADA_BAWAAN = { warna: "#DC2626", lembut: "#FEE2E2", Ikon: AlertTriangle }
  * memanjang ke bawah. Header bisa diklik untuk minimize / expand (diingat
  * per browser). Tanpa tindakan kartu tidak dirender sama sekali.
  */
-export function PerluTindakanCard({ items }: { items: TindakanItem[] }) {
-  const [terlipat, ubah] = useTerlipat("dashboard.perluTindakan.terlipat");
+export function PerluTindakanCard({
+  items,
+  judul = "Perlu tindakan",
+  kunciLipat = "dashboard.perluTindakan.terlipat",
+  tema = TEMA_TINDAKAN
+}: {
+  items: TindakanItem[];
+  judul?: string;
+  /** Kunci penyimpanan status minimize — beda per kartu. */
+  kunciLipat?: string;
+  tema?: TemaKartu;
+}) {
+  const [terlipat, ubah] = useTerlipat(kunciLipat);
   if (items.length === 0) return null;
 
   return (
     <div
       className="card"
       style={{
-        borderColor: "#FCA5A5",
-        background: "linear-gradient(180deg, #FFF5F5 0%, #FFFFFF 100%)",
-        boxShadow: "0 2px 8px rgba(220, 38, 38, 0.12)",
+        borderColor: tema.border,
+        background: `linear-gradient(180deg, ${tema.latar} 0%, #FFFFFF 100%)`,
+        boxShadow: `0 2px 8px ${tema.bayangan}`,
         overflow: "hidden"
       }}
     >
@@ -76,7 +115,7 @@ export function PerluTindakanCard({ items }: { items: TindakanItem[] }) {
           gap: 8,
           width: "100%",
           padding: "12px 16px",
-          background: "linear-gradient(90deg, #DC2626 0%, #EF4444 100%)",
+          background: `linear-gradient(90deg, ${tema.warna} 0%, ${tema.warnaTerang} 100%)`,
           color: "white",
           border: 0,
           cursor: "pointer",
@@ -85,11 +124,11 @@ export function PerluTindakanCard({ items }: { items: TindakanItem[] }) {
       >
         <AlertTriangle style={{ width: 18, height: 18, color: "white" }} />
         <span className="eyebrow" style={{ color: "white", fontWeight: 700 }}>
-          Perlu tindakan
+          {judul}
         </span>
         <span
           className="badge"
-          style={{ background: "white", color: "#DC2626", height: 18, fontSize: 11, padding: "0 7px", fontWeight: 700 }}
+          style={{ background: "white", color: tema.warna, height: 18, fontSize: 11, padding: "0 7px", fontWeight: 700 }}
         >
           {items.length}
         </span>
@@ -128,7 +167,7 @@ export function PerluTindakanCard({ items }: { items: TindakanItem[] }) {
       {!terlipat && (
         <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" style={{ padding: 12 }}>
           {items.map((it) => {
-            const nada = NADA[it.key] ?? NADA_BAWAAN;
+            const nada = NADA[it.nada ?? it.key] ?? NADA_BAWAAN;
             const Ikon = nada.Ikon;
             return (
               <div

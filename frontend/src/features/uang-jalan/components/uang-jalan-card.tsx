@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { queryClient } from "@/lib/api/query";
-import { Plus, Pencil, Trash2, Wallet } from "lucide-react";
+import { ChevronDown, Plus, Pencil, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
@@ -8,7 +9,14 @@ import { Field, Textarea } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Modal } from "@/components/ui/modal";
 import { UangJalanModal } from "./uang-jalan-modal";
-import { deleteUangJalan, rejectRequest, setUangJalanAwal } from "@/features/uang-jalan/api";
+import { StatusApprovalBadge } from "@/features/approval/components/status-approval-badge";
+import {
+  deleteUangJalan,
+  rejectRequest,
+  setUangJalanAwal,
+  type TambahanDibatalkan
+} from "@/features/uang-jalan/api";
+import { RiwayatApprovalModal, type DetailTambahan } from "./riwayat-approval-modal";
 import { formatRupiah, formatDate, formatDateTime } from "@/lib/utils";
 import type { SumberDana, UangJalan, UangJalanRequest, UangJalanRingkasan } from "@/types";
 
@@ -23,6 +31,10 @@ interface Props {
   hanyaLihat?: boolean;
   /** Nomor tagihan bila job sudah ditagihkan — uang jalan tidak bisa ditambah lagi. */
   nomorTagihan?: string | null;
+  /** Tanggal uang jalan awal ditetapkan (= job dibuat) — baris pertama riwayat. */
+  tanggalAwal?: string;
+  /** Pengajuan tambahan yang dihapus selama menunggu — riwayat saja, tidak dihitung. */
+  dibatalkan?: TambahanDibatalkan[];
 }
 
 function Angka({
@@ -62,7 +74,9 @@ export function UangJalanCard({
   ringkasan,
   pengajuan = [],
   hanyaLihat = false,
-  nomorTagihan = null
+  nomorTagihan = null,
+  tanggalAwal,
+  dibatalkan = []
 }: Props) {
   const toast = useToast();
 
@@ -73,6 +87,9 @@ export function UangJalanCard({
   const [alasanTolak, setAlasanTolak] = useState("");
   const pendingRequests = pengajuan.filter((r) => r.status === "diajukan");
   const adaBukti = transaksi.some((t) => t.jenis === "pencairan" && t.bukti_transfer_path);
+  // BATASAN: uang jalan awal terkunci begitu sudah ada uang jalan yang keluar ke
+  // driver (dijaga juga backend & database, migration 20261001000022).
+  const awalTerkunci = transaksi.some((t) => t.jenis === "pencairan");
 
   async function tolak() {
     if (!rejecting) return;
@@ -85,6 +102,18 @@ export function UangJalanCard({
     setAlasanTolak("");
   }
   const [hapus, setHapus] = useState<UangJalan | null>(null);
+  const [menghapus, setMenghapus] = useState<string | null>(null);
+  const sedangHapus = useRef(false);
+  // Riwayat selalu mulai terciut setiap halaman dibuka; dibuka sendiri bila perlu.
+  const [riwayatTerlipat, setRiwayatTerlipat] = useState(true);
+  const lipatRiwayat = () => setRiwayatTerlipat((v) => !v);
+  // Transaksi aktif + pengajuan tambahan yang dibatalkan, urut tanggal.
+  const riwayat = [
+    ...transaksi.map((t) => ({ batal: false as const, t, tanggal: t.tanggal, dibuat: t.created_at })),
+    ...dibatalkan.map((d) => ({ batal: true as const, d, tanggal: d.tanggal, dibuat: d.created_at }))
+  ].sort((a, b) => a.tanggal.localeCompare(b.tanggal) || a.dibuat.localeCompare(b.dibuat));
+  // Baris "Tambah uang jalan" yang riwayat approval-nya sedang dibuka.
+  const [detailTambahan, setDetailTambahan] = useState<DetailTambahan | null>(null);
   const [editUangJalanAwal, setEditUangJalanAwal] = useState(false);
   const [uangJalanAwalDraft, setUangJalanAwalDraft] = useState(String(Math.round(ringkasan.uang_jalan_awal)));
   const [saving, setSaving] = useState(false);
@@ -111,11 +140,18 @@ export function UangJalanCard({
   }
 
   async function konfirmasiHapus() {
-    if (!hapus) return;
-    const res = await deleteUangJalan(hapus.id, jobId);
-    if (!res.ok) return toast.error(res.error);
-    toast.success("Catatan dihapus");
+    // Penjaga klik ganda yang langsung berlaku (state baru berubah setelah render).
+    if (!hapus || sedangHapus.current) return;
+    sedangHapus.current = true;
+    const pengajuan = hapus.jenis === "tambahan";
+    // Jendela konfirmasi ditutup, popup loading menutup layar sampai selesai.
     setHapus(null);
+    setMenghapus(pengajuan ? "Menghapus pengajuan…" : "Menghapus catatan…");
+    const res = await deleteUangJalan(hapus.id, jobId);
+    setMenghapus(null);
+    sedangHapus.current = false;
+    if (!res.ok) return toast.error(res.error);
+    toast.success(pengajuan ? "Pengajuan uang jalan dihapus" : "Catatan dihapus");
   }
 
   return (
@@ -145,7 +181,7 @@ export function UangJalanCard({
             }}
           >
             <Plus style={{ width: 13, height: 13 }} />
-            Catat
+            Ajukan
           </Button>
         )}
       </div>
@@ -196,14 +232,9 @@ export function UangJalanCard({
           }}
         >
           <div>
-            <Angka label="Uang jalan" value={formatRupiah(ringkasan.uang_jalan)} />
-            {ringkasan.tambahan > 0 && (
-              <div className="caption" style={{ marginTop: 2 }}>
-                {formatRupiah(ringkasan.uang_jalan_awal)} + tambahan{" "}
-                {formatRupiah(ringkasan.tambahan)}
-              </div>
-            )}
-            {!hanyaLihat && (
+            {/* Hanya nominal — rinciannya ada di riwayat uang jalan di bawah. */}
+            <Angka label="TOTAL UJ" value={formatRupiah(ringkasan.uang_jalan)} />
+            {!hanyaLihat && !awalTerkunci && (
             <button
               type="button"
               className="btn-link"
@@ -216,6 +247,7 @@ export function UangJalanCard({
               Ubah uang jalan awal
             </button>
             )}
+
           </div>
           <Angka label="Sudah dikasih" value={formatRupiah(ringkasan.cair)} />
           <Angka
@@ -286,8 +318,55 @@ export function UangJalanCard({
         </p>
       )}
 
-      {/* Riwayat */}
-      {transaksi.length === 0 ? (
+      <button
+        type="button"
+        onClick={lipatRiwayat}
+        aria-expanded={!riwayatTerlipat}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          background: "none",
+          border: 0,
+          padding: "4px 0 8px",
+          cursor: "pointer",
+          font: "inherit",
+          color: "inherit"
+        }}
+      >
+        <span className="eyebrow">Riwayat uang jalan ({riwayat.length + (ringkasan.uang_jalan_awal > 0 ? 1 : 0)})</span>
+        <span className="caption" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {riwayatTerlipat ? "Tampilkan" : "Sembunyikan"}
+          <ChevronDown
+            style={{ width: 14, height: 14, transform: riwayatTerlipat ? "none" : "rotate(180deg)", transition: "transform 150ms" }}
+          />
+        </span>
+      </button>
+
+      {!riwayatTerlipat && (
+      <>
+      {/* Riwayat — diawali uang jalan awal (ditetapkan saat job dibuat). */}
+      {ringkasan.uang_jalan_awal > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 0",
+            borderBottom: "1px solid var(--border-default)"
+          }}
+        >
+          <div style={{ minWidth: 62 }} className="caption mono">
+            {tanggalAwal ? formatDate(tanggalAwal) : "—"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600 }}>Uang jalan awal</div>
+          <div className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
+            {formatRupiah(ringkasan.uang_jalan_awal)}
+          </div>
+        </div>
+      )}
+      {riwayat.length === 0 ? (
         <p
           style={{
             fontSize: 12.5,
@@ -300,8 +379,63 @@ export function UangJalanCard({
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {transaksi.map((t) => {
+          {riwayat.map((baris) => {
+            if (baris.batal) {
+              const d = baris.d;
+              // Pengajuan tambahan yang dihapus selama menunggu: riwayat saja.
+              return (
+                <div
+                  key={`batal-${d.id}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 0",
+                    borderBottom: "1px solid var(--border-default)",
+                    opacity: 0.75
+                  }}
+                >
+                  <div style={{ minWidth: 62 }} className="caption mono">
+                    {formatDate(d.tanggal)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Tambah uang jalan</span>
+                        <span className="badge" style={{ background: "var(--bg-muted)", color: "var(--text-secondary)" }}>
+                          Dibatalkan
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-link"
+                          style={{ fontSize: 11.5, fontWeight: 500 }}
+                          onClick={() => setDetailTambahan({ ...d, dibatalkan: true })}
+                        >
+                          Lihat detail
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-tertiary)" }}>
+                    +{formatRupiah(d.jumlah)}
+                  </div>
+                </div>
+              );
+            }
+            const t = baris.t;
             const tambah = t.jenis === "tambahan";
+            const statusTambahan = tambah ? (t.status_approval ?? "disetujui") : null;
+            // BATASAN: tambahan yang sudah disetujui / ditolak tidak bisa diubah
+            // (dijaga database, migration 20261001000010); masih bisa dihapus.
+            const bisaDiubah = statusTambahan === null || statusTambahan === "menunggu";
+            // BATASAN: tambahan yang sudah diputuskan (disetujui / ditolak) tidak bisa
+            // diubah maupun dihapus (hapus dijaga juga backend, UangJalanService.delete).
+            const sudahDiputuskan = statusTambahan === "disetujui" || statusTambahan === "ditolak";
+            // Pengembalian & kasbon supir: riwayat ganti driver / unit — tidak bisa
+            // diubah / dihapus (dijaga database). BATASAN: hanya pengembalian yang
+            // mengurangi uang yang sudah cair; kasbon tidak (migration 20261001000017).
+            const penggantian = t.jenis === "pengembalian" || t.jenis === "kasbon";
+            const kasbon = t.jenis === "kasbon";
             return (
               <div
                 key={t.id}
@@ -319,12 +453,30 @@ export function UangJalanCard({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>
                     {tambah ? (
-                      <span style={{ color: "#b45309" }}>Tambah uang jalan</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <span style={{ color: "#b45309" }}>Tambah uang jalan</span>
+                        {statusTambahan !== "disetujui" && statusTambahan && (
+                          <StatusApprovalBadge status={statusTambahan} />
+                        )}
+                        <button
+                          type="button"
+                          className="btn-link"
+                          style={{ fontSize: 11.5, fontWeight: 500 }}
+                          onClick={() => setDetailTambahan(t)}
+                        >
+                          Lihat detail
+                        </button>
+                      </span>
+                    ) : penggantian ? (
+                      <span style={{ color: "var(--status-perjalanan-text)" }}>
+                        {t.jenis === "kasbon" ? "Kasbon supir" : `Dikembalikan ke ${t.sumber_dana_nama ?? "kas"}`}
+                      </span>
                     ) : (
                       t.sumber_dana_nama ?? "—"
                     )}
                   </div>
-                  {(t.keperluan || t.catatan) && (
+                  {/* Tambahan: alasan & catatan dilihat di modal "Lihat detail" supaya ringkas. */}
+                  {!tambah && (t.keperluan || t.catatan) && (
                     <div className="caption" style={{ marginTop: 1 }}>
                       {[t.keperluan, t.catatan].filter(Boolean).join(" · ")}
                     </div>
@@ -351,15 +503,18 @@ export function UangJalanCard({
                   style={{
                     fontSize: 13,
                     fontWeight: 700,
-                    color: tambah ? "#b45309" : "var(--text-primary)"
+                    color: tambah ? "#b45309" : "var(--text-primary)",
+                    // Tambahan yang ditolak tidak dihitung — dicoret supaya jelas.
+                    textDecoration: statusTambahan === "ditolak" ? "line-through" : undefined
                   }}
                 >
-                  {tambah ? "+" : ""}
+                  {tambah ? "+" : penggantian && !kasbon ? "−" : ""}
                   {formatRupiah(t.jumlah)}
                 </div>
                 {/* Pencairan dari pengajuan driver: hanya lihat bukti transfer. */}
-                {!hanyaLihat && !t.request_id && (
+                {!hanyaLihat && !t.request_id && !penggantian && !sudahDiputuskan && (
                 <div style={{ display: "flex", gap: 2 }}>
+                  {bisaDiubah && (
                   <button
                     type="button"
                     className="btn-icon"
@@ -371,6 +526,7 @@ export function UangJalanCard({
                   >
                     <Pencil style={{ width: 13, height: 13 }} />
                   </button>
+                  )}
                   <button
                     type="button"
                     className="btn-icon"
@@ -385,6 +541,8 @@ export function UangJalanCard({
             );
           })}
         </div>
+      )}
+      </>
       )}
 
       <UangJalanModal
@@ -424,15 +582,23 @@ export function UangJalanCard({
         open={!!hapus}
         onClose={() => setHapus(null)}
         onConfirm={konfirmasiHapus}
-        title="Hapus catatan uang jalan?"
+        // Tambahan yang masih menunggu = pengajuan; pencairan manual = catatan.
+        title={hapus?.jenis === "tambahan" ? "Hapus pengajuan uang jalan?" : "Hapus catatan uang jalan?"}
         body={
-          hapus
-            ? `${formatDate(hapus.tanggal)} — ${formatRupiah(hapus.jumlah)}. Sisa uang jalan akan dihitung ulang.`
-            : ""
+          hapus ? (
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px" }}>
+              <span className="caption">Tanggal</span>
+              <strong>{formatDate(hapus.tanggal)}</strong>
+              <span className="caption">Nominal</span>
+              <strong className="mono">{formatRupiah(hapus.jumlah)}</strong>
+            </div>
+          ) : null
         }
         confirmText="Hapus"
         variant="danger"
       />
+      <RiwayatApprovalModal tambahan={detailTambahan} onClose={() => setDetailTambahan(null)} />
+      <LoadingOverlay message={menghapus} />
     </div>
   );
 }

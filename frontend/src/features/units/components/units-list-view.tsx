@@ -208,95 +208,97 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
         <>
           {/* Desktop: tabel */}
           <div className="card hidden lg:block">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 130 }}>Kode</th>
-                  <th>Jenis</th>
-                  <th>No. Polisi</th>
-                  <th style={{ minWidth: 220 }}>Alamat terkini</th>
-                  <th style={{ width: 140 }}>Status</th>
-                  <th>Driver default</th>
-                  <th>Asuransi</th>
-                  <th style={{ width: 50 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.items.map((u) => (
-                  <tr key={u.id} className="row-link">
-                    <td>
-                      <Link
-                        to={`/units/${u.id}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          textDecoration: "none",
-                          color: "inherit"
-                        }}
-                      >
-                        <div
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 130 }}>Kode</th>
+                    <th>Jenis</th>
+                    <th>No. Polisi</th>
+                    <th style={{ minWidth: 220 }}>Alamat terkini</th>
+                    <th style={{ width: 140 }}>Status</th>
+                    <th>Driver default</th>
+                    <th>Asuransi</th>
+                    <th style={{ width: 50 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.items.map((u) => (
+                    <tr key={u.id} className="row-link">
+                      <td>
+                        <Link
+                          to={`/units/${u.id}`}
                           style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 6,
-                            background: "var(--bg-subtle)",
                             display: "flex",
                             alignItems: "center",
-                            justifyContent: "center",
-                            color: "var(--text-secondary)"
+                            gap: 8,
+                            textDecoration: "none",
+                            color: "inherit"
                           }}
                         >
-                          <Truck style={{ width: 14, height: 14 }} />
-                        </div>
-                        <span style={{ fontWeight: 600 }}>{u.kode_unit}</span>
-                        {!u.is_active && (
-                          <span
-                            className="badge"
-                            style={{ fontSize: 10, height: 18 }}
+                          <div
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 6,
+                              background: "var(--bg-subtle)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--text-secondary)"
+                            }}
                           >
-                            Nonaktif
-                          </span>
+                            <Truck style={{ width: 14, height: 14 }} />
+                          </div>
+                          <span style={{ fontWeight: 600 }}>{u.kode_unit}</span>
+                          {!u.is_active && (
+                            <span
+                              className="badge"
+                              style={{ fontSize: 10, height: 18 }}
+                            >
+                              Nonaktif
+                            </span>
+                          )}
+                        </Link>
+                      </td>
+                      <td>{u.jenis_unit_nama}</td>
+                      <td className="mono" style={{ fontSize: 13 }}>
+                        {u.no_polisi}
+                      </td>
+                      <td>
+                        <LocationCell
+                          hasImei={!!u.imei_gps}
+                          entry={locations[u.id]}
+                          loaded={locationsLoaded}
+                        />
+                      </td>
+                      <td>
+                        <StatusBadge status={u.status} />
+                      </td>
+                      <td className="muted" style={{ fontSize: 12.5 }}>
+                        {u.default_driver_nama ?? (
+                          <span style={{ color: "var(--text-tertiary)" }}>—</span>
                         )}
-                      </Link>
-                    </td>
-                    <td>{u.jenis_unit_nama}</td>
-                    <td className="mono" style={{ fontSize: 13 }}>
-                      {u.no_polisi}
-                    </td>
-                    <td>
-                      <LocationCell
-                        hasImei={!!u.imei_gps}
-                        entry={locations[u.id]}
-                        loaded={locationsLoaded}
-                      />
-                    </td>
-                    <td>
-                      <StatusBadge status={u.status} />
-                    </td>
-                    <td className="muted" style={{ fontSize: 12.5 }}>
-                      {u.default_driver_nama ?? (
-                        <span style={{ color: "var(--text-tertiary)" }}>—</span>
-                      )}
-                    </td>
-                    <td>
-                      <AsuransiSel polis={u.polis_terkini} />
-                    </td>
-                    <td>
-                      <Link
-                        to={`/units/${u.id}`}
-                        style={{
-                          color: "var(--text-tertiary)",
-                          display: "inline-flex"
-                        }}
-                      >
-                        <ChevronRight style={{ width: 16, height: 16 }} />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                      <td>
+                        <AsuransiSel polis={u.polis_terkini} />
+                      </td>
+                      <td>
+                        <Link
+                          to={`/units/${u.id}`}
+                          style={{
+                            color: "var(--text-tertiary)",
+                            display: "inline-flex"
+                          }}
+                        >
+                          <ChevronRight style={{ width: 16, height: 16 }} />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Mobile: card list */}

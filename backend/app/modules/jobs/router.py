@@ -15,8 +15,11 @@ from app.modules.jobs.schemas import (
     ActiveJobByUnit,
     CancelRequest,
     ConflictCheckRequest,
+    GantiDriverRequest,
+    GantiTrailerRequest,
     GantiTrukEntry,
-    GantiTrukRequest,
+    GantiUnitRequest,
+    GantiUnitUlangRequest,
     Job,
     JobConflictResponse,
     JobCreate,
@@ -69,7 +72,8 @@ def get_photo_service(client: AsyncClient = Depends(user_client)) -> JobPhotoSer
 async def list_jobs_page(
     status: JobListFilter = Query("all"),
     customer_id: str | None = Query(None),
-    q: str | None = Query(None, description="Cari nomor job, customer, alat, atau rute"),
+    proyek_id: str | None = Query(None),
+    q: str | None = Query(None, description="Cari nomor job, nomor proyek, customer, alat, atau rute"),
     params: PageParams = Depends(page_params),
     auth: AuthContext = Depends(require_auth),
     svc: JobService = Depends(get_service),
@@ -77,6 +81,7 @@ async def list_jobs_page(
     return await svc.list_page(
         status=status,
         customer_id=customer_id,
+        proyek_id=proyek_id,
         q=q,
         params=params,
         dengan_tagihan=_boleh_lihat_tagihan(auth),
@@ -88,10 +93,11 @@ async def list_jobs_page(
 async def list_jobs(
     status: JobListFilter = Query("all"),
     customer_id: str | None = Query(None),
+    proyek_id: str | None = Query(None),
     svc: JobService = Depends(get_service),
 ) -> list[Job]:
     """Tanpa potongan — dipakai deteksi bentrok jadwal dan ekspor."""
-    return await svc.list_all(status=status, customer_id=customer_id)
+    return await svc.list_all(status=status, customer_id=customer_id, proyek_id=proyek_id)
 
 
 @router.get("/counts", response_model=dict[str, int])
@@ -143,10 +149,42 @@ async def riwayat_ganti_truk(job_id: str, svc: JobService = Depends(get_service)
     return await svc.riwayat_ganti_truk(job_id)
 
 
-@router.post("/{job_id}/ganti-truk", response_model=OkResponse, dependencies=[Depends(_bukan_finance)])
-async def ganti_truk(job_id: str, payload: GantiTrukRequest, svc: JobService = Depends(get_service)) -> OkResponse:
-    await svc.ganti_truk(job_id, payload)
+@router.post("/{job_id}/ganti-driver", response_model=OkResponse, dependencies=[Depends(_bukan_finance)])
+async def ganti_driver(job_id: str, payload: GantiDriverRequest, svc: JobService = Depends(get_service)) -> OkResponse:
+    """Driver sakit / kabur: ganti driver di job yang sama + catat pengembalian & kasbon."""
+    await svc.ganti_driver(job_id, payload)
     return OkResponse()
+
+
+@router.post("/{job_id}/ganti-trailer", response_model=OkResponse, dependencies=[Depends(_bukan_finance)])
+async def ganti_trailer(
+    job_id: str, payload: GantiTrailerRequest, svc: JobService = Depends(get_service)
+) -> OkResponse:
+    """Unit trailer rusak: ganti trailer di job yang sama."""
+    await svc.ganti_trailer(job_id, payload)
+    return OkResponse()
+
+
+@router.post("/{job_id}/ganti-unit", response_model=JobCreated, dependencies=[Depends(_bukan_finance)])
+async def ganti_unit(
+    job_id: str,
+    payload: GantiUnitRequest,
+    auth: AuthContext = Depends(require_auth),
+    svc: JobService = Depends(get_service),
+) -> JobCreated:
+    """Unit rusak / insiden: job pengganti di proyek yang sama; job lama ditutup Selesai."""
+    return await svc.ganti_unit(job_id, payload, created_by=auth.user.id)
+
+
+@router.post("/{job_id}/ganti-unit-ulang", response_model=JobCreated, dependencies=[Depends(_bukan_finance)])
+async def ganti_unit_ulang(
+    job_id: str,
+    payload: GantiUnitUlangRequest,
+    auth: AuthContext = Depends(require_auth),
+    svc: JobService = Depends(get_service),
+) -> JobCreated:
+    """Job pengganti dibatalkan → buat job pengganti baru untuk job lama ini."""
+    return await svc.ganti_unit_ulang(job_id, payload, created_by=auth.user.id)
 
 
 @router.post(

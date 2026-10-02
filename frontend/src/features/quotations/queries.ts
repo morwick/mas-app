@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getQuotation,
   listQuotations,
-  peekNextQuotationNumber,
   quotationJobs,
   rekomendasiHarga,
   type RekomendasiHargaParams
@@ -25,6 +24,3 @@ export const useRekomendasiHarga = (params: RekomendasiHargaParams | null) =>
     enabled: !!params,
     staleTime: 60_000
   });
-
-export const useNextQuotationNumber = () =>
-  useQuery({ queryKey: ["quotations", "next-number"], queryFn: peekNextQuotationNumber, staleTime: 0 });

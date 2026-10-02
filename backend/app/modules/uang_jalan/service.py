@@ -9,6 +9,7 @@ Aturan (PRD v2 §7.2):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -26,9 +27,11 @@ from app.core.storage import (
     validate_photo,
 )
 from app.domain.uang_jalan import hitung_ringkasan
+from app.modules.jobs.mappers import PROYEK_CUSTOMER_EMBED, nama_customer_job
 from app.modules.uang_jalan.schemas import (
     JobUangJalan,
     SumberDana,
+    TambahanDibatalkan,
     UangJalan,
     UangJalanInput,
     UangJalanJobRow,
@@ -42,7 +45,7 @@ SIGNED_URL_TTL_S = 60 * 60
 
 UANG_JALAN_SELECT = """
   id, job_id, jenis, tanggal, jumlah, sumber_dana_id, keperluan, catatan, created_at,
-  bukti_transfer_path, request_id,
+  bukti_transfer_path, request_id, status_approval,
   sumber:sumber_dana(nama),
   creator:profiles(nama)
 """
@@ -71,6 +74,7 @@ def _to_uang_jalan(r: dict[str, Any], bukti_url: str | None = None) -> UangJalan
         bukti_transfer_path=r.get("bukti_transfer_path"),
         bukti_transfer_url=bukti_url,
         request_id=r.get("request_id"),
+        status_approval=r.get("status_approval") or "disetujui",
     )
 
 
@@ -166,11 +170,14 @@ class UangJalanService:
             .order("created_at")
             .execute()
         )
-        out = []
-        for r in rows(res):
-            url = await self._signed_url(r.get("bukti_transfer_path")) if with_bukti_url else None
-            out.append(_to_uang_jalan(r, url))
-        return out
+        data = rows(res)
+        # Tautan bukti transfer dibuat paralel — dulu satu per satu (lambat bila
+        # pencairan banyak).
+        if with_bukti_url:
+            urls = await asyncio.gather(*(self._signed_url(r.get("bukti_transfer_path")) for r in data))
+        else:
+            urls = [None] * len(data)
+        return [_to_uang_jalan(r, url) for r, url in zip(data, urls, strict=True)]
 
     async def list_requests_by_job(self, job_id: str) -> list[UangJalanRequest]:
         res = await (
@@ -200,14 +207,42 @@ class UangJalanService:
         return to_posisi(first(res.data))
 
     async def job_summary(self, job_id: str, *, with_bukti_url: bool = True) -> JobUangJalan:
-        job = single(await self._db.table("jobs").select("uang_jalan_awal").eq("id", job_id).maybe_single().execute())
-        transaksi = await self.list_by_job(job_id, with_bukti_url=with_bukti_url)
+        # Semua bagian independen — dijalankan paralel supaya kartu uang jalan cepat.
+        job_res, transaksi, pengajuan, posisi, dibatalkan = await asyncio.gather(
+            self._db.table("jobs").select("uang_jalan_awal").eq("id", job_id).maybe_single().execute(),
+            self.list_by_job(job_id, with_bukti_url=with_bukti_url),
+            self.list_requests_by_job(job_id),
+            self.posisi(job_id),
+            self._tambahan_dibatalkan(job_id),
+        )
+        job = single(job_res)
         return JobUangJalan(
             transaksi=transaksi,
             ringkasan=hitung_ringkasan(num((job or {}).get("uang_jalan_awal")), transaksi),  # type: ignore[arg-type]
-            pengajuan=await self.list_requests_by_job(job_id),
-            posisi=await self.posisi(job_id),
+            pengajuan=pengajuan,
+            posisi=posisi,
+            dibatalkan=dibatalkan,
         )
+
+    async def _tambahan_dibatalkan(self, job_id: str) -> list[TambahanDibatalkan]:
+        """Pengajuan tambahan yang dihapus selama menunggu approval — hanya untuk
+        riwayat. Gagal (mis. migrasi belum dijalankan) → kosong, halaman tetap jalan."""
+        try:
+            res = await self._db.rpc("tambahan_uang_jalan_dibatalkan", {"p_job_id": job_id}).execute()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("riwayat tambahan dibatalkan tidak terbaca: %s", exc)
+            return []
+        return [
+            TambahanDibatalkan(
+                id=str(r["id"]),
+                tanggal=str(r["tanggal"]),
+                jumlah=num(r.get("jumlah")),
+                keperluan=r.get("keperluan"),
+                catatan=r.get("catatan"),
+                created_at=str(r["created_at"]),
+            )
+            for r in rows(res)
+        ]
 
     async def list_jobs(
         self, *, hanya_belum_lunas: bool = False, hanya_berjalan: bool = False
@@ -219,8 +254,8 @@ class UangJalanService:
             .select(
                 "id, job_number, status_job, asal, tujuan, etd, uang_jalan_awal,"
                 " unit:units(kode_unit), driver:drivers(nama),"
-                " customer:customers(nama_perusahaan),"
-                " uang_jalan(id, jenis, jumlah, tanggal),"
+                f" {PROYEK_CUSTOMER_EMBED},"
+                " uang_jalan(id, jenis, jumlah, tanggal, status_approval),"
                 " uang_jalan_requests(id, status_pengajuan)"
             )
             .neq("status_job", "cancelled")
@@ -239,6 +274,7 @@ class UangJalanService:
                     tanggal=t["tanggal"],
                     jumlah=num(t.get("jumlah")),
                     created_at=t["tanggal"],
+                    status_approval=t.get("status_approval") or "disetujui",
                 )
                 for t in (r.get("uang_jalan") or [])
             ]
@@ -254,11 +290,14 @@ class UangJalanService:
                     etd=r["etd"],
                     unit_kode=(first(r.get("unit")) or {}).get("kode_unit"),
                     driver_nama=(first(r.get("driver")) or {}).get("nama"),
-                    customer_nama=(first(r.get("customer")) or {}).get("nama_perusahaan"),
+                    customer_nama=nama_customer_job(r),
                     ringkasan=ringkasan,
                     pencairan_terakhir=pencairan[-1] if pencairan else None,
                     pengajuan_menunggu=sum(
                         1 for q in (r.get("uang_jalan_requests") or []) if q.get("status_pengajuan") == "diajukan"
+                    ),
+                    tambahan_menunggu_approval=sum(
+                        1 for t in transaksi if t.jenis == "tambahan" and t.status_approval == "menunggu"
                     ),
                 )
             )
@@ -368,11 +407,40 @@ class UangJalanService:
         """Soft delete: baris ditandai terhapus. File bukti transfer sengaja
         dibiarkan di bucket supaya transaksi bisa dikembalikan utuh."""
         await self._tolak_bila_dari_pengajuan(uang_jalan_id, "dihapus")
+        # BATASAN: tambahan uang jalan yang sudah diputuskan approver (disetujui /
+        # ditolak) tidak bisa dihapus.
+        row = single(
+            await self._db.table("uang_jalan")
+            .select("jenis, status_approval")
+            .eq("id", uang_jalan_id)
+            .maybe_single()
+            .execute()
+        )
+        status = (row or {}).get("status_approval")
+        if row and row.get("jenis") == "tambahan" and status in ("disetujui", "ditolak"):
+            raise ValidationError(f"Tambahan uang jalan yang sudah {status} tidak bisa dihapus.")
         await self._db.table("uang_jalan").update({STATUS: DIHAPUS}).eq("id", uang_jalan_id).execute()
 
     async def set_uang_jalan_awal(self, job_id: str, uang_jalan_awal: int) -> None:
         """Uang jalan awal disimpan di job; kenaikan sesudahnya dicatat sebagai
-        transaksi 'tambahan' supaya ada jejaknya."""
+        transaksi 'tambahan' supaya ada jejaknya.
+
+        BATASAN: terkunci begitu sudah ada uang jalan yang keluar ke driver
+        (pencairan aktif). Dijaga juga database (migration 20261001000022)."""
+        keluar = await (
+            self._db.table("uang_jalan")
+            .select("id")
+            .eq("job_id", job_id)
+            .eq("jenis", "pencairan")
+            .eq(STATUS, AKTIF)
+            .limit(1)
+            .execute()
+        )
+        if rows(keluar):
+            raise ValidationError(
+                "Uang jalan awal tidak bisa diubah karena uang jalan sudah dikasih ke driver. "
+                "Gunakan \"Tambah uang jalan\"."
+            )
         await self._db.table("jobs").update({"uang_jalan_awal": uang_jalan_awal}).eq("id", job_id).execute()
 
     async def reject_request(self, request_id: str, *, alasan: str | None, decided_by: str) -> None:

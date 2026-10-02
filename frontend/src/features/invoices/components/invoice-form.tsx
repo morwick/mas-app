@@ -36,7 +36,7 @@ interface Props {
     atas_nama?: string | null;
   };
   /**
-   * Dari tab "Job siap ditagih": customer & job yang sudah dicentang di sana
+   * Dari tab "Proyek siap ditagih": customer & job yang sudah dicentang di sana
    * langsung mengisi form ini (hanya berlaku saat membuat tagihan baru).
    */
   initialCustomerId?: string;
@@ -139,7 +139,32 @@ export function InvoiceForm({
     [customers, form.customer_id]
   );
 
-  const jobsTersedia = jobsPerCustomer[form.customer_id] ?? [];
+  // BATASAN: satu proyek hanya boleh masuk satu tagihan (satu tagihan boleh
+  // banyak proyek). Job yang proyeknya sudah ada di tagihan aktif LAIN tidak
+  // ditawarkan di sini — backend & database juga menolaknya.
+  const jobsCustomer = jobsPerCustomer[form.customer_id] ?? [];
+  const jobsTersedia = jobsCustomer.filter(
+    (j) => !j.proyek_invoice_id || j.proyek_invoice_id === invoice?.id
+  );
+  const jobsTertahan = jobsCustomer.filter(
+    (j) => j.proyek_invoice_id && j.proyek_invoice_id !== invoice?.id
+  );
+
+  /** Pilihan "Tarik job per proyek": proyek yang punya job siap tagih. */
+  const proyekOptions = useMemo(() => {
+    const perProyek = new Map<string, { nomor: string; jumlah: number }>();
+    for (const j of jobsTersedia) {
+      if (!j.proyek_id) continue;
+      const ada = perProyek.get(j.proyek_id);
+      if (ada) ada.jumlah += 1;
+      else perProyek.set(j.proyek_id, { nomor: j.proyek_nomor ?? "—", jumlah: 1 });
+    }
+    return [...perProyek.entries()].map(([id, p]) => ({
+      value: id,
+      label: p.nomor,
+      hint: `${p.jumlah} job siap tagih`
+    }));
+  }, [jobsTersedia]);
 
   /**
    * Uang jalan & surat jalan job yang sudah dipilih di suatu baris — dicari
@@ -267,8 +292,18 @@ export function InvoiceForm({
 
   /** Tambahkan semua job yang belum ditagih sekaligus — untuk rekap bulanan. */
   function tambahSemuaJob() {
+    tambahJobs(jobsTersedia);
+  }
+
+  /** Tambahkan semua job siap tagih dari satu proyek. */
+  function tambahJobProyek(proyekId: string) {
+    if (!proyekId) return;
+    tambahJobs(jobsTersedia.filter((j) => j.proyek_id === proyekId));
+  }
+
+  function tambahJobs(daftar: JobBelumDitagihRow[]) {
     const sudahAda = new Set(items.map((i) => i.job_id).filter(Boolean));
-    const baru = jobsTersedia
+    const baru = daftar
       .filter((j) => !sudahAda.has(j.id))
       .map((j) =>
         newItem({
@@ -552,8 +587,28 @@ export function InvoiceForm({
                 ? `${jobsTersedia.length} job selesai belum ditagih untuk customer ini`
                 : "Pilih customer dulu untuk menarik job yang belum ditagih"}
             </p>
+            {jobsTertahan.length > 0 && (
+              <p className="caption" style={{ color: "var(--status-pickup-text)" }}>
+                {jobsTertahan.length} job lain tidak bisa ditagih di sini karena proyeknya sudah masuk
+                tagihan{" "}
+                {[...new Set(jobsTertahan.map((j) => j.proyek_invoice_number))].join(", ")} — satu
+                proyek hanya boleh satu tagihan.
+              </p>
+            )}
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {proyekOptions.length > 0 && (
+              <div style={{ minWidth: 220 }}>
+                <Combobox
+                  value=""
+                  onChange={tambahJobProyek}
+                  options={proyekOptions}
+                  placeholder="Tarik job per proyek…"
+                  searchPlaceholder="Cari nomor / nama proyek…"
+                  emptyText="Tidak ada proyek siap tagih"
+                />
+              </div>
+            )}
             {jobsTersedia.length > 0 && (
               <Button
                 size="sm"
@@ -658,7 +713,7 @@ export function InvoiceForm({
                       .map((j) => ({
                         value: j.id,
                         label: j.job_number,
-                        hint: `${j.asal} → ${j.tujuan}`
+                        hint: [j.proyek_nomor, `${j.asal} → ${j.tujuan}`].filter(Boolean).join(" · ")
                       }))
                   ]}
                   placeholder="— tanpa job —"

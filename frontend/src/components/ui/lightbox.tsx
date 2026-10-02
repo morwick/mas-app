@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { kunciScroll } from "@/lib/kunci-scroll";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,10 +25,10 @@ export function Lightbox({ open, onClose, images, initialIndex = 0 }: LightboxPr
       if (e.key === "ArrowRight") setIdx((i) => Math.min(images.length - 1, i + 1));
     };
     window.addEventListener("keydown", handler);
-    document.body.style.overflow = "hidden";
+    const lepas = kunciScroll();
     return () => {
       window.removeEventListener("keydown", handler);
-      document.body.style.overflow = "";
+      lepas();
     };
   }, [open, onClose, images.length]);
 

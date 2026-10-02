@@ -10,14 +10,59 @@ import {
   isJobAktif
 } from "@/features/units/components/aset-detail-parts";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { formatDate } from "@/lib/utils";
-import type { Driver, Job } from "@/types";
+import { formatDate, formatRupiah } from "@/lib/utils";
+import type { Driver, Job, KasbonDriver } from "@/types";
 
 interface Props {
   driver: Driver;
   jobs: Job[];
   /** Unit yang memakai driver ini sebagai driver tetap (bila ada). */
   unitTetap?: { unit_id: string; kode_unit: string } | null;
+  /** Kasbon supir (dicatat saat ganti driver / ganti unit). */
+  kasbon?: { total: number; riwayat: KasbonDriver[] };
+}
+
+/** Kasbon supir: hanya dicatat & ditampilkan (pelunasan belum ada). */
+function KasbonCard({ kasbon }: { kasbon: { total: number; riwayat: KasbonDriver[] } }) {
+  return (
+    <div className="card card-pad">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+        <div className="h3">Kasbon supir</div>
+        <div className="mono" style={{ fontWeight: 700 }}>
+          {formatRupiah(kasbon.total)}
+        </div>
+      </div>
+      {kasbon.riwayat.length === 0 ? (
+        <div className="caption">Belum ada kasbon.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {kasbon.riwayat.map((k) => (
+            <div key={k.id} style={{ fontSize: 12.5, display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <div>
+                <div>
+                  {k.job_id ? (
+                    <Link to={`/jobs/${k.job_id}`} className="mono">
+                      {k.job_number ?? "Job"}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}{" "}
+                  · {k.asal === "ganti_unit" ? "ganti unit" : "ganti driver"}
+                </div>
+                <div className="caption">
+                  {formatDate(k.created_at)}
+                  {k.created_by_nama ? ` · ${k.created_by_nama}` : ""}
+                </div>
+              </div>
+              <div className="mono" style={{ fontWeight: 600 }}>
+                {formatRupiah(k.jumlah)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 type TabKey = "aktif" | "riwayat";
@@ -62,7 +107,7 @@ export function DriverStatusBadge({ driver }: { driver: Driver }) {
  * Detail driver — pola sama dengan detail unit: kartu identitas, tab job
  * aktif / riwayat job, dan di kolom kanan dokumen (SIM) serta ringkasan job.
  */
-export function DriverDetailView({ driver, jobs, unitTetap }: Props) {
+export function DriverDetailView({ driver, jobs, unitTetap, kasbon }: Props) {
   const { canManageOperational } = useAuth();
   const activeJob = useMemo(() => jobs.find(isJobAktif), [jobs]);
   const pastJobs = useMemo(() => jobs.filter((j) => !isJobAktif(j)), [jobs]);
@@ -214,6 +259,7 @@ export function DriverDetailView({ driver, jobs, unitTetap }: Props) {
             { label: "SIM", tanggal: driver.sim_berlaku_sampai, nomor: driver.no_sim, url: driver.sim_url }
           ]}
         />
+        {kasbon && <KasbonCard kasbon={kasbon} />}
         <div className="card card-pad">
           <div className="h3" style={{ marginBottom: 12 }}>
             Ringkasan job

@@ -177,7 +177,12 @@ export interface Job {
   id: string;
   job_number: string;
   share_token: string;
-  customer_id: string;
+  /**
+   * Customer & PIC lapangan diambil dari proyek job ini. customer_id null =
+   * proyek tanpa customer (unit jalan kosongan); customer_nama berisi
+   * "Tanpa customer".
+   */
+  customer_id: string | null;
   customer_nama: string;
   pic_nama?: string | null;
   pic_no_hp?: string | null;
@@ -217,6 +222,8 @@ export interface Job {
   /** Validasi admin (Fase 7). */
   validated_at?: string | null;
   validated_by_nama?: string | null;
+  /** Karyawan pembuat job. */
+  created_by_nama?: string | null;
   validation_note?: string | null;
   eta_is_estimated?: boolean;
   /** Penawaran asal job ini. Null untuk job yang dibuat langsung tanpa penawaran. */
@@ -224,6 +231,15 @@ export interface Job {
   quotation_number?: string | null;
   /** Item penawaran (yang deal) asal job ini. */
   quotation_item_id?: string | null;
+  /** Proyek induk job ini — setiap job wajib masuk satu proyek. */
+  proyek_id?: string | null;
+  proyek_nomor?: string | null;
+  /** Ganti unit karena rusak: job ini menggantikan job lama… */
+  menggantikan_job_id?: string | null;
+  menggantikan_job_number?: string | null;
+  /** …atau job ini sudah diganti job pengganti (job lama: tidak ditagih). */
+  diganti_oleh_job_id?: string | null;
+  diganti_oleh_job_number?: string | null;
   /** Tagihan aktif (tidak batal) yang memuat job ini — nomor & status bayar, hanya untuk admin. */
   invoice_id?: string | null;
   invoice_number?: string | null;
@@ -241,6 +257,8 @@ export interface Job {
    */
   /** Total uang jalan yang sudah ditransfer ke driver. > 0 = tidak bisa dibatalkan. */
   uang_jalan_cair?: number;
+  /** Sudah ada pencairan uang jalan — unit, unit trailer & driver terkunci di edit job. */
+  ada_pencairan_uang_jalan?: boolean;
   uang_jalan_pending?: boolean;
   uang_jalan_pending_nominal?: number | null;
   uang_jalan_pending_at?: string | null;
@@ -524,8 +542,10 @@ export type QuotationListRow = Omit<Quotation, "items"> & {
   /** Job yang sudah dibuat dari penawaran ini, tidak termasuk yang dibatalkan. */
   jumlah_job: number;
   jumlah_job_selesai: number;
-  /** Item deal yang belum punya job aktif. */
-  jumlah_item_deal_belum_job?: number;
+  /** Punya item deal tetapi belum ada satu pun proyek aktif. */
+  deal_belum_ada_proyek?: boolean;
+  /** Proyek yang terbentuk dari penawaran ini (dari job-job aktifnya). */
+  jumlah_proyek?: number;
   /** Item yang disetujui (deal), termasuk yang harganya direvisi. */
   jumlah_item_deal?: number;
   jumlah_item_deal_revisi?: number;
@@ -545,6 +565,24 @@ export interface QuotationJobRef {
   tujuan: string;
   etd: string;
   quotation_item_id?: string | null;
+  proyek_id?: string | null;
+  proyek_nomor?: string | null;
+  unit_id?: string | null;
+  unit_kode?: string | null;
+  proyek_created_at?: string | null;
+  proyek_created_by_nama?: string | null;
+}
+
+/** Kasbon supir (sisa uang jalan yang tidak dikembalikan saat diganti). */
+export interface KasbonDriver {
+  id: string;
+  jumlah: number;
+  asal: "ganti_driver" | "ganti_unit";
+  keterangan: string | null;
+  job_id: string | null;
+  job_number: string | null;
+  created_at: string;
+  created_by_nama: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -563,11 +601,18 @@ export interface SumberDana {
   is_active: boolean;
 }
 
-export type UangJalanJenis = "pencairan" | "tambahan";
+/**
+ * pencairan = uang ke driver; tambahan = menambah uang jalan job;
+ * pengembalian & kasbon = dicatat saat ganti driver / unit. Pengembalian
+ * mengurangi cair; kasbon tidak (hanya mencatat utang supir lama).
+ */
+export type UangJalanJenis = "pencairan" | "tambahan" | "pengembalian" | "kasbon";
 
 export const uangJalanJenisLabel: Record<UangJalanJenis, string> = {
   pencairan: "Dikasih",
-  tambahan: "Tambah uang jalan"
+  tambahan: "Tambah uang jalan",
+  pengembalian: "Dikembalikan supir",
+  kasbon: "Kasbon supir"
 };
 
 export interface UangJalan {
@@ -586,6 +631,8 @@ export interface UangJalan {
   bukti_transfer_path?: string | null;
   bukti_transfer_url?: string | null;
   request_id?: string | null;
+  /** Tambahan uang jalan butuh approval; pencairan selalu "disetujui". */
+  status_approval?: "menunggu" | "disetujui" | "ditolak";
 }
 
 export type UangJalanRequestStatus = "diajukan" | "dicairkan" | "ditolak";
@@ -633,6 +680,8 @@ export interface UangJalanRingkasan {
   sisa: number;
   /** Porsi yang sudah cair terhadap uang jalan job, untuk indikator cepat. */
   persen_cair: number;
+  /** Tambahan yang masih menunggu approval — belum masuk uang_jalan. */
+  tambahan_menunggu?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -688,6 +737,8 @@ export interface InvoiceItem {
   /** Job yang ditagihkan baris ini. Null untuk baris di luar job. */
   job_id?: string | null;
   job_number?: string | null;
+  /** Proyek induk job baris ini. */
+  proyek_nomor?: string | null;
   deskripsi: string;
   dari?: string | null;
   tujuan?: string | null;
@@ -786,6 +837,8 @@ export interface Invoice {
 
 export type InvoiceListRow = Omit<Invoice, "items" | "payments"> & {
   jumlah_item: number;
+  /** Nomor proyek dari job-job di tagihan ini (boleh lebih dari satu). */
+  proyek_nomor: string[];
 };
 
 /** Satu baris per customer di halaman piutang, dari get_piutang_summary(). */
@@ -812,10 +865,15 @@ export interface JobProfitabilityRow {
   status: JobStatus;
   /** Nilai baris invoice untuk job ini, di luar PPN. */
   pendapatan: number;
-  /** Uang jalan yang benar-benar cair. */
+  /** Uang jalan yang benar-benar terpakai (pencairan − pengembalian; kasbon tidak mengurangi). */
   uang_jalan: number;
   biaya_insiden: number;
   laba: number;
+  proyek_nomor: string | null;
+  /** Proyek tanpa customer (unit jalan kosongan) → cost perusahaan, tidak ditagih. */
+  kosongan: boolean;
+  /** Job lama yang unitnya rusak & sudah diganti job ini — tidak ditagih. */
+  diganti_oleh: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -918,6 +976,48 @@ export interface JobBelumDitagihRow {
   surat_jalan_unloading_urls: string[];
   uang_jalan_awal: number;
   uang_jalan_transaksi: UangJalanTransaksi[];
+  /** Proyek induk job. */
+  proyek_id?: string | null;
+  proyek_nomor?: string | null;
+  /**
+   * Tagihan aktif yang sudah memuat job lain dari proyek ini. Satu proyek
+   * hanya boleh masuk satu tagihan, jadi job ini hanya bisa ditambahkan ke
+   * tagihan tersebut.
+   */
+  proyek_invoice_id?: string | null;
+  proyek_invoice_number?: string | null;
+  /** Jumlah job proyek ini yang tidak dibatalkan. */
+  proyek_jumlah_job?: number;
+}
+
+/** Satu baris di Tab Proyek. */
+export interface ProyekRingkas {
+  id: string;
+  /** Nomor otomatis, mis. 001/PRJ/MAS/X/2026 (urut di-reset tiap bulan). */
+  nomor_proyek: string;
+  /** Kosong = proyek tanpa customer (unit jalan kosongan). */
+  customer_id: string | null;
+  customer_nama: string | null;
+  /** PIC lapangan & No HP-nya — milik proyek (dulu per job). */
+  pic_nama: string | null;
+  pic_no_hp: string | null;
+  /** Author: pengguna yang membuat proyek. */
+  created_by_nama: string | null;
+  created_at: string;
+  /** Unit proyek (bisa lebih dari satu setelah ganti unit karena rusak). */
+  unit_kode: string | null;
+  /** Nomor penawaran asal (bila proyek dari penawaran). */
+  quote_number: string | null;
+  jumlah_job: number;
+  jumlah_job_selesai: number;
+  jumlah_job_batal: number;
+  /** Tagihan aktif yang memuat proyek ini (paling banyak satu). */
+  invoice_id: string | null;
+  invoice_number: string | null;
+}
+
+export interface ProyekDetail extends ProyekRingkas {
+  jobs: Job[];
 }
 
 export interface UangJalanJobRow {
@@ -934,6 +1034,8 @@ export interface UangJalanJobRow {
   pencairan_terakhir: string | null;
   /** Pengajuan driver yang belum dicairkan. */
   pengajuan_menunggu: number;
+  /** Tambahan uang jalan yang masih menunggu approval. */
+  tambahan_menunggu_approval?: number;
 }
 
 export interface LocationEntry {

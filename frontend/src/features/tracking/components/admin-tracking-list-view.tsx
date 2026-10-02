@@ -6,7 +6,8 @@ import {
   ArrowRight,
   Activity,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  UserRound
 } from "lucide-react";
 import { computeEta, compareEta } from "@/lib/routing/eta";
 import { TrackingTabs } from "@/features/tracking/components/tracking-tabs";
@@ -46,9 +47,11 @@ interface LocationEntry {
 interface Props {
   jobs: Job[];
   units: Unit[];
+  /** driver_id → nama driver. */
+  driverMap?: Record<string, string>;
 }
 
-export function AdminTrackingListView({ jobs, units }: Props) {
+export function AdminTrackingListView({ jobs, units, driverMap = {} }: Props) {
   const unitsMap = useMemo(() => {
     const m = new Map<string, Unit>();
     for (const u of units) m.set(u.id, u);
@@ -141,7 +144,7 @@ export function AdminTrackingListView({ jobs, units }: Props) {
             className="btn btn-primary"
             style={{ marginTop: 16, textDecoration: "none" }}
           >
-            Buat job baru
+            Buat proyek baru
           </Link>
         </div>
       ) : (
@@ -208,6 +211,22 @@ export function AdminTrackingListView({ jobs, units }: Props) {
                       }}
                     >
                       {job.customer_nama}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        marginTop: 2,
+                        fontSize: 12,
+                        color: "var(--text-secondary)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      <UserRound style={{ width: 12, height: 12, flexShrink: 0 }} />
+                      {driverMap[job.driver_id] ?? "Driver belum diketahui"}
                     </div>
                   </div>
                   <span

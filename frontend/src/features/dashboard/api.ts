@@ -56,10 +56,10 @@ export interface DashboardData {
   dokumen_jatuh_tempo: DokumenJatuhTempo[];
   monitoring_servis: MonitoringServis;
   /** Kartu "Perlu tindakan" — angka saja. */
-  penawaran_deal_tanpa_job?: number;
+  penawaran_deal_tanpa_proyek?: number;
   penawaran_akan_kedaluwarsa?: number;
   /** Job selesai & tervalidasi tapi belum masuk tagihan mana pun. */
-  jobs_belum_invoice: number;
+  proyek_belum_ditagih: number;
 }
 
 export const layoutCounts = () => api.get<LayoutCounts>("/layout/counts");

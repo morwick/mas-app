@@ -30,13 +30,12 @@ import {
 } from "@/lib/job-conflicts";
 import { minEtdValue, validateSchedule } from "@/lib/job-schedule";
 import { isoToLocalInput } from "@/lib/utils";
-import type { Customer, Driver, Job, Unit } from "@/types";
+import type { Driver, Job, Unit } from "@/types";
 import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
 import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
 
 interface Props {
   job: Job;
-  customers: Customer[];
   drivers: Driver[];
   units: Unit[];
   activeJobs: Job[];
@@ -47,7 +46,6 @@ interface Props {
 
 export function EditJobView({
   job,
-  customers,
   drivers,
   units,
   activeJobs,
@@ -58,9 +56,6 @@ export function EditJobView({
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    customer_id: job.customer_id,
-    pic_nama: job.pic_nama ?? "",
-    pic_no_hp: job.pic_no_hp ?? "",
     alat_diangkut: job.alat_diangkut,
     asal: job.asal,
     tujuan: job.tujuan,
@@ -145,22 +140,6 @@ export function EditJobView({
     }
   }
 
-  /**
-   * Sama seperti form tambah: PIC ikut customer yang dipilih, tapi tetap bisa
-   * ditimpa karena PIC di lapangan bisa beda dengan yang tercatat di master.
-   */
-  function onCustomerChange(customerId: string) {
-    if (customerId === form.customer_id) return;
-    const customer = customers.find((c) => c.id === customerId);
-    setForm((f) => ({
-      ...f,
-      customer_id: customerId,
-      pic_nama: customer?.pic_nama ?? "",
-      pic_no_hp: customer?.pic_no_hp ?? ""
-    }));
-    setError(({ pic_nama: _n, pic_no_hp: _h, ...rest }) => rest);
-  }
-
   const conflicts = useMemo<ConflictCheckResult>(() => {
     if (!form.unit_id || !form.driver_id || !form.etd)
       return { unit: [], driver: [], hasAny: false };
@@ -177,19 +156,7 @@ export function EditJobView({
   }, [form.unit_id, form.driver_id, form.etd, form.eta, activeJobs, job.id]);
 
   // Item nonaktif tetap ditampilkan bila sedang terpilih, supaya job lama yang
-  // memakai customer/driver arsip tidak kehilangan nilainya saat diedit.
-  const customerOptions = useMemo<ComboboxOption[]>(
-    () =>
-      customers
-        .filter((c) => c.is_active || c.id === form.customer_id)
-        .map((c) => ({
-          value: c.id,
-          label: c.nama_perusahaan,
-          hint: [c.kota, c.pic_nama].filter(Boolean).join(" · ") || undefined
-        })),
-    [customers, form.customer_id]
-  );
-
+  // memakai driver arsip tidak kehilangan nilainya saat diedit.
   const unitOptions = useMemo<ComboboxOption[]>(
     () =>
       units
@@ -213,6 +180,10 @@ export function EditJobView({
   // Sama seperti form tambah: ganti unit ke yang tanpa GPS → beri tahu
   // konsekuensinya ke halaman tracking customer.
   const selectedUnit = units.find((u) => u.id === form.unit_id);
+  // BATASAN: uang jalan sudah dicairkan → unit, unit trailer & driver terkunci
+  // (dijaga juga backend). Penggantian lewat Ganti driver / unit di detail job.
+  const penugasanTerkunci = Boolean(job.ada_pencairan_uang_jalan);
+  const alasanTerkunci = "Terkunci — uang jalan sudah dicairkan. Gunakan Ganti driver / Ganti unit di detail job.";
   const trailer = useTrailerUntukUnit(form.unit_id);
   const trailerTampil = Boolean(trailer.data?.wajib);
   // Wajib bila unit diganti, atau job ini memang sudah memakai trailer. Job lama
@@ -221,9 +192,6 @@ export function EditJobView({
     trailerTampil && (form.unit_id !== job.unit_id || Boolean(job.unit_trailer_id));
   const unitWithoutGps =
     selectedUnit && !selectedUnit.imei_gps ? selectedUnit : null;
-
-  // PIC lapangan wajib — tombol simpan mati selama salah satunya kosong.
-  const picFilled = !!form.pic_nama.trim() && !!form.pic_no_hp.trim();
 
   async function doSubmit() {
     setLoading(true);
@@ -251,7 +219,6 @@ export function EditJobView({
     );
     // ETA kosong hanya boleh bila sistem bisa menghitungnya dari rute.
     if (!form.eta && estimasi.isError && !adaDurasiTersimpan) errs.eta = ETA_TIDAK_TERHITUNG_MESSAGE;
-    if (!form.pic_nama.trim()) errs.pic_nama = "PIC wajib diisi";
     if (!form.alat_diangkut.trim()) errs.alat_diangkut = "Alat wajib diisi";
     // Sama seperti form tambah: lokasi wajib dipin di peta supaya koordinatnya
     // tersimpan; alamat di kotak teks tetap boleh dilengkapi setelah dipin.
@@ -263,9 +230,6 @@ export function EditJobView({
     else if (trailer.isError)
       errs.unit_trailer_id = "Pilihan unit trailer gagal dimuat — muat ulang halaman lalu coba lagi";
     else if (trailerWajib && !form.unit_trailer_id) errs.unit_trailer_id = "Unit trailer wajib dipilih";
-    if (!form.pic_no_hp.trim()) errs.pic_no_hp = "No HP PIC wajib diisi";
-    else if (!/^(08|\+628)\d{7,12}$/.test(form.pic_no_hp.trim()))
-      errs.pic_no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
     setError(errs);
     if (Object.keys(errs).length > 0) return;
     // Bentrok jadwal tidak bisa di-"tetap simpan" — server juga menolaknya.
@@ -282,36 +246,18 @@ export function EditJobView({
       <Card>
         <CardHeader title={`Edit ${job.job_number}`} description={job.customer_nama} />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Customer" required>
-            <Combobox
-              value={form.customer_id}
-              onChange={onCustomerChange}
-              options={customerOptions}
-              placeholder="Pilih customer"
-              searchPlaceholder="Cari nama perusahaan, kota, PIC…"
-              emptyText="Customer tidak ditemukan"
-            />
-          </Field>
-          <Field
-            label="PIC di lapangan"
-            required
-            hint="Boleh disesuaikan dengan yang standby di lapangan."
-          >
-            <Input
-              value={form.pic_nama}
-              onChange={(e) => set("pic_nama", e.target.value)}
-              error={error.pic_nama}
-            />
-          </Field>
-          <Field label="No HP PIC" required>
-            <Input
-              type="tel"
-              value={form.pic_no_hp}
-              onChange={(e) => set("pic_no_hp", e.target.value)}
-              error={error.pic_no_hp}
-              className="mono"
-            />
-          </Field>
+          {/* Customer, PIC lapangan, dan No HP PIC milik proyek — diubah dari
+              form proyek, bukan per job. */}
+          <div className="sm:col-span-2 caption" style={{ fontSize: 12.5 }}>
+            Customer: <strong>{job.customer_nama}</strong>
+            {job.pic_nama ? ` · PIC ${job.pic_nama}${job.pic_no_hp ? ` (${job.pic_no_hp})` : ""}` : ""}
+            {job.proyek_id && (
+              <>
+                {" — "}
+                <Link to={`/proyek/${job.proyek_id}/edit`}>ubah di proyek {job.proyek_nomor}</Link>
+              </>
+            )}
+          </div>
           <Field label="Alat" required className="sm:col-span-2">
             <Input
               value={form.alat_diangkut}
@@ -382,8 +328,9 @@ export function EditJobView({
               />
             </div>
           )}
-          <Field label="Unit" required>
+          <Field label="Unit" required hint={penugasanTerkunci ? alasanTerkunci : undefined}>
             <Combobox
+              disabled={penugasanTerkunci}
               value={form.unit_id}
               onChange={(v) =>
                 // Unit berganti → pilihan unit trailer ikut berganti.
@@ -416,9 +363,12 @@ export function EditJobView({
             error={error.unit_trailer_id}
             required={trailerWajib}
             trailerJobIni={job.unit_trailer_id}
+            disabled={penugasanTerkunci}
+            hint={penugasanTerkunci ? alasanTerkunci : undefined}
           />
-          <Field label="Driver" required>
+          <Field label="Driver" required hint={penugasanTerkunci ? alasanTerkunci : undefined}>
             <Combobox
+              disabled={penugasanTerkunci}
               value={form.driver_id}
               onChange={(v) => set("driver_id", v)}
               options={driverOptions}
@@ -475,7 +425,7 @@ export function EditJobView({
             Batal
           </Button>
         </Link>
-        <Button type="submit" loading={loading} disabled={!picFilled}>
+        <Button type="submit" loading={loading}>
           Simpan perubahan
         </Button>
       </div>

@@ -120,6 +120,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(next);
   }, []);
 
+  // Profil di localStorage hanya salinan saat login. Role / nama bisa diubah
+  // admin setelahnya (mis. role baru ditambahkan ke akun yang sedang login),
+  // jadi profil diambil ulang dari server saat aplikasi dibuka (termasuk
+  // reload) dan saat tab kembali aktif. Gagal (mis. offline) → pakai salinan.
+  useEffect(() => {
+    const segarkan = () => {
+      if (adminSession.get()) void refreshUser().catch(() => undefined);
+    };
+    segarkan();
+    const saatTerlihat = () => {
+      if (document.visibilityState === "visible") segarkan();
+    };
+    document.addEventListener("visibilitychange", saatTerlihat);
+    return () => document.removeEventListener("visibilitychange", saatTerlihat);
+  }, [refreshUser]);
+
   const gantiRole = useCallback(async (role: UserRole) => {
     const user = await api.post<CurrentUser>("/auth/role", { role });
     const current = adminSession.get();

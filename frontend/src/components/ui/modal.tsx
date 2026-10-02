@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { kunciScroll } from "@/lib/kunci-scroll";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,18 +24,23 @@ export function Modal({
   maxWidth = "max-w-[500px]",
   hideClose
 }: ModalProps) {
+  // onClose sering berupa fungsi baru tiap render — disimpan di ref supaya
+  // kunci scroll tidak dilepas-pasang setiap render.
+  const tutupRef = useRef(onClose);
+  tutupRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") tutupRef.current();
     };
     window.addEventListener("keydown", handler);
-    document.body.style.overflow = "hidden";
+    // Scroll halaman dikunci tanpa melompat ke atas (lihat lib/kunci-scroll).
+    const lepas = kunciScroll();
     return () => {
       window.removeEventListener("keydown", handler);
-      document.body.style.overflow = "";
+      lepas();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

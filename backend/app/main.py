@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.errors import install_exception_handlers
 from app.core.request_context import ip_dari_request, ip_klien, ua_klien
+from app.modules.approval.router import router as approval_router
 from app.modules.asuransi.router import polis_router as polis_asuransi_router
 from app.modules.asuransi.router import router as asuransi_router
 from app.modules.auth.router import router as auth_router
@@ -33,6 +34,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.penghapusan_aset.router import router as penghapusan_aset_router
 from app.modules.penjualan_unit.router import router as penjualan_unit_router
 from app.modules.perintah_kerja.router import router as perintah_kerja_router
+from app.modules.proyek.router import router as proyek_router
 from app.modules.quotations.router import router as quotations_router
 from app.modules.reports.router import router as reports_router
 from app.modules.search.router import router as search_router
@@ -59,6 +61,7 @@ def build_api_router() -> APIRouter:
         penghapusan_aset_router,
         drivers_router,
         customers_router,
+        proyek_router,
         jobs_router,
         incidents_router,
         maintenance_router,
@@ -78,6 +81,7 @@ def build_api_router() -> APIRouter:
         notifications_router,
         log_sistem_router,
         karyawan_router,
+        approval_router,
         dashboard_router,
         driver_portal_router,
         cron_router,

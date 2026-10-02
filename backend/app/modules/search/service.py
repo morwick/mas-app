@@ -17,6 +17,7 @@ from supabase import AsyncClient
 
 from app.core.paging import ilike_any
 from app.core.pg import rows
+from app.modules.jobs.mappers import PROYEK_CUSTOMER_EMBED, nama_customer_job
 from app.modules.search.schemas import SearchHit, SearchResponse
 
 # Jumlah hasil per entitas. Kecil dan disengaja: kotak cari adalah jalan pintas
@@ -60,7 +61,7 @@ class SearchService:
             # berdasarkan nama customer terwakili oleh hasil entitas customer.
             self._query(
                 "jobs",
-                "id, job_number, alat_diangkut, status_job, customer:customers(nama_perusahaan)",
+                f"id, job_number, alat_diangkut, status_job, {PROYEK_CUSTOMER_EMBED}",
                 ["job_number", "alat_diangkut", "asal", "tujuan"],
                 cleaned,
             ),
@@ -87,8 +88,7 @@ class SearchService:
 
         hits: list[SearchHit] = []
         for r in jobs:
-            cust = r.get("customer") or {}
-            nama_cust = cust.get("nama_perusahaan") if isinstance(cust, dict) else None
+            nama_cust = nama_customer_job(r)
             hits.append(
                 SearchHit(
                     kind="job",

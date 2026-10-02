@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.modules.approval.schemas import StatusApprovalData
 from app.modules.penjualan_unit.aset import AsetDokumen
 
 JenisAset = Literal["unit", "unit_trailer"]
@@ -43,6 +44,8 @@ class PenjualanUnit(BaseModel):
     bukti_bast_url: str | None = None
     created_by_nama: str | None = None
     created_at: str
+    # Menunggu approval: status aset belum berubah & dokumen belum bisa dicetak / diunggah.
+    status_approval: StatusApprovalData = "disetujui"
     # Data aset untuk isi surat penjualan & BAST.
     aset: AsetDokumen | None = None
 

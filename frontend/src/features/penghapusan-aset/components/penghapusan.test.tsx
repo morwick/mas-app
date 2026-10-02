@@ -92,6 +92,7 @@ describe("batalkan penghapusan", () => {
       <BatalPenghapusanModal
         penghapusan={{
           id: "h1",
+          status_approval: "disetujui",
           nomor_berita_acara: "0001/BAP/MAS/IX/2026",
           aset: null,
           jenis_aset: "unit",

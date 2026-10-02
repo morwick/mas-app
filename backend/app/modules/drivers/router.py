@@ -7,8 +7,15 @@ from app.core.auth import user_client
 from app.core.dokumen import baca_berkas, parse_form
 from app.core.paging import Page, PageParams, page_params
 from app.modules.auth.schemas import OkResponse
-from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate, KaryawanDriverOption, SetPinRequest
-from app.modules.drivers.service import DriverService
+from app.modules.drivers.schemas import (
+    Driver,
+    DriverCreate,
+    DriverUpdate,
+    KaryawanDriverOption,
+    KasbonDriverRingkas,
+    SetPinRequest,
+)
+from app.modules.drivers.service import DriverService, kasbon_driver
 from app.modules.jobs.schemas import Job
 from app.modules.jobs.service import JobService
 
@@ -53,6 +60,12 @@ async def karyawan_pilihan(svc: DriverService = Depends(get_service)) -> list[Ka
 @router.get("/{driver_id}", response_model=Driver)
 async def get_driver(driver_id: str, svc: DriverService = Depends(get_service)) -> Driver:
     return await svc.get(driver_id)
+
+
+@router.get("/{driver_id}/kasbon", response_model=KasbonDriverRingkas)
+async def driver_kasbon(driver_id: str, client: AsyncClient = Depends(user_client)) -> KasbonDriverRingkas:
+    """Riwayat & total kasbon supir (dari ganti driver / ganti unit)."""
+    return await kasbon_driver(client, driver_id)
 
 
 @router.get("/{driver_id}/jobs", response_model=list[Job])

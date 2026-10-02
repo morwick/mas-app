@@ -46,6 +46,7 @@ export function InvoicesListView({ invoices }: Props) {
       return (
         row.invoice_number.toLowerCase().includes(needle) ||
         row.customer_nama.toLowerCase().includes(needle) ||
+        (row.proyek_nomor ?? []).some((n) => n.toLowerCase().includes(needle)) ||
         (row.pic_nama ?? "").toLowerCase().includes(needle)
       );
     });
@@ -133,124 +134,139 @@ export function InvoicesListView({ invoices }: Props) {
         <>
           {/* Desktop */}
           <div className="card hidden lg:block">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 180 }}>Nomor tagihan</th>
-                  <th>Customer</th>
-                  <th style={{ width: 110 }}>Tanggal</th>
-                  <th style={{ width: 110 }}>Jatuh tempo</th>
-                  <th style={{ width: 140, textAlign: "right" }}>Total</th>
-                  <th style={{ width: 140, textAlign: "right" }}>Sisa</th>
-                  <th style={{ width: 150 }}>Status</th>
-                  <th style={{ width: 130 }}>Status bayar</th>
-                  <th style={{ width: 44 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {pg.items.map((row) => (
-                  <tr key={row.id} className="row-link">
-                    <td>
-                      <Link
-                        to={`/invoices/${row.id}`}
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 180 }}>Nomor tagihan</th>
+                    <th>Customer</th>
+                    <th style={{ width: 170 }}>Proyek</th>
+                    <th style={{ width: 110 }}>Tanggal</th>
+                    <th style={{ width: 110 }}>Jatuh tempo</th>
+                    <th style={{ width: 140, textAlign: "right" }}>Total</th>
+                    <th style={{ width: 140, textAlign: "right" }}>Sisa</th>
+                    <th style={{ width: 150 }}>Status</th>
+                    <th style={{ width: 130 }}>Status bayar</th>
+                    <th style={{ width: 44 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.items.map((row) => (
+                    <tr key={row.id} className="row-link">
+                      <td>
+                        <Link
+                          to={`/invoices/${row.id}`}
+                          className="mono"
+                          style={{
+                            textDecoration: "none",
+                            color: "var(--text-primary)",
+                            fontSize: 12.5,
+                            fontWeight: 600
+                          }}
+                        >
+                          {row.invoice_number}
+                        </Link>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                          {row.customer_nama}
+                        </div>
+                        <div
+                          style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}
+                        >
+                          {row.jumlah_item} baris rincian
+                        </div>
+                      </td>
+                      <td>
+                        {/* Satu tagihan boleh berisi banyak proyek. */}
+                        {(row.proyek_nomor ?? []).length > 0 ? (
+                          (row.proyek_nomor ?? []).map((n) => (
+                            <div key={n} className="mono" style={{ fontSize: 11.5 }}>
+                              {n}
+                            </div>
+                          ))
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td className="muted" style={{ fontSize: 12.5 }}>
+                        {formatDate(row.tanggal)}
+                      </td>
+                      <td className="muted" style={{ fontSize: 12.5 }}>
+                        {row.jatuh_tempo ? formatDate(row.jatuh_tempo) : "—"}
+                      </td>
+                      <td
                         className="mono"
                         style={{
-                          textDecoration: "none",
-                          color: "var(--text-primary)",
+                          textAlign: "right",
                           fontSize: 12.5,
                           fontWeight: 600
                         }}
                       >
-                        {row.invoice_number}
-                      </Link>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600, fontSize: 13.5 }}>
-                        {row.customer_nama}
-                      </div>
-                      <div
-                        style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}
-                      >
-                        {row.jumlah_item} baris rincian
-                      </div>
-                    </td>
-                    <td className="muted" style={{ fontSize: 12.5 }}>
-                      {formatDate(row.tanggal)}
-                    </td>
-                    <td className="muted" style={{ fontSize: 12.5 }}>
-                      {row.jatuh_tempo ? formatDate(row.jatuh_tempo) : "—"}
-                    </td>
-                    <td
-                      className="mono"
-                      style={{
-                        textAlign: "right",
-                        fontSize: 12.5,
-                        fontWeight: 600
-                      }}
-                    >
-                      {formatRupiah(row.total)}
-                    </td>
-                    <td
-                      className="mono"
-                      style={{
-                        textAlign: "right",
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        color:
-                          row.sisa > 0 && row.status_tampil === "jatuh_tempo"
-                            ? "#C13838"
-                            : row.sisa > 0
-                              ? "var(--text-primary)"
-                              : "var(--text-tertiary)"
-                      }}
-                    >
-                      {row.status === "batal" ? "—" : formatRupiah(row.sisa)}
-                    </td>
-                    <td>
-                      <InvoiceStatusBadge
-                        status={row.status_tampil}
-                        hariTerlambat={row.hari_terlambat}
-                      />
-                    </td>
-                    <td>
-                      <StatusBayarBadge status={row.status_bayar} />
-                    </td>
-                    <td>
-                      <Link
-                        to={`/invoices/${row.id}`}
+                        {formatRupiah(row.total)}
+                      </td>
+                      <td
+                        className="mono"
                         style={{
-                          color: "var(--text-tertiary)",
-                          display: "inline-flex"
+                          textAlign: "right",
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          color:
+                            row.sisa > 0 && row.status_tampil === "jatuh_tempo"
+                              ? "#C13838"
+                              : row.sisa > 0
+                                ? "var(--text-primary)"
+                                : "var(--text-tertiary)"
                         }}
                       >
-                        <ChevronRight style={{ width: 16, height: 16 }} />
-                      </Link>
+                        {row.status === "batal" ? "—" : formatRupiah(row.sisa)}
+                      </td>
+                      <td>
+                        <InvoiceStatusBadge
+                          status={row.status_tampil}
+                          hariTerlambat={row.hari_terlambat}
+                        />
+                      </td>
+                      <td>
+                        <StatusBayarBadge status={row.status_bayar} />
+                      </td>
+                      <td>
+                        <Link
+                          to={`/invoices/${row.id}`}
+                          style={{
+                            color: "var(--text-tertiary)",
+                            display: "inline-flex"
+                          }}
+                        >
+                          <ChevronRight style={{ width: 16, height: 16 }} />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td
+                      colSpan={6}
+                      style={{ fontSize: 12, color: "var(--text-tertiary)" }}
+                    >
+                      {filtered.length} tagihan ditampilkan · sisa belum masuk
                     </td>
+                    <td
+                      className="mono"
+                      style={{
+                        textAlign: "right",
+                        fontWeight: 700,
+                        fontSize: 13
+                      }}
+                    >
+                      {formatRupiah(sisaTertagih)}
+                    </td>
+                    <td colSpan={3} />
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td
-                    colSpan={5}
-                    style={{ fontSize: 12, color: "var(--text-tertiary)" }}
-                  >
-                    {filtered.length} tagihan ditampilkan · sisa belum masuk
-                  </td>
-                  <td
-                    className="mono"
-                    style={{
-                      textAlign: "right",
-                      fontWeight: 700,
-                      fontSize: 13
-                    }}
-                  >
-                    {formatRupiah(sisaTertagih)}
-                  </td>
-                  <td colSpan={3} />
-                </tr>
-              </tfoot>
-            </table>
+                </tfoot>
+              </table>
+            </div>
           </div>
 
           {/* Mobile */}
@@ -276,6 +292,9 @@ export function InvoicesListView({ invoices }: Props) {
                 <div style={{ fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
                   {row.customer_nama}
                 </div>
+                {(row.proyek_nomor ?? []).length > 0 && (
+                  <div className="caption mono">Proyek {(row.proyek_nomor ?? []).join(", ")}</div>
+                )}
                 <div
                   style={{
                     display: "flex",

@@ -127,7 +127,8 @@ class Job {
   factory Job.fromJson(Map<String, dynamic> j) => Job(
         id: j['id'] as String,
         jobNumber: j['job_number'] as String,
-        customerNama: (j['customer_nama'] as String?) ?? '-',
+        // Proyek tanpa customer (unit jalan kosongan) cukup ditulis "Kosongan".
+        customerNama: j['customer_id'] == null ? 'Kosongan' : (j['customer_nama'] as String?) ?? '-',
         picNama: j['pic_nama'] as String?,
         picNoHp: j['pic_no_hp'] as String?,
         alatDiangkut: (j['alat_diangkut'] as String?) ?? '-',

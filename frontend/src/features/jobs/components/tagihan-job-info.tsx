@@ -21,7 +21,8 @@ export function TagihanJobInfo({ job, ringkas = false }: { job: Job; ringkas?: b
 
   if (!job.invoice_id || !job.invoice_number) {
     // info_tagihan false = backend tidak mengirim info tagihan (operator).
-    if (job.status !== "selesai" || !job.info_tagihan) return null;
+    // Kosongan (proyek tanpa customer) tidak pernah ditagih — tanpa status tagihan.
+    if (job.status !== "selesai" || !job.info_tagihan || !job.customer_id) return null;
     return (
       <div className="caption" style={ringkas ? { marginTop: 4 } : { marginBottom: 8 }}>
         Belum ditagihkan

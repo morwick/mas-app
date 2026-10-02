@@ -108,8 +108,11 @@ class QuotationListRow(QuotationBase):
     # Job dari penawaran ini, tidak termasuk yang dibatalkan.
     jumlah_job: int
     jumlah_job_selesai: int
-    # Item deal yang belum punya job aktif (tidak dibatalkan).
-    jumlah_item_deal_belum_job: int = 0
+    # Punya item deal tetapi belum ada satu pun proyek aktif (filter "Deal — belum ada proyek").
+    deal_belum_ada_proyek: bool = False
+    # Proyek yang terbentuk dari penawaran ini (kolom Pelaksanaan) — proyek
+    # unik dari job-job aktif penawaran ini.
+    jumlah_proyek: int = 0
     # Item yang disetujui (deal), termasuk yang harganya direvisi.
     jumlah_item_deal: int = 0
     jumlah_item_deal_revisi: int = 0
@@ -130,6 +133,13 @@ class QuotationJobRef(BaseModel):
     tujuan: str
     etd: str
     quotation_item_id: str | None = None
+    proyek_id: str | None = None
+    proyek_nomor: str | None = None
+    unit_id: str | None = None
+    unit_kode: str | None = None
+    # Proyek induk job: kapan dibuat & oleh siapa (ringkasan di detail penawaran).
+    proyek_created_at: str | None = None
+    proyek_created_by_nama: str | None = None
 
 
 class QuotationItemInput(BaseModel):

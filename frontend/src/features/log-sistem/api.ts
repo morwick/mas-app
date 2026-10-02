@@ -8,7 +8,8 @@ export type AksiLog =
   | "Hapus Data"
   | "Cetak Dokumen"
   | "Blacklist"
-  | "Cabut Blacklist";
+  | "Cabut Blacklist"
+  | "Approval";
 
 export const AKSI_LOG: AksiLog[] = [
   "Login",
@@ -18,7 +19,8 @@ export const AKSI_LOG: AksiLog[] = [
   "Hapus Data",
   "Cetak Dokumen",
   "Blacklist",
-  "Cabut Blacklist"
+  "Cabut Blacklist",
+  "Approval"
 ];
 
 export interface LogSistem {

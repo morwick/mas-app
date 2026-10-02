@@ -26,7 +26,8 @@ const WARNA_AKSI: Record<AksiLog, { bg: string; fg: string }> = {
   "Hapus Data": { bg: "var(--status-cancelled-bg)", fg: "var(--status-cancelled-text)" },
   "Cetak Dokumen": { bg: "var(--status-pickup-bg)", fg: "var(--status-pickup-text)" },
   Blacklist: { bg: "#b91c1c", fg: "#fff" },
-  "Cabut Blacklist": { bg: "var(--status-standby-bg)", fg: "var(--status-standby-text)" }
+  "Cabut Blacklist": { bg: "var(--status-standby-bg)", fg: "var(--status-standby-text)" },
+  Approval: { bg: "var(--status-perjalanan-bg)", fg: "var(--status-perjalanan-text)" }
 };
 
 function AksiBadge({ aksi }: { aksi: AksiLog }) {
@@ -186,34 +187,36 @@ export function LogSistemView() {
         <div style={{ opacity: log.isPlaceholderData ? 0.6 : 1, transition: "opacity 120ms" }}>
           {/* Desktop: tabel */}
           <div className="card hidden lg:block" style={{ overflow: "hidden" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 170 }}>Waktu (WIB)</th>
-                  <th style={{ width: 170 }}>Karyawan</th>
-                  <th style={{ width: 120 }}>Aksi</th>
-                  <th>Keterangan</th>
-                  <th style={{ width: 140 }}>IP address</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((l) => (
-                  <tr key={l.id}>
-                    <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                      {formatWaktuWIB(l.waktu)}
-                    </td>
-                    <td>{namaPelaku(l)}</td>
-                    <td>
-                      <AksiBadge aksi={l.aksi} />
-                    </td>
-                    <td style={{ wordBreak: "break-word" }}>{l.keterangan}</td>
-                    <td style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 12.5 }}>
-                      {l.ip_address ?? "—"}
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 170 }}>Waktu (WIB)</th>
+                    <th style={{ width: 170 }}>Karyawan</th>
+                    <th style={{ width: 120 }}>Aksi</th>
+                    <th>Keterangan</th>
+                    <th style={{ width: 140 }}>IP address</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((l) => (
+                    <tr key={l.id}>
+                      <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                        {formatWaktuWIB(l.waktu)}
+                      </td>
+                      <td>{namaPelaku(l)}</td>
+                      <td>
+                        <AksiBadge aksi={l.aksi} />
+                      </td>
+                      <td style={{ wordBreak: "break-word" }}>{l.keterangan}</td>
+                      <td style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 12.5 }}>
+                        {l.ip_address ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pagination state={pg} label="log" attached />
           </div>
 

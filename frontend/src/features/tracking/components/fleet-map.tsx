@@ -17,6 +17,8 @@ export interface FleetMapUnitJob {
   number: string;
   customer_nama: string;
   tujuan: string;
+  /** Nama driver yang sedang bertugas di job ini. */
+  driver_nama?: string | null;
   route: {
     asal: { lat: number; lng: number };
     tujuan: { lat: number; lng: number };
@@ -123,6 +125,7 @@ function popupHtml(u: FleetMapUnit): string {
       ">
         <div style="font-size:10.5px;color:#888;font-weight:600;letter-spacing:0.3px;text-transform:uppercase">Job aktif</div>
         <div style="font-size:11.5px;color:#333;margin-top:2px;font-weight:600">${escapeHtml(u.job.customer_nama)}</div>
+        <div style="font-size:11px;color:#333;margin-top:1px">Driver: ${escapeHtml(u.job.driver_nama ?? "—")}</div>
         <div style="font-size:10.5px;color:#666;margin-top:1px">→ ${escapeHtml(u.job.tujuan)}</div>
         <a href="/tracking/${escapeHtml(u.job.id)}"
           style="

@@ -357,7 +357,7 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
               <tr>
                 <th style={{ width: 40 }}>No</th>
                 <th>Uraian</th>
-                <th style={{ width: 140 }}>Job</th>
+                <th style={{ width: 190 }}>Proyek / Job</th>
                 <th style={{ width: 90 }}>Jumlah</th>
                 <th style={{ width: 140, textAlign: "right" }}>Harga</th>
                 <th style={{ width: 140, textAlign: "right" }}>Total</th>
@@ -378,6 +378,11 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
                     )}
                   </td>
                   <td>
+                    {it.proyek_nomor && (
+                      <div className="mono caption" style={{ fontSize: 11 }}>
+                        {it.proyek_nomor}
+                      </div>
+                    )}
                     {it.job_id && it.job_number ? (
                       <Link
                         to={`/jobs/${it.job_id}`}

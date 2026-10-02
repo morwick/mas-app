@@ -117,7 +117,7 @@ export function PenghapusanFormModal({ open, onClose, penghapusan, onSubmit, bus
       description={
         isEdit
           ? "Aset & nomor berita acara tidak berubah. Edit hanya bisa selama berita acara bertanda tangan belum diunggah."
-          : "Aset yang dihapus otomatis berstatus Diafkirkan, keluar dari armada, dan tidak bisa dipakai job lagi."
+          : "Penghapusan diajukan ke approver. Aset baru berstatus Diafkirkan setelah disetujui; selama menunggu, aset tidak bisa dipakai job."
       }
       footer={
         <>

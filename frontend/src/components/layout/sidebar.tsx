@@ -7,7 +7,9 @@ import {
   groupHasActive,
   isNavGroup,
   navTree,
+  sisipkanGrupApproval,
   visibleNavTree,
+  type NavGroup,
   type NavItem,
   type UserRoleLike
 } from "./nav-items";
@@ -26,6 +28,8 @@ interface SidebarProps {
   };
   /** Dilipat lewat tombol di top bar (desktop): hanya ikon yang tampil. */
   mini?: boolean;
+  /** Grup Approval milik pengguna ini (dibuat dari fitur yang ia pegang). */
+  approval?: NavGroup | null;
 }
 
 const COUNT_KEY: Record<string, keyof NonNullable<SidebarProps["counts"]>> = {
@@ -39,9 +43,9 @@ const BADGE_KEYS = new Set(["/jobs"]);
 /** Lebar menu terlipat (hanya ikon). */
 const LEBAR_MINI = 64;
 
-export function Sidebar({ user, counts, mini = false }: SidebarProps) {
+export function Sidebar({ user, counts, mini = false, approval }: SidebarProps) {
   const { pathname } = useLocation();
-  const entries = visibleNavTree(navTree, user?.role);
+  const entries = sisipkanGrupApproval(visibleNavTree(navTree, user?.role), approval);
   // Semua grup terbuka secara default; yang ditutup manual disimpan di sini.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -61,8 +65,9 @@ export function Sidebar({ user, counts, mini = false }: SidebarProps) {
       : pathname.startsWith(item.href);
     const Icon = item.icon;
     const countKey = COUNT_KEY[item.href];
-    const count = countKey ? counts?.[countKey] : undefined;
-    const badge = BADGE_KEYS.has(item.href);
+    // Angka tindakan menunggu (Approval) memakai gaya badge yang sama dengan Job aktif.
+    const count = countKey ? counts?.[countKey] : item.badge ? item.badge : undefined;
+    const badge = BADGE_KEYS.has(item.href) || Boolean(item.badge);
     return (
       <Link
         key={item.href}
@@ -117,8 +122,8 @@ export function Sidebar({ user, counts, mini = false }: SidebarProps) {
     const active = item.match ? item.match(pathname) : pathname.startsWith(item.href);
     const Icon = item.icon;
     const countKey = COUNT_KEY[item.href];
-    const count = countKey ? counts?.[countKey] : undefined;
-    const badge = BADGE_KEYS.has(item.href) && count != null && count > 0;
+    const count = countKey ? counts?.[countKey] : item.badge;
+    const badge = (BADGE_KEYS.has(item.href) || Boolean(item.badge)) && count != null && count > 0;
     return (
       <Link
         key={item.href}

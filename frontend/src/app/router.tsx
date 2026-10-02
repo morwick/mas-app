@@ -18,6 +18,11 @@ import {
 } from "./guards";
 import { NotFoundPage } from "./NotFoundPage";
 import { NotificationsPage } from "@/features/notifications/pages/NotificationsPage";
+import {
+  ApproverPage,
+  PengajuanApprovalDetailPage,
+  PengajuanApprovalPage
+} from "@/features/approval/pages/ApprovalPages";
 
 import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { ResetPasswordPage } from "@/features/auth/pages/ResetPasswordPage";
@@ -32,10 +37,12 @@ import { CustomersPage } from "@/features/customers/pages/CustomersPage";
 import { EditCustomerPage, NewCustomerPage } from "@/features/customers/pages/CustomerFormPage";
 import { JobsPage } from "@/features/jobs/pages/JobsPage";
 import { JobDetailPage } from "@/features/jobs/pages/JobDetailPage";
-import { EditJobPage, NewJobPage } from "@/features/jobs/pages/JobFormPages";
+import { EditJobPage } from "@/features/jobs/pages/JobFormPages";
 import { JobConfirmationPage } from "@/features/jobs/pages/JobConfirmationPage";
 import { JadwalPage } from "@/features/jobs/pages/JadwalPage";
 import { SuratJalanPage } from "@/features/jobs/pages/SuratJalanPage";
+import { ProyekDetailPage, ProyekPage, ProyekPerUnitPage } from "@/features/proyek/pages/ProyekPages";
+import { EditProyekPage, NewProyekPage, TambahJobProyekPage } from "@/features/proyek/pages/ProyekFormPages";
 import {
   FleetMapPage,
   TrackingDetailPage,
@@ -139,6 +146,9 @@ export const router = createBrowserRouter([
           { path: "/reports/utilisasi", element: <UtilisasiReportPage /> },
 
           { path: "/notifikasi", element: <NotificationsPage /> },
+          // Approval: semua role — hak lihat & putus dijaga backend/database.
+          { path: "/approval/:fitur", element: <PengajuanApprovalPage /> },
+          { path: "/approval/:fitur/:id", element: <PengajuanApprovalDetailPage /> },
           { path: "/profil", element: <ProfilePage /> },
           // Menu "Pengaturan" sudah dihapus; alamat lamanya tetap hidup.
           { path: "/settings", element: <Navigate to="/profil" replace /> },
@@ -222,6 +232,8 @@ export const router = createBrowserRouter([
             element: <RequireRole roles={["superadmin", "admin", "finance", "operator"]} />,
             children: [
               { path: "/jobs/:id", element: <JobDetailPage /> },
+              // Detail proyek: ikut aturan lihat detail job.
+              { path: "/proyek/:id", element: <ProyekDetailPage /> },
               // Tautan notifikasi lama "Job menunggu validasi" — panel validasi
               // ada di detail job, jadi diarahkan ke sana (bukan 404).
               { path: "/jobs/:id/validasi", element: <KeDetailJob /> }
@@ -232,8 +244,18 @@ export const router = createBrowserRouter([
             // Job & Penawaran penuh (buat/ubah/hapus): superadmin & admin saja.
             element: <RequireRole roles={["superadmin", "admin"]} />,
             children: [
+              // Menu Proyek: Tab Proyek (/proyek) & Tab Proyek Detail (Job) (/jobs).
+              { path: "/proyek", element: <ProyekPage /> },
+              // Tab Proyek per unit (rute statis — didahulukan dari /proyek/:id).
+              { path: "/proyek/per-unit", element: <ProyekPerUnitPage /> },
               { path: "/jobs", element: <JobsPage /> },
-              { path: "/jobs/new", element: <NewJobPage /> },
+              // Proyek baru + job-jobnya. /jobs/new dipertahankan untuk tautan
+              // lama (dashboard, penawaran "Buat job").
+              { path: "/proyek/new", element: <NewProyekPage /> },
+              { path: "/jobs/new", element: <NewProyekPage /> },
+              // Edit proyek = PIC lapangan saja; tambah job di halaman terpisah.
+              { path: "/proyek/:id/edit", element: <EditProyekPage /> },
+              { path: "/proyek/:id/tambah-job", element: <TambahJobProyekPage /> },
               { path: "/jobs/jadwal", element: <JadwalPage /> },
               { path: "/jobs/:id/edit", element: <EditJobPage /> },
               { path: "/jobs/:id/confirmation", element: <JobConfirmationPage /> },
@@ -276,6 +298,7 @@ export const router = createBrowserRouter([
             element: <RequireSuperadmin />,
             children: [
               { path: "/karyawan", element: <KaryawanPage /> },
+              { path: "/approver", element: <ApproverPage /> },
               { path: "/penjualan-unit", element: <PenjualanUnitPage /> },
               { path: "/penghapusan-aset", element: <PenghapusanAsetPage /> },
               { path: "/pengguna", element: <UsersPage /> }

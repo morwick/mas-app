@@ -159,7 +159,7 @@ export function PenjualanFormModal({ open, onClose, penjualan, onSubmit, busy }:
       description={
         isEdit
           ? "Aset & nomor dokumen tidak berubah. Edit hanya bisa selama surat / BAST bertanda tangan belum diunggah."
-          : "Aset yang dicatat terjual otomatis berstatus Terjual dan tidak bisa dipakai job lagi."
+          : "Penjualan diajukan ke approver. Aset baru berstatus Terjual setelah disetujui; selama menunggu, aset tidak bisa dipakai job."
       }
       footer={
         <>

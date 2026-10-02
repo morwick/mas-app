@@ -41,7 +41,7 @@ from app.modules.penjualan_unit.schemas import (
 SELECT = f"""
   id, nomor_surat, nomor_bast, jenis_aset, unit_id, unit_trailer_id, nama_pembeli, no_hp_pembeli, email_pembeli,
   harga_jual, tanggal_jual, catatan, bukti_path, bukti_uploaded_at, bukti_bast_path, bukti_bast_uploaded_at,
-  penyerah_nama, penyerah_jabatan, created_at,
+  penyerah_nama, penyerah_jabatan, created_at, status_approval,
   {ASET_DOKUMEN_SELECT},
   created_by_profile:profiles!penjualan_unit_created_by_fkey(nama)
 """
@@ -109,6 +109,7 @@ class PenjualanUnitService:
             bukti_bast_url=await self._signed_bukti_url(r.get("bukti_bast_path")) if with_url else None,
             created_by_nama=(first(r.get("created_by_profile")) or {}).get("nama"),
             created_at=r["created_at"],
+            status_approval=r.get("status_approval") or "disetujui",
             aset=aset_dokumen(r),
         )
 
@@ -206,13 +207,16 @@ class PenjualanUnitService:
         kolom_waktu = "bukti_uploaded_at" if dokumen == "surat" else "bukti_bast_uploaded_at"
         row = single(
             await self._db.table("penjualan_unit")
-            .select(f"id, {kolom}")
+            .select(f"id, status_approval, {kolom}")
             .eq("id", penjualan_id)
             .maybe_single()
             .execute()
         )
         if row is None:
             raise NotFoundError("Catatan penjualan tidak ditemukan")
+        # BATASAN: dokumen bertanda tangan hanya untuk penjualan yang sudah disetujui.
+        if row.get("status_approval") != "disetujui":
+            raise ValidationError("Dokumen bertanda tangan baru bisa diunggah setelah penjualan disetujui approver.")
         ext = validate_document(content_type, len(data))
         path = f"{penjualan_id}/{dokumen}-{unique_object_name(ext)}"
         await upload_object(self._db, self._bucket, path, data, content_type or "application/pdf")

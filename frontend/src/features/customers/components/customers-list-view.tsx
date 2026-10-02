@@ -134,112 +134,114 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
         <>
           {/* Desktop: tabel */}
           <div className="card hidden lg:block">
-            <table className="table">
-            <thead>
-              <tr>
-                <th>Nama perusahaan</th>
-                <th>Alamat</th>
-                <th style={{ width: 130 }}>Jumlah penawaran</th>
-                <th style={{ width: 110 }}>Total job</th>
-                <th style={{ width: 100 }}>Status</th>
-                <th style={{ width: 50 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pg.items.map((c) => (
-                <tr key={c.id} className="row-link">
-                  <td>
-                    <Link
-                      to={`/customers/${c.id}/edit`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        textDecoration: "none",
-                        color: "inherit"
-                      }}
-                    >
-                      <div
+            <div className="table-scroll">
+              <table className="table">
+              <thead>
+                <tr>
+                  <th>Nama perusahaan</th>
+                  <th>Alamat</th>
+                  <th style={{ width: 130 }}>Jumlah penawaran</th>
+                  <th style={{ width: 110 }}>Total job</th>
+                  <th style={{ width: 100 }}>Status</th>
+                  <th style={{ width: 50 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.items.map((c) => (
+                  <tr key={c.id} className="row-link">
+                    <td>
+                      <Link
+                        to={`/customers/${c.id}/edit`}
                         style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 6,
-                          background: "var(--brand-primary-light)",
-                          color: "var(--brand-primary-dark)",
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
-                          fontWeight: 700,
-                          fontSize: 11,
-                          flexShrink: 0
+                          gap: 10,
+                          textDecoration: "none",
+                          color: "inherit"
                         }}
                       >
-                        {abbr(c.nama_perusahaan)}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
                         <div
                           style={{
-                            fontWeight: 600,
-                            fontSize: 13.5,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap"
+                            width: 32,
+                            height: 32,
+                            borderRadius: 6,
+                            background: "var(--brand-primary-light)",
+                            color: "var(--brand-primary-dark)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 700,
+                            fontSize: 11,
+                            flexShrink: 0
                           }}
                         >
-                          {c.nama_perusahaan}
+                          {abbr(c.nama_perusahaan)}
                         </div>
-                        {c.catatan && (
+                        <div style={{ minWidth: 0 }}>
                           <div
                             style={{
-                              fontSize: 11,
-                              color: "var(--text-tertiary)",
+                              fontWeight: 600,
+                              fontSize: 13.5,
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap"
                             }}
                           >
-                            {c.catatan}
+                            {c.nama_perusahaan}
                           </div>
-                        )}
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="muted" style={{ fontSize: 12.5 }}>
-                    {c.alamat ?? (
-                      <span style={{ color: "var(--text-tertiary)" }}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <CountLink
-                      to={`/quotations?customer_id=${c.id}`}
-                      count={quotationCounts[c.id] ?? 0}
-                    />
-                  </td>
-                  <td>
-                    <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
-                  </td>
-                  <td>
-                    {c.is_active ? (
-                      <span className="badge badge-bertugas">Aktif</span>
-                    ) : (
-                      <span className="badge">Nonaktif</span>
-                    )}
-                  </td>
-                  <td>
-                    <Link
-                      to={`/customers/${c.id}/edit`}
-                      style={{
-                        color: "var(--text-tertiary)",
-                        display: "inline-flex"
-                      }}
-                    >
-                      <ChevronRight style={{ width: 16, height: 16 }} />
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                          {c.catatan && (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-tertiary)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              }}
+                            >
+                              {c.catatan}
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+                    </td>
+                    <td className="muted" style={{ fontSize: 12.5 }}>
+                      {c.alamat ?? (
+                        <span style={{ color: "var(--text-tertiary)" }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <CountLink
+                        to={`/quotations?customer_id=${c.id}`}
+                        count={quotationCounts[c.id] ?? 0}
+                      />
+                    </td>
+                    <td>
+                      <CountLink to={`/jobs?customer_id=${c.id}`} count={jobCounts[c.id] ?? 0} />
+                    </td>
+                    <td>
+                      {c.is_active ? (
+                        <span className="badge badge-bertugas">Aktif</span>
+                      ) : (
+                        <span className="badge">Nonaktif</span>
+                      )}
+                    </td>
+                    <td>
+                      <Link
+                        to={`/customers/${c.id}/edit`}
+                        style={{
+                          color: "var(--text-tertiary)",
+                          display: "inline-flex"
+                        }}
+                      >
+                        <ChevronRight style={{ width: 16, height: 16 }} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
           </div>
 
           {/* Mobile: card list */}

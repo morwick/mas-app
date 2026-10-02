@@ -14,13 +14,27 @@ interface Props {
   required?: boolean;
   /** Trailer yang sedang dipakai job ini (form edit) — tetap bisa dipilih walau Bertugas. */
   trailerJobIni?: string | null;
+  /** Terkunci (mis. uang jalan job sudah dicairkan). */
+  disabled?: boolean;
+  /** Keterangan pengganti hint bawaan (mis. alasan terkunci). */
+  hint?: string;
 }
 
 /**
  * Pilihan Unit Trailer di form job. Hanya tampil bila jenis unit dari unit
  * yang dipilih punya jenis unit trailer; selain itu tidak dirender sama sekali.
  */
-export function UnitTrailerField({ pilihan, loading, value, onChange, error, required, trailerJobIni }: Props) {
+export function UnitTrailerField({
+  pilihan,
+  loading,
+  value,
+  onChange,
+  error,
+  required,
+  trailerJobIni,
+  disabled,
+  hint
+}: Props) {
   if (loading) {
     return (
       <Field label="Unit trailer">
@@ -35,9 +49,10 @@ export function UnitTrailerField({ pilihan, loading, value, onChange, error, req
       label="Unit trailer"
       required={required ?? true}
       hint={
-        pilihan.trailer.length === 0
+        hint ??
+        (pilihan.trailer.length === 0
           ? "Belum ada unit trailer untuk jenis unit ini — tambahkan dulu di menu Unit Trailer."
-          : "Unit ini wajib memakai unit trailer."
+          : "Unit ini wajib memakai unit trailer.")
       }
     >
       <Combobox
@@ -59,6 +74,7 @@ export function UnitTrailerField({ pilihan, loading, value, onChange, error, req
         searchPlaceholder="Cari kode trailer atau jenisnya…"
         emptyText="Tidak ada unit trailer yang cocok"
         error={error}
+        disabled={disabled}
       />
     </Field>
   );

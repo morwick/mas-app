@@ -65,3 +65,17 @@ async def test_uang_jalan_dari_pengajuan_driver_terkunci(aksi: str) -> None:
             payload = UangJalanInput(job_id="j1", jenis="tambahan", tanggal="2026-09-26", jumlah=100_000)
             await svc.update("uj-1", payload)
     assert not db.ditulis
+
+
+@pytest.mark.parametrize("status", ["disetujui", "ditolak"])
+async def test_tambahan_yang_sudah_diputuskan_tidak_bisa_dihapus(status: str) -> None:
+    db = _Db({"request_id": None, "jenis": "tambahan", "status_approval": status})
+    with pytest.raises(ValidationError, match=f"sudah {status} tidak bisa dihapus"):
+        await UangJalanService(db).delete("uj-1")  # type: ignore[arg-type]
+    assert not db.ditulis
+
+
+async def test_tambahan_menunggu_masih_bisa_dihapus() -> None:
+    db = _Db({"request_id": None, "jenis": "tambahan", "status_approval": "menunggu"})
+    await UangJalanService(db).delete("uj-1")  # type: ignore[arg-type]
+    assert db.ditulis

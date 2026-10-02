@@ -6,6 +6,7 @@ import 'package:mas_driver/features/jobs/models.dart';
 Map<String, dynamic> _jobJson({String status = 'loading', List<Map<String, dynamic>> photos = const []}) => {
       'id': 'j1',
       'job_number': 'JOB-2026-001',
+      'customer_id': 'c1',
       'customer_nama': 'PT Contoh',
       'alat_diangkut': 'Excavator PC200',
       'asal': 'Pool Cikarang',
@@ -31,6 +32,19 @@ Map<String, dynamic> _photo(String stage, String slot, {bool rendah = false}) =>
     };
 
 void main() {
+  group('Customer job', () {
+    test('job dengan customer menampilkan nama customer', () {
+      expect(Job.fromJson(_jobJson()).customerNama, 'PT Contoh');
+    });
+
+    test('proyek kosongan (tanpa customer) cukup ditulis Kosongan', () {
+      final json = _jobJson()
+        ..['customer_id'] = null
+        ..['customer_nama'] = 'Tanpa customer';
+      expect(Job.fromJson(json).customerNama, 'Kosongan');
+    });
+  });
+
   group('JobStatus', () {
     test('menunggu_pickup lama dinormalkan ke ditugaskan', () {
       expect(JobStatus.parse('menunggu_pickup').normalized, JobStatus.ditugaskan);

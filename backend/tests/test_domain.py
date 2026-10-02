@@ -120,6 +120,19 @@ class TestUangJalan:
     def test_zero_uang_jalan(self) -> None:
         assert hitung_ringkasan(0, []).persen_cair == 0
 
+    def test_kasbon_tidak_mengurangi_cair_pengembalian_mengurangi(self) -> None:
+        from app.modules.uang_jalan.schemas import UangJalan
+
+        tx = [
+            UangJalan(id="1", job_id="j", jenis="pencairan", tanggal="2026-09-01", jumlah=1_000_000, created_at="x"),
+            UangJalan(id="2", job_id="j", jenis="pengembalian", tanggal="2026-09-02", jumlah=300_000, created_at="x"),
+            UangJalan(id="3", job_id="j", jenis="kasbon", tanggal="2026-09-02", jumlah=200_000, created_at="x"),
+        ]
+        r = hitung_ringkasan(1_500_000, tx)
+        # 1.000.000 − 300.000 pengembalian; kasbon 200.000 tidak mengurangi.
+        assert r.cair == 700_000
+        assert r.sisa == 800_000
+
 
 class TestRouting:
     def test_polyline_roundtrip_known_sample(self) -> None:

@@ -39,7 +39,7 @@ from app.modules.penjualan_unit.aset import (
 
 SELECT = f"""
   id, nomor_berita_acara, jenis_aset, unit_id, unit_trailer_id, tanggal_hapus, alasan, catatan,
-  status_aset_sebelum, bukti_path, bukti_uploaded_at, created_at,
+  status_aset_sebelum, bukti_path, bukti_uploaded_at, created_at, status_approval,
   {ASET_DOKUMEN_SELECT},
   created_by_profile:profiles!penghapusan_aset_created_by_fkey(nama)
 """
@@ -100,6 +100,7 @@ class PenghapusanAsetService:
             bukti_url=await self._signed_bukti_url(r.get("bukti_path")) if with_url else None,
             created_by_nama=(first(r.get("created_by_profile")) or {}).get("nama"),
             created_at=r["created_at"],
+            status_approval=r.get("status_approval") or "disetujui",
             aset=aset_dokumen(r),
         )
 
@@ -188,13 +189,18 @@ class PenghapusanAsetService:
     async def upload_bukti(self, penghapusan_id: str, *, data: bytes, content_type: str | None) -> None:
         row = single(
             await self._db.table("penghapusan_aset")
-            .select("id, bukti_path")
+            .select("id, bukti_path, status_approval")
             .eq("id", penghapusan_id)
             .maybe_single()
             .execute()
         )
         if row is None:
             raise NotFoundError("Catatan penghapusan tidak ditemukan")
+        # BATASAN: berita acara bertanda tangan hanya untuk penghapusan yang sudah disetujui.
+        if row.get("status_approval") != "disetujui":
+            raise ValidationError(
+                "Berita acara bertanda tangan baru bisa diunggah setelah penghapusan disetujui approver."
+            )
         ext = validate_document(content_type, len(data))
         path = f"{penghapusan_id}/{unique_object_name(ext)}"
         await upload_object(self._db, self._bucket, path, data, content_type or "application/pdf")

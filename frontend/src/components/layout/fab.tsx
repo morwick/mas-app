@@ -9,7 +9,7 @@ interface FabProps {
   icon?: React.ReactNode;
 }
 
-export function Fab({ href, label = "Job baru", className, icon }: FabProps) {
+export function Fab({ href, label = "Proyek baru", className, icon }: FabProps) {
   return (
     // `display` sengaja TIDAK ditulis inline: inline style mengalahkan
     // `lg:hidden` (display:none), sehingga FAB ikut tampil di desktop dan

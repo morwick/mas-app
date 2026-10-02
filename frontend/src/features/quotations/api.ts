@@ -67,9 +67,6 @@ export const rekomendasiHarga = (p: RekomendasiHargaParams) =>
     kecuali_quotation_id: p.kecualiQuotationId || undefined
   });
 
-export const peekNextQuotationNumber = () =>
-  api.get<{ nomor: string }>("/quotations/next-number").then((r) => r.nomor);
-
 export function createQuotation(
   input: QuotationInput
 ): Promise<ActionResult<{ id: string; quote_number: string }>> {

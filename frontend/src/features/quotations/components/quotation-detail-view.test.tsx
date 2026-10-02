@@ -152,3 +152,83 @@ describe("QuotationDetailView — kedaluwarsa", () => {
     expect(screen.queryByRole("note", { name: "Revisi penawaran" })).toBeNull();
   });
 });
+
+describe("QuotationDetailView — ringkasan biaya saat ada revisi", () => {
+  it("tanpa revisi & item ditolak: total tidak dicoret", () => {
+    renderView(penawaran(false));
+    expect(screen.getAllByText("Rp 1.000.000").every((el) => el.style.textDecoration === "")).toBe(true);
+  });
+
+  it("subtotal, PPN 11%, total awal dicoret; angka baru di sampingnya", () => {
+    const q = {
+      ...penawaran(false),
+      status: "terkirim",
+      ppn_aktif: true,
+      ppn_persen: 11,
+      subtotal: 10_000_000,
+      ppn_nominal: 1_100_000,
+      total: 11_100_000,
+      items: [
+        {
+          id: "i1",
+          urutan: 1,
+          dari: "Cilegon",
+          tujuan: "Bekasi",
+          qty: 1,
+          satuan: "unit",
+          harga_satuan: 10_000_000,
+          subtotal: 10_000_000,
+          harga_revisi: 8_000_000,
+          harga_final: 8_000_000,
+          subtotal_final: 8_000_000,
+          keputusan: "deal"
+        }
+      ]
+    } as unknown as Quotation;
+    renderView(q);
+    expect(screen.getByText("Rp 11.100.000").style.textDecoration).toBe("line-through");
+    expect(screen.getByText("Rp 1.100.000").style.textDecoration).toBe("line-through");
+    // Harga & total item yang direvisi: awal dicoret, "Rev : …" di bawahnya.
+    expect(screen.getAllByText("Rev : Rp 8.000.000").length).toBe(2);
+    const diTabel = screen.getAllByText("Rp 10.000.000").filter((el) => el.closest("td"));
+    expect(diTabel.length).toBe(2);
+    expect(diTabel.every((el) => el.style.textDecoration === "line-through")).toBe(true);
+    // Angka baru: subtotal 8 jt, PPN 880 rb, total 8,88 jt.
+    expect(screen.getByText("Rp 880.000")).toBeTruthy();
+    expect(screen.getByText("Rp 8.880.000")).toBeTruthy();
+  });
+});
+
+describe("QuotationDetailView — item ditolak", () => {
+  it("baris item ditolak dicoret dan tidak ikut total", () => {
+    const item = (id: string, dari: string, harga: number, keputusan: string) => ({
+      id,
+      urutan: 1,
+      dari,
+      tujuan: "Bekasi",
+      qty: 1,
+      satuan: "unit",
+      harga_satuan: harga,
+      subtotal: harga,
+      harga_revisi: null,
+      harga_final: harga,
+      subtotal_final: harga,
+      keputusan
+    });
+    const q = {
+      ...penawaran(false),
+      status: "terkirim",
+      subtotal: 15_000_000,
+      total: 15_000_000,
+      items: [item("i1", "Cilegon", 10_000_000, "deal"), item("i2", "Serang", 5_000_000, "ditolak")]
+    } as unknown as Quotation;
+    renderView(q);
+    expect((screen.getByText("Serang") as HTMLElement).style.textDecoration).toBe("line-through");
+    expect((screen.getByText("Cilegon") as HTMLElement).style.textDecoration).toBe("");
+    // Tanpa revisi harga: tidak ada baris "Rev :".
+    expect(screen.queryByText(/^Rev :/)).toBeNull();
+    // Total awal 15 jt dicoret; angka baru 10 jt (tanpa item ditolak).
+    expect(screen.getAllByText("Rp 15.000.000").some((el) => el.style.textDecoration === "line-through")).toBe(true);
+    expect(screen.getAllByText("Rp 10.000.000").length).toBeGreaterThan(0);
+  });
+});

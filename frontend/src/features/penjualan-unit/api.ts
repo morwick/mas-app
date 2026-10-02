@@ -1,3 +1,4 @@
+import type { StatusApprovalData } from "@/features/approval/api";
 import { api } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
 import type { ActionResult } from "@/types";
@@ -48,6 +49,8 @@ export interface PenjualanUnit {
   created_by_nama: string | null;
   created_at: string;
   aset: AsetDokumen | null;
+  /** Menunggu approval: aset belum berubah, dokumen belum bisa dicetak / diunggah. */
+  status_approval: StatusApprovalData;
 }
 
 /** Isian yang boleh diedit — aset & nomor dokumen tetap. */

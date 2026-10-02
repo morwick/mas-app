@@ -6,6 +6,7 @@ import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { dengarTersambung } from "@/lib/tracksolid-captcha";
 import { DashboardView } from "../components/dashboard-view";
 import { FinanceDashboardView } from "../components/finance-dashboard-view";
+import { PerluApprovalCard } from "../components/perlu-approval-card";
 import { useDashboard, useFinanceDashboard } from "../queries";
 
 /** Sama dengan menu Service: odometer GPS disinkron (maks. sekali / 5 menit
@@ -40,10 +41,10 @@ function OperationalDashboardPage() {
       jobsMenungguValidasi={q.data.jobs_menunggu_validasi}
       uangJalanDiajukan={q.data.uang_jalan_diajukan}
       jobBelumKonfirmasi={q.data.job_belum_konfirmasi}
-      jobsBelumInvoice={q.data.jobs_belum_invoice}
+      proyekBelumDitagih={q.data.proyek_belum_ditagih}
       dokumenJatuhTempo={q.data.dokumen_jatuh_tempo}
       monitoringServis={q.data.monitoring_servis}
-      penawaranDealTanpaJob={q.data.penawaran_deal_tanpa_job ?? 0}
+      penawaranDealTanpaProyek={q.data.penawaran_deal_tanpa_proyek ?? 0}
       penawaranAkanKedaluwarsa={q.data.penawaran_akan_kedaluwarsa ?? 0}
     />
   );
@@ -58,5 +59,11 @@ function FinanceDashboardPage() {
 
 export function DashboardPage() {
   const user = useCurrentUser();
-  return user.role === "finance" ? <FinanceDashboardPage /> : <OperationalDashboardPage />;
+  return (
+    <div className="flex flex-col" style={{ gap: 20 }}>
+      {/* Approver bisa di role apa pun — widget muncul hanya bila ada yang menunggu. */}
+      <PerluApprovalCard />
+      {user.role === "finance" ? <FinanceDashboardPage /> : <OperationalDashboardPage />}
+    </div>
+  );
 }

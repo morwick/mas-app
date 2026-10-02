@@ -7,7 +7,7 @@
  * daripada daftar kunci yang gampang ketinggalan.
  */
 
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, type QueryKey } from "@tanstack/react-query";
 import { toResult } from "@/lib/api/client";
 import type { ActionResult } from "@/types";
 
@@ -27,8 +27,24 @@ export const queryClient = new QueryClient({
 });
 
 /** Jalankan mutasi lalu segarkan cache; hasilnya dalam bentuk ActionResult. */
-export async function mutate<T>(promise: Promise<T>): Promise<ActionResult<T>> {
+export async function mutate<T>(
+  promise: Promise<T>,
+  opsi: {
+    /**
+     * Hanya query ini yang DITUNGGU segar sebelum mutasi dianggap selesai; sisanya
+     * disegarkan di latar belakang. Tanpa opsi ini seluruh query ditunggu —
+     * aman tapi lambat di halaman yang memuat banyak data (mis. detail job).
+     */
+    tungguKunci?: QueryKey[];
+  } = {}
+): Promise<ActionResult<T>> {
   const result = await toResult(promise);
-  if (result.ok) await queryClient.invalidateQueries();
+  if (!result.ok) return result;
+  if (opsi.tungguKunci) {
+    await Promise.all(opsi.tungguKunci.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+    void queryClient.invalidateQueries();
+  } else {
+    await queryClient.invalidateQueries();
+  }
   return result;
 }

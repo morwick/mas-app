@@ -32,6 +32,8 @@ class InvoiceItem(BaseModel):
     # Job yang ditagihkan baris ini. None untuk baris di luar job.
     job_id: str | None = None
     job_number: str | None = None
+    # Proyek induk job baris ini (ditampilkan di depan nomor job).
+    proyek_nomor: str | None = None
     deskripsi: str
     dari: str | None = None
     tujuan: str | None = None
@@ -121,6 +123,8 @@ class Invoice(InvoiceBase):
 
 class InvoiceListRow(InvoiceBase):
     jumlah_item: int
+    # Nomor proyek dari job-job di tagihan ini (satu tagihan boleh banyak proyek).
+    proyek_nomor: list[str] = Field(default_factory=list)
 
 
 class InvoiceItemInput(BaseModel):
@@ -191,6 +195,15 @@ class JobBelumDitagihRow(BaseModel):
     # Rincian uang jalan: uang jalan awal + tiap pencairan / tambahan (dengan bukti transfer).
     uang_jalan_awal: float | None = None
     uang_jalan_transaksi: list[UangJalanTransaksi] = []
+    # Proyek induk job. Satu proyek hanya boleh masuk satu tagihan: bila job
+    # lain proyek ini sudah ada di tagihan aktif, job ini hanya bisa
+    # ditambahkan ke tagihan tersebut (proyek_invoice_*).
+    proyek_id: str | None = None
+    proyek_nomor: str | None = None
+    proyek_invoice_id: str | None = None
+    proyek_invoice_number: str | None = None
+    # Jumlah job proyek ini yang tidak dibatalkan (tab "Proyek siap ditagih").
+    proyek_jumlah_job: int = 0
 
 
 class FinanceDashboardSummary(BaseModel):
@@ -226,3 +239,8 @@ class JobProfitabilityRow(BaseModel):
     uang_jalan: float
     biaya_insiden: float
     laba: float
+    proyek_nomor: str | None = None
+    # Proyek tanpa customer (unit jalan kosongan): tidak ditagih → cost perusahaan.
+    kosongan: bool = False
+    # Job lama yang unitnya rusak & diganti job ini — tidak ditagih.
+    diganti_oleh: str | None = None

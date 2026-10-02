@@ -337,35 +337,37 @@ export function KaryawanView() {
       ) : (
         <div style={{ opacity: list.isPlaceholderData ? 0.6 : 1, transition: "opacity 120ms" }}>
           <div className="card hidden lg:block" style={{ overflow: "hidden" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Nama</th>
-                  <th style={{ width: 130 }}>Tanggal lahir</th>
-                  <th>Alamat</th>
-                  <th style={{ width: 170 }}>Terhubung ke</th>
-                  <th style={{ width: 100 }}>Status</th>
-                  <th style={{ width: 330 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((k) => (
-                  <tr key={k.id}>
-                    <td>
-                      <div style={{ fontWeight: 500 }}>{k.nama}</div>
-                      <InfoBlacklist k={k} />
-                    </td>
-                    <td>{k.tanggal_lahir ? formatDate(k.tanggal_lahir) : "—"}</td>
-                    <td style={{ wordBreak: "break-word" }}>{k.alamat ?? "—"}</td>
-                    <td className="caption">{keterhubungan(k)}</td>
-                    <td>
-                      <StatusBadge aktif={k.is_active} blacklist={k.is_blacklist} />
-                    </td>
-                    <td>{tombolAksi(k)}</td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nama</th>
+                    <th style={{ width: 130 }}>Tanggal lahir</th>
+                    <th>Alamat</th>
+                    <th style={{ width: 170 }}>Terhubung ke</th>
+                    <th style={{ width: 100 }}>Status</th>
+                    <th style={{ width: 330 }}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((k) => (
+                    <tr key={k.id}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{k.nama}</div>
+                        <InfoBlacklist k={k} />
+                      </td>
+                      <td>{k.tanggal_lahir ? formatDate(k.tanggal_lahir) : "—"}</td>
+                      <td style={{ wordBreak: "break-word" }}>{k.alamat ?? "—"}</td>
+                      <td className="caption">{keterhubungan(k)}</td>
+                      <td>
+                        <StatusBadge aktif={k.is_active} blacklist={k.is_blacklist} />
+                      </td>
+                      <td>{tombolAksi(k)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pagination state={pg} label="karyawan" attached />
           </div>
 

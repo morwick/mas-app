@@ -38,15 +38,18 @@ export function LabaView({ rows, start, end }: Props) {
           pendapatan: acc.pendapatan + r.pendapatan,
           uang_jalan: acc.uang_jalan + r.uang_jalan,
           insiden: acc.insiden + r.biaya_insiden,
-          laba: acc.laba + r.laba
+          laba: acc.laba + r.laba,
+          // Proyek kosongan (tanpa customer) tidak ditagih → cost perusahaan.
+          cost_kosongan: acc.cost_kosongan + (r.kosongan ? r.uang_jalan + r.biaya_insiden : 0)
         }),
-        { pendapatan: 0, uang_jalan: 0, insiden: 0, laba: 0 }
+        { pendapatan: 0, uang_jalan: 0, insiden: 0, laba: 0, cost_kosongan: 0 }
       ),
     [rows]
   );
 
   const belumDitagih = useMemo(
-    () => rows.filter((r) => r.pendapatan === 0 && r.status === "selesai"),
+    // Kosongan & job lama yang unitnya diganti memang tidak ditagih.
+    () => rows.filter((r) => r.pendapatan === 0 && r.status === "selesai" && !r.kosongan && !r.diganti_oleh),
     [rows]
   );
 
@@ -108,6 +111,9 @@ export function LabaView({ rows, start, end }: Props) {
         <StatCard label="Pendapatan (di luar PPN)" value={total.pendapatan} />
         <StatCard label="Uang jalan" value={-total.uang_jalan} />
         <StatCard label="Biaya insiden" value={-total.insiden} />
+        {total.cost_kosongan > 0 && (
+          <StatCard label="Cost perusahaan (kosongan)" value={-total.cost_kosongan} tone="danger" />
+        )}
         <StatCard
           label="Laba kotor"
           value={total.laba}
@@ -201,8 +207,15 @@ export function LabaView({ rows, start, end }: Props) {
                       >
                         {r.job_number}
                       </Link>
+                      {r.proyek_nomor && (
+                        <div className="caption mono" style={{ fontSize: 10.5 }}>
+                          {r.proyek_nomor}
+                        </div>
+                      )}
                     </td>
-                    <td style={{ fontSize: 13 }}>{r.customer_nama}</td>
+                    <td style={{ fontSize: 13 }}>
+                      {r.kosongan ? <span className="muted">Kosongan · cost perusahaan</span> : r.customer_nama}
+                    </td>
                     <td className="mono" style={{ fontSize: 12 }}>
                       {r.unit_kode}
                     </td>
@@ -220,9 +233,13 @@ export function LabaView({ rows, start, end }: Props) {
                             : "var(--text-primary)"
                       }}
                     >
-                      {r.pendapatan === 0
-                        ? "belum ditagih"
-                        : formatRupiah(r.pendapatan)}
+                      {r.pendapatan !== 0
+                        ? formatRupiah(r.pendapatan)
+                        : r.kosongan
+                          ? "tidak ditagih"
+                          : r.diganti_oleh
+                            ? `diganti ${r.diganti_oleh}`
+                            : "belum ditagih"}
                     </td>
                     <td
                       className="mono"

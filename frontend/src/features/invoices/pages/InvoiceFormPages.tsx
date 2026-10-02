@@ -6,7 +6,7 @@ import { InvoiceForm } from "../components/invoice-form";
 import { alasanTerkunci } from "../lib-terkunci";
 import { useInvoice, useJobsBelumDitagih, useNextInvoiceNumber } from "../queries";
 
-/** Dikirim navigasi dari tab "Job siap ditagih" di menu Tagihan. */
+/** Dikirim navigasi dari tab "Proyek siap ditagih" di menu Tagihan. */
 interface NewInvoiceNavState {
   customerId?: string;
   jobIds?: string[];

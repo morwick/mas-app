@@ -12,11 +12,8 @@ import type {
   PhotoStage
 } from "@/types";
 
+/** Isian job. Customer, PIC lapangan, dan No HP PIC milik proyek. */
 export interface JobInput {
-  customer_id: string;
-  /** PIC di lapangan — wajib; backend menolak nilai kosong. */
-  pic_nama: string;
-  pic_no_hp: string;
   alat_diangkut: string;
   asal: string;
   tujuan: string;
@@ -36,6 +33,8 @@ export interface JobInput {
   /** Diisi bila job lahir dari penawaran yang sudah deal. */
   quotation_id?: string | null;
   quotation_item_id?: string | null;
+  /** Wajib saat menambah job ke proyek yang sudah ada (POST /jobs). */
+  proyek_id?: string | null;
 }
 
 /** Hasil mutasi job — membawa `conflicts` saat server menolak karena bentrok (409). */
@@ -72,7 +71,7 @@ export const checkJobConflicts = (input: {
  * Daftar job disegarkan supaya peringatan bentrok di form ikut muncul bila
  * datanya tadi sudah basi.
  */
-function toJobResult<T>(err: unknown): JobMutationResult<T> {
+export function toJobResult<T>(err: unknown): JobMutationResult<T> {
   if (err instanceof ApiError && err.status === 409 && err.body.conflicts) {
     void queryClient.invalidateQueries({ queryKey: ["jobs"] });
     const raw = err.body.conflicts as {
@@ -148,9 +147,11 @@ export function updateJobStatus(
   return mutate(api.post(`/jobs/${id}/status`, { status, notes: notes ?? null }));
 }
 
-/** Satu baris riwayat pergantian truk. */
+/** Satu baris riwayat penggantian di job (driver / unit trailer / unit). */
 export interface GantiTrukEntry {
   id: string;
+  /** ganti_truk (riwayat lama) | ganti_driver | ganti_trailer | ganti_unit */
+  jenis: "ganti_truk" | "ganti_driver" | "ganti_trailer" | "ganti_unit";
   diganti_pada: string;
   status_job_saat_ganti: string;
   alasan: string;
@@ -161,24 +162,93 @@ export interface GantiTrukEntry {
   unit_trailer_lama_kode: string | null;
   unit_trailer_baru_kode: string | null;
   diganti_oleh_nama: string | null;
+  uang_jalan_dikembalikan: number;
+  kasbon: number;
+  /** Ganti unit: job pengganti yang dibuat. */
+  job_pengganti_id: string | null;
+  job_pengganti_number: string | null;
+  /** Status job pengganti (cancelled → bisa "Selesaikan job dengan unit lain"). */
+  job_pengganti_status?: string | null;
 }
 
 export const getRiwayatGantiTruk = (id: string) => api.get<GantiTrukEntry[]>(`/jobs/${id}/ganti-truk`);
 
-/** Ganti truk di tengah perjalanan; driver opsional ikut diganti. */
-export function gantiTruk(
+/** Uang jalan di tangan supir lama: dikembalikan ke kas dan/atau jadi kasbon. */
+export interface PengembalianKasbon {
+  uang_jalan_dikembalikan: number;
+  /** Kas penerima — wajib bila ada pengembalian. */
+  sumber_dana_id: string | null;
+  kasbon: number;
+}
+
+export interface InsidenPenggantian {
+  insiden_tanggal: string;
+  insiden_lokasi?: string | null;
+  insiden_deskripsi: string;
+}
+
+/** Driver sakit / kabur: ganti driver di job yang sama. */
+export function gantiDriver(
+  id: string,
+  input: PengembalianKasbon & { driver_id: string; alasan: string }
+): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/jobs/${id}/ganti-driver`, input));
+}
+
+/** Unit trailer rusak: ganti trailer di job yang sama. */
+export function gantiTrailer(
+  id: string,
+  input: InsidenPenggantian & { unit_trailer_id: string; alasan: string }
+): Promise<ActionResult<unknown>> {
+  return mutate(api.post(`/jobs/${id}/ganti-trailer`, input));
+}
+
+/** Unit rusak: job pengganti di proyek yang sama; job lama ditutup Selesai. */
+export function gantiUnit(
+  id: string,
+  input: InsidenPenggantian &
+    PengembalianKasbon & {
+      unit_id: string;
+      driver_id: string;
+      unit_trailer_id: string | null;
+      etd: string;
+      eta: string | null;
+      uang_jalan_awal: number;
+      alasan: string;
+    }
+): Promise<ActionResult<{ id: string; job_number: string; share_token: string }>> {
+  return mutate(
+    api.post<{ id: string; job_number: string; share_token: string }>(`/jobs/${id}/ganti-unit`, {
+      ...input,
+      etd: localInputToIso(input.etd),
+      eta: input.eta ? localInputToIso(input.eta) : null
+    })
+  );
+}
+
+/**
+ * Job pengganti (ganti unit) dibatalkan → buat pengganti baru untuk job lama
+ * `id`. Job pengganti yang dibatalkan dihapus (soft delete) oleh database.
+ */
+export function gantiUnitUlang(
   id: string,
   input: {
     unit_id: string;
+    driver_id: string;
+    unit_trailer_id: string | null;
+    etd: string;
+    eta: string | null;
+    uang_jalan_awal: number;
     alasan: string;
-    driver_id?: string | null;
-    unit_trailer_id?: string | null;
-    insiden_tanggal: string;
-    insiden_lokasi?: string | null;
-    insiden_deskripsi: string;
   }
-): Promise<ActionResult<unknown>> {
-  return mutate(api.post(`/jobs/${id}/ganti-truk`, input));
+): Promise<ActionResult<{ id: string; job_number: string; share_token: string }>> {
+  return mutate(
+    api.post<{ id: string; job_number: string; share_token: string }>(`/jobs/${id}/ganti-unit-ulang`, {
+      ...input,
+      etd: localInputToIso(input.etd),
+      eta: input.eta ? localInputToIso(input.eta) : null
+    })
+  );
 }
 
 export function cancelJob(id: string, reason?: string): Promise<ActionResult<unknown>> {

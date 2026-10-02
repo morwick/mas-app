@@ -52,6 +52,9 @@
   --status-danger-text: var(--status-cancelled-text);
 
   /* Job statuses */
+  /* Keputusan menunggu (approval, item penawaran): kuning. */
+  --status-menunggu-bg: #fef9c3;
+  --status-menunggu-text: #854d0e;
   --status-pickup-bg: #eaf2ff;
   --status-pickup-text: #1f4fa8;
   --status-perjalanan-bg: #e8f7e0;
@@ -450,6 +453,10 @@ select {
 .badge-cancelled {
   background: var(--status-cancelled-bg);
   color: var(--status-cancelled-text);
+}
+.badge-menunggu {
+  background: var(--status-menunggu-bg);
+  color: var(--status-menunggu-text);
 }
 .badge-pickup {
   background: var(--status-pickup-bg);

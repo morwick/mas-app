@@ -4,36 +4,37 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
 import { useCustomers } from "@/features/customers/queries";
 import { InvoicesListView } from "../components/invoices-list-view";
-import { JobsSiapTagihView } from "../components/jobs-siap-tagih-view";
+import { kelompokkanPerProyek, ProyekSiapTagihView } from "../components/proyek-siap-tagih-view";
 import { useInvoices, useJobsBelumDitagih } from "../queries";
 
-type TabKey = "job" | "tagihan";
+type TabKey = "proyek" | "tagihan";
 
 export function InvoicesPage() {
-  const [tab, setTab] = useState<TabKey>("job");
+  const [tab, setTab] = useState<TabKey>("proyek");
   const jobs = useJobsBelumDitagih();
   const customers = useCustomers(true);
   const invoices = useInvoices();
 
-  const jumlahJobSiapTagih = Object.values(jobs.data ?? {}).reduce((n, arr) => n + arr.length, 0);
+  // Angka tab = jumlah proyek (beberapa job satu proyek dihitung satu).
+  const jumlahProyekSiapTagih = kelompokkanPerProyek(jobs.data ?? {}, {}).length;
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Tagihan"
-        description="Job selesai yang siap ditagih, dan daftar tagihan yang sudah dibuat."
+        description="Proyek yang semua job-nya selesai dan siap ditagih, serta daftar tagihan yang sudah dibuat."
       />
       <Tabs
         variant="pill"
         value={tab}
         onChange={(k) => setTab(k as TabKey)}
         items={[
-          { key: "job", label: "Job siap ditagih", count: jumlahJobSiapTagih },
+          { key: "proyek", label: "Proyek siap ditagih", count: jumlahProyekSiapTagih },
           { key: "tagihan", label: "Tagihan", count: invoices.data?.length }
         ]}
       />
 
-      {tab === "job" ? (
+      {tab === "proyek" ? (
         jobs.isPending || customers.isPending ? (
           <PageLoading />
         ) : jobs.isError ? (
@@ -41,7 +42,7 @@ export function InvoicesPage() {
         ) : customers.isError ? (
           <PageError error={customers.error} onRetry={customers.refetch} />
         ) : (
-          <JobsSiapTagihView jobsPerCustomer={jobs.data ?? {}} customers={customers.data} />
+          <ProyekSiapTagihView jobsPerCustomer={jobs.data ?? {}} customers={customers.data} />
         )
       ) : invoices.isPending ? (
         <PageLoading />

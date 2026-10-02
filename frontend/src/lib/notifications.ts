@@ -32,8 +32,11 @@ export type NotificationKind =
   | "job_diterima"
   | "uang_jalan_diajukan"
   | "job_menunggu_validasi"
-  // Superadmin: login TrackSolid butuh captcha
-  | "tracksolid_captcha";
+  // Keputusan akhir pengajuan approval (untuk pengguna ber-role admin)
+  | "approval_disetujui"
+  | "approval_ditolak"
+  // Job disetujui admin saat validasi (superadmin, finance, operator berwenang)
+  | "job_divalidasi";
 
 export type NotificationSeverity = "info" | "warning" | "danger";
 
@@ -67,7 +70,9 @@ export const KIND_META: Record<NotificationKind, KindMeta> = {
   job_diterima: { icon: PackageCheck, label: "Driver menerima job" },
   uang_jalan_diajukan: { icon: Wallet, label: "Pengajuan uang jalan" },
   job_menunggu_validasi: { icon: ClipboardCheck, label: "Menunggu validasi" },
-  tracksolid_captcha: { icon: WifiOff, label: "TrackSolid butuh captcha" }
+  approval_disetujui: { icon: ClipboardCheck, label: "Approval disetujui" },
+  approval_ditolak: { icon: ClipboardCheck, label: "Approval ditolak" },
+  job_divalidasi: { icon: PackageCheck, label: "Job divalidasi" }
 };
 
 const SEVERITY_TOKENS: Record<

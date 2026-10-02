@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buatGrupApproval,
   groupHasActive,
   isNavGroup,
   mobileNavItems,
   navItems,
   navTree,
   profileItem,
+  sisipkanGrupApproval,
   visibleNavTree,
   type NavGroup
 } from "@/components/layout/nav-items";
@@ -23,10 +25,11 @@ describe("susunan menu", () => {
     ).toEqual(["Dashboard", "Master", "Monitoring", "Laporan", "Log Sistem", "Notifikasi"]);
   });
 
-  it("Master urut: Karyawan, Pengguna, Jenis Unit, Unit, Unit Trailer, Driver, Mekanik, Customer, Asuransi, Bengkel Luar", () => {
+  it("Master urut: Karyawan, Pengguna, Approver, Jenis Unit, Unit, Unit Trailer, Driver, Mekanik, Customer, Asuransi, Bengkel Luar", () => {
     expect(group("master").items.map((i) => i.label)).toEqual([
       "Karyawan",
       "Pengguna",
+      "Approver",
       "Jenis Unit",
       "Unit",
       "Unit Trailer",
@@ -46,9 +49,10 @@ describe("susunan menu", () => {
     expect(jenis.href.startsWith("/settings")).toBe(false);
   });
 
-  it("Monitoring berisi sembilan submenu sesuai urutan", () => {
+  it("Monitoring berisi sepuluh submenu sesuai urutan (Job tepat di bawah Proyek)", () => {
     expect(group("monitoring").items.map((i) => i.label)).toEqual([
       "Penawaran",
+      "Proyek",
       "Job",
       "Pantau",
       "Uang Jalan",
@@ -175,6 +179,7 @@ describe("visibleNavTree", () => {
     const monitoring = tree.find((e) => isNavGroup(e) && e.key === "monitoring");
     expect(monitoring && isNavGroup(monitoring) ? monitoring.items.map((i) => i.label) : []).toEqual([
       "Penawaran",
+      "Proyek",
       "Job",
       "Pantau",
       "Uang Jalan",
@@ -218,5 +223,33 @@ describe("groupHasActive", () => {
   it("tidak menandai grup yang tidak terkait", () => {
     expect(groupHasActive(group("master"), "/jobs")).toBe(false);
     expect(groupHasActive(group("monitoring"), "/units")).toBe(false);
+  });
+});
+
+describe("grup Approval", () => {
+  it("tidak ada grup bila pengguna bukan approver", () => {
+    expect(buatGrupApproval([])).toBeNull();
+    const pohon = visibleNavTree(navTree, "operator");
+    expect(sisipkanGrupApproval(pohon, null)).toEqual(pohon);
+  });
+
+  it("submenu per fitur dengan angka menunggu, disisipkan setelah Monitoring", () => {
+    const grup = buatGrupApproval([
+      { kode: "tambahan_uang_jalan", nama: "Tambahan Uang Jalan", menunggu_saya: 2 },
+      { kode: "penjualan_aset", nama: "Penjualan Unit & Unit Trailer", menunggu_saya: 0 }
+    ]);
+    expect(grup?.items.map((i) => [i.href, i.badge])).toEqual([
+      ["/approval/tambahan_uang_jalan", 2],
+      ["/approval/penjualan_aset", 0]
+    ]);
+    // Role apa pun (mis. finance) tetap mendapat grup Approval bila ia approver.
+    const pohon = sisipkanGrupApproval(visibleNavTree(navTree, "finance"), grup);
+    const kunci = pohon.filter(isNavGroup).map((g) => g.key);
+    expect(kunci.indexOf("approval")).toBe(kunci.indexOf("monitoring") + 1);
+  });
+
+  it("Approver di Master hanya untuk superadmin", () => {
+    const item = group("master").items.find((i) => i.href === "/approver");
+    expect(item?.roles).toEqual(["superadmin"]);
   });
 });

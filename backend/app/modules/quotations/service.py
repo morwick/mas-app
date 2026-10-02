@@ -66,6 +66,14 @@ def status_dari_keputusan(keputusan: list[str]) -> QuotationStatus:
     return "completed"
 
 
+def _job_pelaksanaan(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Job yang dihitung untuk pelaksanaan penawaran: tidak dibatalkan, dan job
+    lama yang unitnya rusak & sudah diganti tidak dihitung (yang dihitung job
+    penggantinya)."""
+    diganti = {j["menggantikan_job_id"] for j in jobs if j.get("menggantikan_job_id")}
+    return [j for j in jobs if j.get("status_job") != "cancelled" and j["id"] not in diganti]
+
+
 def _to_item(r: dict[str, Any], jumlah_job: int = 0, nama: dict[str, str] | None = None) -> QuotationItem:
     revisi = r.get("harga_revisi")
     harga_satuan = num(r.get("harga_satuan"))
@@ -222,7 +230,7 @@ class QuotationService:
             self._db.table("quotations")
             .select(
                 f"{QUOTATION_SELECT}, quotation_items(id, keputusan, harga_revisi, subtotal, subtotal_final),"
-                " jobs(id, status_job, quotation_item_id)"
+                " jobs(id, status_job, quotation_item_id, menggantikan_job_id, proyek_id)"
             )
             .eq("quotation_items.status", AKTIF)
             .eq("jobs.status", AKTIF)
@@ -238,8 +246,8 @@ class QuotationService:
 
         out = []
         for r in rows(await q.execute()):
-            jobs = [j for j in (r.get("jobs") or []) if j.get("status_job") != "cancelled"]
-            punya_job = {j["quotation_item_id"] for j in jobs if j.get("quotation_item_id")}
+            jobs = _job_pelaksanaan(r.get("jobs") or [])
+            jumlah_proyek = len({j["proyek_id"] for j in jobs if j.get("proyek_id")})
             items = r.get("quotation_items") or []
             deal = [it for it in items if it.get("keputusan") == "deal"]
             menunggu = [it for it in items if it.get("keputusan") == "menunggu"]
@@ -248,10 +256,11 @@ class QuotationService:
                 QuotationListRow(
                     **_base_fields(r),
                     jumlah_item=len(items),
-                    jumlah_item_deal_belum_job=sum(
-                        1 for it in items if it.get("keputusan") == "deal" and it["id"] not in punya_job
-                    ),
+                    # BATASAN: dihitung per penawaran — cukup satu proyek aktif (job tidak
+                    # batal) walau item deal lain belum punya proyek.
+                    deal_belum_ada_proyek=bool(deal) and jumlah_proyek == 0,
                     jumlah_item_deal=len(deal),
+                    jumlah_proyek=jumlah_proyek,
                     jumlah_item_deal_revisi=sum(1 for it in deal if it.get("harga_revisi") is not None),
                     nilai_deal=sum(
                         num(it.get("subtotal") if it.get("subtotal_final") is None else it["subtotal_final"])
@@ -387,23 +396,37 @@ class QuotationService:
     async def jobs_for(self, quotation_id: str) -> list[QuotationJobRef]:
         res = await (
             self._db.table("jobs")
-            .select("id, job_number, status_job, asal, tujuan, etd, quotation_item_id")
+            .select(
+                "id, job_number, status_job, asal, tujuan, etd, quotation_item_id, proyek_id,"
+                " proyek:proyek(nomor_proyek, created_at, pembuat:profiles!proyek_created_by_fkey(nama)),"
+                " unit_id, unit:units(kode_unit)"
+            )
             .eq("quotation_id", quotation_id)
+            .eq("status", 1)
             .order("created_at")
             .execute()
         )
-        return [
-            QuotationJobRef(
-                id=r["id"],
-                job_number=r["job_number"],
-                status=r["status_job"],
-                asal=r["asal"],
-                tujuan=r["tujuan"],
-                etd=r["etd"],
-                quotation_item_id=r.get("quotation_item_id"),
+        hasil: list[QuotationJobRef] = []
+        for r in rows(res):
+            proyek = first(r.get("proyek")) or {}
+            hasil.append(
+                QuotationJobRef(
+                    id=r["id"],
+                    job_number=r["job_number"],
+                    status=r["status_job"],
+                    asal=r["asal"],
+                    tujuan=r["tujuan"],
+                    etd=r["etd"],
+                    quotation_item_id=r.get("quotation_item_id"),
+                    proyek_id=r.get("proyek_id"),
+                    proyek_nomor=proyek.get("nomor_proyek"),
+                    proyek_created_at=proyek.get("created_at"),
+                    proyek_created_by_nama=(first(proyek.get("pembuat")) or {}).get("nama"),
+                    unit_id=r.get("unit_id"),
+                    unit_kode=(first(r.get("unit")) or {}).get("kode_unit"),
+                )
             )
-            for r in rows(res)
-        ]
+        return hasil
 
     async def create(self, payload: QuotationInput, *, created_by: str | None) -> QuotationCreated:
         _validate(payload)

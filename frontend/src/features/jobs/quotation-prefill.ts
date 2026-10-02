@@ -9,7 +9,30 @@
 
 import { formatRupiah } from "@/lib/utils";
 import type { Customer, Quotation, QuotationItem } from "@/types";
-import type { JobPrefill } from "./components/new-job-view";
+
+/**
+ * Data awal form proyek saat dibuka dari item penawaran yang sudah deal:
+ * customer & PIC untuk proyek, sisanya untuk job pertama.
+ *
+ * Harga tidak punya kolom sendiri di tabel jobs, jadi ringkasannya ikut masuk
+ * ke `catatan`; angka resminya tetap tinggal di penawaran, dan job menyimpan
+ * `quotation_id` sebagai penunjuknya.
+ */
+export interface JobPrefill {
+  quotation_id: string;
+  /** Item penawaran (deal) yang dibuatkan job ini. */
+  quotation_item_id: string;
+  quote_number: string;
+  /** mis. "item 2: Pekanbaru → Dumai" — untuk banner. */
+  item_label: string;
+  customer_id?: string;
+  pic_nama?: string;
+  pic_no_hp?: string;
+  alat_diangkut?: string;
+  asal?: string;
+  tujuan?: string;
+  catatan?: string;
+}
 
 function buildCatatan(q: Quotation, item: QuotationItem, customer: Customer | null): string {
   const lines: string[] = [];

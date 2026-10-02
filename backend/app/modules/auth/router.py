@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from supabase import AsyncClient
 
-from app.core.auth import AuthContext, CurrentUser, require_auth, user_client
+from app.core.auth import AuthContext, CurrentUser, require_auth, require_auth_segar, user_client
 from app.core.config import Settings, get_settings
 from app.core.supabase import SupabaseClientFactory, get_client_factory
 from app.modules.auth.schemas import (
@@ -51,7 +51,8 @@ async def password_reset(payload: PasswordResetRequest, svc: AuthService = Depen
 
 
 @router.get("/me", response_model=CurrentUser)
-async def me(auth: AuthContext = Depends(require_auth)) -> CurrentUser:
+async def me(auth: AuthContext = Depends(require_auth_segar)) -> CurrentUser:
+    # Profil segar (tanpa cache): role yang baru ditambahkan admin langsung tampil.
     return auth.user
 
 

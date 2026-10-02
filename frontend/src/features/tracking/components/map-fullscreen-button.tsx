@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { kunciScroll } from "@/lib/kunci-scroll";
 import { Maximize2, X } from "lucide-react";
 
 /**
@@ -24,12 +25,11 @@ export function MapFullscreenButton({ children }: Props) {
       if (e.key === "Escape") setFullscreen(false);
     }
     document.addEventListener("keydown", onKey);
-    // Lock body scroll
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Kunci scroll halaman tanpa melompat ke atas (lihat lib/kunci-scroll).
+    const lepas = kunciScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      lepas();
     };
   }, [fullscreen]);
 

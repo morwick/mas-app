@@ -13,6 +13,8 @@ export const useNotifications = (enabled = true) =>
     queryKey: ["notifications"],
     queryFn: listNotifications,
     enabled,
+    // Lonceng diperbarui di latar — tidak memunculkan popup loading halaman.
+    meta: { latar: true },
     refetchInterval: NOTIFIKASI_POLL_MS,
     refetchIntervalInBackground: true,
     staleTime: 20_000

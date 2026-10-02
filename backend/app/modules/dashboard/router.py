@@ -19,6 +19,7 @@ from app.modules.dashboard.servis import MonitoringServis, monitoring_servis
 from app.modules.drivers.service import DriverService
 from app.modules.invoices.schemas import FinanceDashboardSummary
 from app.modules.invoices.service import InvoiceService
+from app.modules.jobs.mappers import PROYEK_CUSTOMER_EMBED, TANPA_CUSTOMER, nama_customer_job
 from app.modules.jobs.service import JobService
 from app.modules.units.schemas import BUKAN_ARMADA, Unit, UnitStatusCounts
 from app.modules.units.service import UnitService
@@ -70,14 +71,14 @@ class DashboardResponse(BaseModel):
     job_belum_konfirmasi: list[JobBelumKonfirmasi] = Field(default_factory=list)
     # Job sudah selesai & tervalidasi tapi belum masuk tagihan mana pun
     # (sama seperti tab "Job siap ditagih" di menu Tagihan).
-    jobs_belum_invoice: int = 0
+    proyek_belum_ditagih: int = 0
     # STNK / KIR / pajak / SIM yang sudah habis atau habis ≤ 30 hari lagi —
     # dulu notifikasi, kini bagian kartu "Perlu tindakan".
     dokumen_jatuh_tempo: list[DokumenJatuhTempo] = Field(default_factory=list)
     # Kartu "Monitoring servis": lewat jadwal & mendekati — dulu notifikasi.
     monitoring_servis: MonitoringServis = Field(default_factory=MonitoringServis)
     # Kartu "Perlu tindakan" — cukup angkanya; daftarnya di halaman Penawaran.
-    penawaran_deal_tanpa_job: int = 0
+    penawaran_deal_tanpa_proyek: int = 0
     penawaran_akan_kedaluwarsa: int = 0
 
 
@@ -85,7 +86,7 @@ async def _jobs_belum_konfirmasi(client: AsyncClient) -> list[JobBelumKonfirmasi
     """Job berstatus 'ditugaskan' — driver belum menekan Terima Job."""
     res = await (
         client.table("jobs")
-        .select("id, job_number, customer:customers(nama_perusahaan), driver:drivers(nama)")
+        .select(f"id, job_number, {PROYEK_CUSTOMER_EMBED}, driver:drivers(nama)")
         .eq("status_job", "ditugaskan")
         .execute()
     )
@@ -93,19 +94,24 @@ async def _jobs_belum_konfirmasi(client: AsyncClient) -> list[JobBelumKonfirmasi
         JobBelumKonfirmasi(
             id=job["id"],
             job_number=job["job_number"],
-            customer_nama=(first(job.get("customer")) or {}).get("nama_perusahaan") or "—",
+            customer_nama=nama_customer_job(job) or TANPA_CUSTOMER,
             driver_nama=(first(job.get("driver")) or {}).get("nama") or "—",
         )
         for job in rows(res)
     ]
 
 
-async def penawaran_deal_tanpa_job(client: AsyncClient) -> int:
-    """Jumlah penawaran yang masih punya item deal belum dibuatkan job (status
-    surat tidak menentukan — item deal bisa ada di surat terkirim maupun completed)."""
+async def penawaran_deal_tanpa_proyek(client: AsyncClient) -> int:
+    """Jumlah penawaran yang punya item deal tetapi belum ada satu pun proyek
+    aktif (status surat tidak menentukan — item deal bisa ada di surat terkirim
+    maupun completed).
+
+    BATASAN: dihitung per penawaran — cukup satu proyek dengan job yang tidak
+    dibatalkan, penawaran tidak terhitung lagi walau item deal lain belum punya
+    proyek. Sama dengan filter "Deal — belum ada proyek" di halaman Penawaran."""
     res = await (
         client.table("quotations")
-        .select("id, quotation_items(id, keputusan), jobs(quotation_item_id, status_job)")
+        .select("id, quotation_items(id, keputusan), jobs(proyek_id, status_job)")
         .in_("status_penawaran", ["terkirim", "completed"])
         .eq("quotation_items.status", AKTIF)
         .eq("jobs.status", AKTIF)
@@ -113,12 +119,11 @@ async def penawaran_deal_tanpa_job(client: AsyncClient) -> int:
     )
     jumlah = 0
     for q in rows(res):
-        punya_job = {
-            j["quotation_item_id"]
-            for j in (q.get("jobs") or [])
-            if j.get("quotation_item_id") and j.get("status_job") != "cancelled"
-        }
-        if any(it.get("keputusan") == "deal" and it["id"] not in punya_job for it in (q.get("quotation_items") or [])):
+        ada_deal = any(it.get("keputusan") == "deal" for it in (q.get("quotation_items") or []))
+        ada_proyek = any(
+            j.get("proyek_id") and j.get("status_job") != "cancelled" for j in (q.get("jobs") or [])
+        )
+        if ada_deal and not ada_proyek:
             jumlah += 1
     return jumlah
 
@@ -136,9 +141,11 @@ async def penawaran_akan_kedaluwarsa(client: AsyncClient, hari_ini: date) -> int
     return res.count or 0
 
 
-async def _count_jobs_belum_invoice(client: AsyncClient) -> int:
+async def _count_proyek_belum_ditagih(client: AsyncClient) -> int:
+    """Jumlah proyek yang punya job siap ditagih (selesai & tervalidasi) tetapi
+    belum masuk tagihan aktif. Beberapa job satu proyek dihitung satu."""
     per_customer = await InvoiceService(client).jobs_belum_ditagih()
-    return sum(len(v) for v in per_customer.values())
+    return len({j.proyek_id for v in per_customer.values() for j in v if j.proyek_id})
 
 
 async def _safe_servis(client: AsyncClient) -> MonitoringServis:
@@ -216,10 +223,10 @@ async def dashboard(client: AsyncClient = Depends(user_client)) -> DashboardResp
         _safe_count(JobService(client).count_by_status("menunggu_validasi")),
         _safe_count(_count_pending_requests(client)),
         _safe_list(_jobs_belum_konfirmasi(client)),
-        _safe_count(_count_jobs_belum_invoice(client)),
+        _safe_count(_count_proyek_belum_ditagih(client)),
         _safe_list(dokumen_jatuh_tempo(client, today_wib())),
         _safe_servis(client),
-        _safe_count(penawaran_deal_tanpa_job(client)),
+        _safe_count(penawaran_deal_tanpa_proyek(client)),
         _safe_count(penawaran_akan_kedaluwarsa(client, today_wib())),
     )
     driver_names = {d.id: d.nama for d in drivers}
@@ -243,10 +250,10 @@ async def dashboard(client: AsyncClient = Depends(user_client)) -> DashboardResp
         jobs_menunggu_validasi=validasi,
         uang_jalan_diajukan=pengajuan,
         job_belum_konfirmasi=belum_konfirmasi,
-        jobs_belum_invoice=belum_invoice,
+        proyek_belum_ditagih=belum_invoice,
         dokumen_jatuh_tempo=dokumen,
         monitoring_servis=servis,
-        penawaran_deal_tanpa_job=penawaran_deal,
+        penawaran_deal_tanpa_proyek=penawaran_deal,
         penawaran_akan_kedaluwarsa=penawaran_habis,
     )
 

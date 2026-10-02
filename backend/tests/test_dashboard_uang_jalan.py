@@ -39,7 +39,7 @@ def _job(id_: str, **kwargs: Any) -> dict[str, Any]:
     return {
         "id": id_,
         "job_number": f"JOB-{id_}",
-        "customer": {"nama_perusahaan": "PT Contoh"},
+        "proyek": {"customer": {"nama_perusahaan": "PT Contoh"}},
         "driver": {"nama": "Budi"},
         **kwargs,
     }

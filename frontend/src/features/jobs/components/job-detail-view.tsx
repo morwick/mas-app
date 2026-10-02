@@ -10,19 +10,16 @@ import {
   Eye,
   ExternalLink,
   FileText,
-  Flag,
-  History,
+  FolderKanban,
   Link as LinkIcon,
-  MapPin,
   MessageCircle,
   Pencil,
   Printer,
   Trash2,
   Truck,
-  X,
+  UserRound,
   RefreshCw
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { TagihanJobInfo } from "./tagihan-job-info";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -33,7 +30,14 @@ import { UpdateStatusModal } from "@/features/jobs/components/update-status-moda
 import { UploadPhotoModal } from "@/features/jobs/components/upload-photo-modal";
 import { PhotoSlots } from "@/features/jobs/components/photo-slots";
 import { ValidationPanel } from "@/features/jobs/components/validation-panel";
-import { GantiTrukModal, bolehGantiTruk } from "@/features/jobs/components/ganti-truk-modal";
+import {
+  GantiDriverModal,
+  GantiTrailerModal,
+  GantiUnitModal,
+  GantiUnitUlangModal,
+  penggantiBatalDariRiwayat,
+  bolehPenggantian
+} from "@/features/jobs/components/penggantian-modal";
 import { useRiwayatGantiTruk } from "@/features/jobs/queries";
 import { updateJobStatus } from "@/features/jobs/api";
 import { deleteJobPhoto } from "@/features/jobs/api";
@@ -51,7 +55,8 @@ import type {
   Unit
 } from "@/types";
 import { UangJalanCard } from "@/features/uang-jalan/components/uang-jalan-card";
-import { formatDateTime, TZ_WIB } from "@/lib/utils";
+import type { TambahanDibatalkan } from "@/features/uang-jalan/api";
+import { formatDateTime, formatRupiah, TZ_WIB } from "@/lib/utils";
 
 interface Props {
   job: Job;
@@ -62,6 +67,8 @@ interface Props {
   uangJalan: UangJalan[];
   uangJalanRingkasan: UangJalanRingkasan;
   uangJalanPengajuan?: UangJalanRequest[];
+  /** Pengajuan tambahan yang dibatalkan — riwayat di kartu uang jalan. */
+  uangJalanDibatalkan?: TambahanDibatalkan[];
   /** Finance: hanya melihat — tidak ada tombol aksi apa pun. */
   hanyaLihat?: boolean;
 }
@@ -76,6 +83,13 @@ function driverInitials(nama: string) {
     .toUpperCase();
 }
 
+const JUDUL_PENGGANTIAN: Record<string, string> = {
+  ganti_truk: "Ganti truk",
+  ganti_driver: "Ganti driver",
+  ganti_trailer: "Ganti unit trailer",
+  ganti_unit: "Ganti unit (job pengganti)"
+};
+
 export function JobDetailView({
   job,
   unit,
@@ -85,6 +99,7 @@ export function JobDetailView({
   uangJalan,
   uangJalanRingkasan,
   uangJalanPengajuan = [],
+  uangJalanDibatalkan = [],
   hanyaLihat = false
 }: Props) {
   const toast = useToast();
@@ -96,8 +111,12 @@ export function JobDetailView({
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState<{ stage: PhotoStage; slot: PhotoSlot | null } | null>(null);
-  const [gantiTrukOpen, setGantiTrukOpen] = useState(false);
+  // Penggantian saat job berjalan: driver (sakit/kabur), unit trailer, atau unit (job pengganti).
+  const [penggantian, setPenggantian] = useState<"driver" | "trailer" | "unit" | null>(null);
   const riwayatGantiTruk = useRiwayatGantiTruk(job.id);
+  // Job lama yang job penggantinya dibatalkan → "Selesaikan job dengan unit lain".
+  const [gantiUlang, setGantiUlang] = useState(false);
+  const penggantiBatal = penggantiBatalDariRiwayat(job, riwayatGantiTruk.data ?? []);
   const [lightbox, setLightbox] = useState<{
     images: string[];
     index: number;
@@ -160,71 +179,84 @@ export function JobDetailView({
       )}
       {/* Header card with stepper */}
       <div className="card">
+        {/* Info job di atas (lebar penuh, nomor penawaran & proyek tidak terdesak),
+            tombol aksi di baris sendiri di bawahnya. */}
         <div
           style={{
             padding: 20,
             display: "flex",
-            alignItems: "flex-start",
-            gap: 20,
-            flexWrap: "wrap"
+            flexDirection: "column",
+            gap: 14
           }}
         >
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
+            {/* Baris atas: badge penawaran & proyek (kiri), status job (kanan atas). */}
             <div
               style={{
                 display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginBottom: 6,
-                flexWrap: "wrap"
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 10
               }}
             >
-              <span
-                className="mono"
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  padding: "3px 8px",
-                  background: "var(--bg-subtle)",
-                  borderRadius: 6
-                }}
-              >
-                {job.job_number}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
+                {/* Hanya muncul untuk job yang lahir dari penawaran — job yang
+                    dibuat langsung memang tidak punya, dan itu sah. */}
+                {!hanyaLihat && job.quotation_id && job.quotation_number && (
+                  <Link
+                    to={`/quotations/${job.quotation_id}`}
+                    className="mono"
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      background: "var(--brand-primary-light)",
+                      color: "var(--brand-primary-dark)",
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                    title="Lihat penawaran asal job ini"
+                  >
+                    <FileText style={{ width: 12, height: 12 }} />
+                    {job.quotation_number}
+                  </Link>
+                )}
+                {job.proyek_id && job.proyek_nomor && (
+                  <Link
+                    to={`/proyek/${job.proyek_id}`}
+                    className="mono"
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      background: "var(--status-pickup-bg)",
+                      color: "var(--status-pickup-text)",
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                    title="Lihat proyek induk job ini"
+                  >
+                    <FolderKanban style={{ width: 12, height: 12 }} />
+                    {job.proyek_nomor}
+                  </Link>
+                )}
+              </div>
               <StatusBadge status={job.status} />
-              {/* Hanya muncul untuk job yang lahir dari penawaran — job yang
-                  dibuat langsung memang tidak punya, dan itu sah. */}
-              {!hanyaLihat && job.quotation_id && job.quotation_number && (
-                <Link
-                  to={`/quotations/${job.quotation_id}`}
-                  className="mono"
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    padding: "3px 8px",
-                    borderRadius: 6,
-                    background: "var(--brand-primary-light)",
-                    color: "var(--brand-primary-dark)",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4
-                  }}
-                  title="Lihat penawaran asal job ini"
-                >
-                  <FileText style={{ width: 12, height: 12 }} />
-                  {job.quotation_number}
-                </Link>
-              )}
-              <span className="caption mono">
-                Dibuat {formatDateTime(job.created_at)}
+            </div>
+            {/* Nomor job besar + alat yang diangkut kecil di sampingnya. */}
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <span className="h1 mono">{job.job_number}</span>
+              <span className="muted" style={{ fontSize: 14 }}>
+                — {job.alat_diangkut}
               </span>
             </div>
-            <TagihanJobInfo job={job} />
-            <div className="h1" style={{ marginBottom: 4 }}>
-              {job.alat_diangkut}
-            </div>
-            <div className="body muted">
+            <div className="body muted" style={{ marginTop: 2 }}>
               {job.customer_nama}
               {job.pic_nama && (
                 <>
@@ -235,10 +267,40 @@ export function JobDetailView({
                 </>
               )}
             </div>
+            <div className="caption" style={{ marginTop: 4 }}>
+              Dibuat {formatDateTime(job.created_at)}
+              {job.created_by_nama ? ` oleh ${job.created_by_nama}` : ""}
+            </div>
+            <TagihanJobInfo job={job} />
+            {job.diganti_oleh_job_id && (
+              <div className="caption" style={{ marginTop: 4 }}>
+                Unit rusak — diganti{" "}
+                <Link to={`/jobs/${job.diganti_oleh_job_id}`} className="mono">
+                  {job.diganti_oleh_job_number}
+                </Link>
+                . Job ini tidak ditagih; uang jalannya tetap dihitung sebagai biaya.
+              </div>
+            )}
+            {job.menggantikan_job_id && (
+              <div className="caption" style={{ marginTop: 4 }}>
+                Job pengganti untuk{" "}
+                <Link to={`/jobs/${job.menggantikan_job_id}`} className="mono">
+                  {job.menggantikan_job_number}
+                </Link>{" "}
+                (unit rusak).
+              </div>
+            )}
           </div>
           {!hanyaLihat && (
           <div
-            style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+            style={{
+              display: "flex",
+              gap: 6,
+              flexWrap: "wrap",
+              alignItems: "center",
+              paddingTop: 14,
+              borderTop: "0.5px dashed var(--border-default)"
+            }}
           >
             <Link
               to={`/jobs/${job.id}/surat-jalan`}
@@ -258,15 +320,48 @@ export function JobDetailView({
               <Pencil style={{ width: 14, height: 14 }} />
               Edit
             </Link>
-            {bolehGantiTruk(job) && (
+            {bolehPenggantian(job) && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setPenggantian("driver")}
+                  title="Driver sakit / kabur: ganti driver di job yang sama."
+                >
+                  <UserRound style={{ width: 14, height: 14 }} />
+                  Ganti driver
+                </button>
+                {job.unit_trailer_id && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setPenggantian("trailer")}
+                    title="Unit trailer rusak: ganti trailer di job yang sama."
+                  >
+                    <Truck style={{ width: 14, height: 14 }} />
+                    Ganti unit trailer
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setPenggantian("unit")}
+                  title="Unit rusak / insiden: buat job pengganti di proyek yang sama."
+                >
+                  <Truck style={{ width: 14, height: 14 }} />
+                  Ganti unit
+                </button>
+              </>
+            )}
+            {penggantiBatal.length > 0 && (
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setGantiTrukOpen(true)}
-                title="Truk rusak di perjalanan? Ganti dengan truk lain (driver opsional ikut diganti)."
+                className="btn btn-primary btn-sm"
+                onClick={() => setGantiUlang(true)}
+                title={`Job pengganti ${penggantiBatal.join(", ")} dibatalkan: buat job baru dengan unit lain.`}
               >
                 <Truck style={{ width: 14, height: 14 }} />
-                Ganti truk
+                Selesaikan job dengan unit lain
               </button>
             )}
             {!closed && (
@@ -275,7 +370,8 @@ export function JobDetailView({
               // "Batalkan job" begitu uang jalan sudah cair.
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-primary btn-sm"
+                style={{ marginLeft: "auto" }}
                 onClick={() => setStatusOpen(true)}
               >
                 <RefreshCw style={{ width: 14, height: 14 }} />
@@ -322,20 +418,179 @@ export function JobDetailView({
               className="grid grid-cols-1 sm:grid-cols-2"
               style={{ gap: 16 }}
             >
-              <DetailField label="Alat diangkut" value={job.alat_diangkut} />
-              <DetailField
-                label="ETD"
-                value={formatDateTime(job.etd)}
-                mono
-              />
+              {/* Alat diangkut sudah jadi judul di header — tidak diulang di sini. */}
               <DetailField label="Asal" value={job.asal} />
-              <DetailField
-                label="ETA"
-                value={job.eta ? formatDateTime(job.eta) : "—"}
-                mono
-              />
-              <DetailField label="Tujuan" value={job.tujuan} fullWidth />
+              <DetailField label="Tujuan" value={job.tujuan} />
+              <DetailField label="ETD" value={formatDateTime(job.etd)} mono />
+              <DetailField label="ETA" value={job.eta ? formatDateTime(job.eta) : "—"} mono />
             </div>
+            {/* Unit & driver menjadi bagian detail pengiriman, di atas catatan internal. */}
+            {(unit || driver) && (
+              <>
+                <div className="divider" style={{ margin: "14px 0" }} />
+                <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 16 }}>
+                  {/* Unit */}
+                  {unit && (
+                    <div>
+                      <div className="eyebrow" style={{ marginBottom: 10 }}>
+                        Unit
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 8,
+                            background: "var(--bg-subtle)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--text-secondary)"
+                          }}
+                        >
+                          <Truck style={{ width: 20, height: 20 }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600 }}>{unit.kode_unit}</div>
+                          <div className="caption">
+                            {unit.jenis_unit_nama} · {unit.no_polisi}
+                          </div>
+                        </div>
+                        {!hanyaLihat && (
+                          <Link
+                            to={`/units/${unit.id}`}
+                            className="btn-link"
+                            style={{ display: "inline-flex" }}
+                          >
+                            <ArrowRight style={{ width: 14, height: 14 }} />
+                          </Link>
+                        )}
+                      </div>
+                      {job.unit_trailer_kode && (
+                        <div
+                          className="caption"
+                          style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--border-default)" }}
+                        >
+                          Unit trailer: <strong style={{ color: "var(--text-primary)" }}>{job.unit_trailer_kode}</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Driver */}
+                  {driver && (
+                    <div>
+                      <div className="eyebrow" style={{ marginBottom: 10 }}>
+                        Driver
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 99,
+                            background: "var(--brand-primary)",
+                            color: "white",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 600,
+                            fontSize: 13
+                          }}
+                        >
+                          {driverInitials(driver.nama)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600 }}>{driver.nama}</div>
+                          <div className="caption mono">{driver.no_hp}</div>
+                        </div>
+                        {!hanyaLihat && (
+                        <a
+                          href={`https://wa.me/${driver.no_hp.replace(/^\+?0/, "62")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-primary btn-sm btn-icon"
+                          style={{ textDecoration: "none" }}
+                          title="WhatsApp"
+                        >
+                          <MessageCircle style={{ width: 14, height: 14 }} />
+                        </a>
+                        )}
+                      </div>
+
+                      {/* Konfirmasi driver.
+                          Job yang sudah dibuat belum tentu sudah sampai ke orangnya.
+                          Sebelum ada penanda ini, job yang tidak dibaca driver baru
+                          ketahuan saat truk tidak berangkat. */}
+                      {!closed && (
+                        <div
+                          style={{
+                            marginTop: 12,
+                            paddingTop: 12,
+                            borderTop: "1px solid var(--border)",
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 8,
+                            fontSize: 12.5
+                          }}
+                        >
+                          {job.accepted_at ? (
+                            <>
+                              <CheckCircle2
+                                style={{
+                                  width: 14,
+                                  height: 14,
+                                  marginTop: 2,
+                                  color: "var(--brand-primary)",
+                                  flexShrink: 0
+                                }}
+                              />
+                              <span>
+                                Diterima driver{" "}
+                                {new Date(job.accepted_at).toLocaleString("id-ID", {
+                                  timeZone: TZ_WIB,
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle
+                                style={{
+                                  width: 14,
+                                  height: 14,
+                                  marginTop: 2,
+                                  color: "#B45309",
+                                  flexShrink: 0
+                                }}
+                              />
+                              <span style={{ color: "#92400E" }}>
+                                Belum dikonfirmasi driver. Job ini belum dibuka di
+                                portal — hubungi driver kalau ETD sudah dekat.
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
             {job.catatan && (
               <>
                 <div className="divider" style={{ margin: "14px 0" }} />
@@ -430,291 +685,107 @@ export function JobDetailView({
 
         {/* Right column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Share link card */}
+          {/* Pantau & bagikan: link lacak untuk customer + TrackSolid unit. */}
           {!hanyaLihat && (
-          <div
-            className="card card-pad"
-            style={{
-              background: "var(--brand-primary-light)",
-              border: "0.5px solid #B5DFA0"
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 8
-              }}
-            >
-              <LinkIcon
-                style={{
-                  width: 16,
-                  height: 16,
-                  color: "var(--brand-primary-dark)"
-                }}
-              />
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "var(--brand-primary-dark)"
-                }}
-              >
-                Share link customer
+            <div className="card card-pad">
+              <div className="eyebrow" style={{ marginBottom: 10 }}>
+                Pantau &amp; bagikan
               </div>
-            </div>
-            <div
-              style={{
-                background: "white",
-                padding: 8,
-                borderRadius: 6,
-                marginBottom: 10,
-                border: "0.5px solid #B5DFA0"
-              }}
-            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, fontSize: 12.5, fontWeight: 600 }}>
+                <LinkIcon style={{ width: 14, height: 14, color: "var(--brand-primary-dark)" }} />
+                Link lacak customer
+              </div>
               <div
                 className="mono"
                 style={{
                   fontSize: 11,
                   color: "var(--text-secondary)",
-                  wordBreak: "break-all"
+                  wordBreak: "break-all",
+                  background: "var(--bg-subtle)",
+                  padding: 8,
+                  borderRadius: 6,
+                  marginBottom: 8
                 }}
               >
                 {shareUrl}
               </div>
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                style={{ flex: 1, background: "white" }}
-                onClick={() => {
-                  navigator.clipboard?.writeText(shareUrl);
-                  toast.success("Link disalin");
-                }}
-              >
-                <Copy style={{ width: 13, height: 13 }} />
-                Copy link
-              </button>
-              <Link
-                to={`/track/${job.share_token}`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-secondary btn-sm"
-                style={{ background: "white", textDecoration: "none" }}
-              >
-                <Eye style={{ width: 13, height: 13 }} />
-                Preview
-              </Link>
-            </div>
-          </div>
-          )}
-
-          {/* TrackSolid */}
-          {!hanyaLihat && (
-          <div className="card card-pad">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 10
-              }}
-            >
-              <div className="eyebrow">TrackSolid</div>
-              {unit && (
-                <Link
-                  to={`/units/${unit.id}/edit`}
-                  className="btn-link"
-                  style={{ fontSize: 11 }}
-                >
-                  Edit di unit
-                </Link>
-              )}
-            </div>
-            {unit?.tracksolid_share_link ? (
-              <a
-                href={unit.tracksolid_share_link}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-secondary btn-sm"
-                style={{ width: "100%", textDecoration: "none" }}
-              >
-                <ExternalLink style={{ width: 13, height: 13 }} />
-                Buka di TrackSolid
-              </a>
-            ) : (
-              <p
-                style={{
-                  fontSize: 12.5,
-                  color: "var(--text-tertiary)",
-                  margin: 0
-                }}
-              >
-                Unit {unit?.kode_unit ?? "ini"} belum punya link TrackSolid.
-              </p>
-            )}
-          </div>
-          )}
-
-          {/* Unit */}
-          {unit && (
-            <div className="card card-pad">
-              <div className="eyebrow" style={{ marginBottom: 10 }}>
-                Unit
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12
-                }}
-              >
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 8,
-                    background: "var(--bg-subtle)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "var(--text-secondary)"
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    navigator.clipboard?.writeText(shareUrl);
+                    toast.success("Link disalin");
                   }}
                 >
-                  <Truck style={{ width: 20, height: 20 }} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{unit.kode_unit}</div>
-                  <div className="caption">
-                    {unit.jenis_unit_nama} · {unit.no_polisi}
-                  </div>
-                </div>
-                {!hanyaLihat && (
-                  <Link
-                    to={`/units/${unit.id}`}
-                    className="btn-link"
-                    style={{ display: "inline-flex" }}
-                  >
-                    <ArrowRight style={{ width: 14, height: 14 }} />
+                  <Copy style={{ width: 13, height: 13 }} />
+                  Copy link
+                </button>
+                <Link
+                  to={`/track/${job.share_token}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-secondary btn-sm"
+                  style={{ textDecoration: "none" }}
+                >
+                  <Eye style={{ width: 13, height: 13 }} />
+                  Preview
+                </Link>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  paddingTop: 12,
+                  borderTop: "0.5px dashed var(--border-default)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8
+                }}
+              >
+                <span style={{ fontSize: 12.5, fontWeight: 600 }}>TrackSolid</span>
+                {unit && (
+                  <Link to={`/units/${unit.id}/edit`} className="btn-link" style={{ fontSize: 11 }}>
+                    Edit di unit
                   </Link>
                 )}
               </div>
-              {job.unit_trailer_kode && (
-                <div
-                  className="caption"
-                  style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--border-default)" }}
-                >
-                  Unit trailer: <strong style={{ color: "var(--text-primary)" }}>{job.unit_trailer_kode}</strong>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Driver */}
-          {driver && (
-            <div className="card card-pad">
-              <div className="eyebrow" style={{ marginBottom: 10 }}>
-                Driver
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12
-                }}
-              >
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 99,
-                    background: "var(--brand-primary)",
-                    color: "white",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: 600,
-                    fontSize: 13
-                  }}
-                >
-                  {driverInitials(driver.nama)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{driver.nama}</div>
-                  <div className="caption mono">{driver.no_hp}</div>
-                </div>
-                {!hanyaLihat && (
+              {/* BATASAN: form unit menyimpan IMEI saja bila admin mengetik IMEI (bukan
+                  link) — tracksolid_share_link kosong tapi GPS tetap terpasang. Pesan
+                  "belum punya" hanya untuk unit tanpa link DAN tanpa IMEI. */}
+              {unit?.tracksolid_share_link ? (
                 <a
-                  href={`https://wa.me/${driver.no_hp.replace(/^\+?0/, "62")}`}
+                  href={unit.tracksolid_share_link}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn btn-primary btn-sm btn-icon"
-                  style={{ textDecoration: "none" }}
-                  title="WhatsApp"
+                  className="btn btn-secondary btn-sm"
+                  style={{ width: "100%", textDecoration: "none", marginTop: 8 }}
                 >
-                  <MessageCircle style={{ width: 14, height: 14 }} />
+                  <ExternalLink style={{ width: 13, height: 13 }} />
+                  Buka di TrackSolid
                 </a>
-                )}
-              </div>
-
-              {/* Konfirmasi driver.
-                  Job yang sudah dibuat belum tentu sudah sampai ke orangnya.
-                  Sebelum ada penanda ini, job yang tidak dibaca driver baru
-                  ketahuan saat truk tidak berangkat. */}
-              {!closed && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    paddingTop: 12,
-                    borderTop: "1px solid var(--border)",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 8,
-                    fontSize: 12.5
-                  }}
-                >
-                  {job.accepted_at ? (
-                    <>
-                      <CheckCircle2
-                        style={{
-                          width: 14,
-                          height: 14,
-                          marginTop: 2,
-                          color: "var(--brand-primary)",
-                          flexShrink: 0
-                        }}
-                      />
-                      <span>
-                        Diterima driver{" "}
-                        {new Date(job.accepted_at).toLocaleString("id-ID", {
-                          timeZone: TZ_WIB,
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit"
-                        })}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertTriangle
-                        style={{
-                          width: 14,
-                          height: 14,
-                          marginTop: 2,
-                          color: "#B45309",
-                          flexShrink: 0
-                        }}
-                      />
-                      <span style={{ color: "#92400E" }}>
-                        Belum dikonfirmasi driver. Job ini belum dibuka di
-                        portal — hubungi driver kalau ETD sudah dekat.
-                      </span>
-                    </>
-                  )}
-                </div>
+              ) : unit?.imei_gps ? (
+                <>
+                  <div className="caption mono" style={{ marginTop: 6 }}>
+                    IMEI {unit.imei_gps}
+                  </div>
+                  <Link
+                    to={`/tracking/${job.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: "100%", textDecoration: "none", marginTop: 8 }}
+                  >
+                    <ExternalLink style={{ width: 13, height: 13 }} />
+                    Lihat lokasi di Pantau
+                  </Link>
+                </>
+              ) : (
+                <p style={{ fontSize: 12.5, color: "var(--text-tertiary)", margin: "6px 0 0" }}>
+                  Unit {unit?.kode_unit ?? "ini"} belum punya IMEI / link TrackSolid.
+                </p>
               )}
             </div>
           )}
@@ -727,25 +798,61 @@ export function JobDetailView({
             pengajuan={uangJalanPengajuan}
             hanyaLihat={hanyaLihat}
             nomorTagihan={job.invoice_id ? job.invoice_number : null}
+            tanggalAwal={job.created_at}
+            dibatalkan={uangJalanDibatalkan}
           />
 
           {(riwayatGantiTruk.data ?? []).length > 0 && (
             <div className="card">
               <div style={{ padding: "14px 16px", borderBottom: "0.5px solid var(--border-default)" }}>
-                <div className="h3">Riwayat ganti truk</div>
-                <div className="caption">Pergantian truk & driver selama perjalanan</div>
+                <div className="h3">Riwayat penggantian</div>
+                <div className="caption">Ganti driver, unit trailer, atau unit selama job berjalan</div>
               </div>
               <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
                 {(riwayatGantiTruk.data ?? []).map((r) => (
                   <div key={r.id} style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 2 }}>
-                    <div style={{ fontWeight: 600 }}>
-                      {r.unit_lama_kode ?? "—"} → {r.unit_baru_kode ?? "—"}
-                      {r.unit_trailer_lama_kode !== r.unit_trailer_baru_kode &&
-                        ` (trailer ${r.unit_trailer_lama_kode ?? "—"} → ${r.unit_trailer_baru_kode ?? "—"})`}
-                    </div>
-                    {r.driver_lama_nama !== r.driver_baru_nama && (
+                    <div style={{ fontWeight: 600 }}>{JUDUL_PENGGANTIAN[r.jenis] ?? "Penggantian"}</div>
+                    {r.unit_baru_kode && r.unit_lama_kode !== r.unit_baru_kode && (
                       <div>
-                        Driver: {r.driver_lama_nama ?? "—"} → {r.driver_baru_nama ?? "—"}
+                        Unit: {r.unit_lama_kode ?? "—"} → {r.unit_baru_kode}
+                      </div>
+                    )}
+                    {r.unit_trailer_lama_kode !== r.unit_trailer_baru_kode && (
+                      <div>
+                        Unit trailer: {r.unit_trailer_lama_kode ?? "—"} → {r.unit_trailer_baru_kode ?? "—"}
+                      </div>
+                    )}
+                    {r.driver_baru_nama && r.driver_lama_nama !== r.driver_baru_nama && (
+                      <div>
+                        Driver: {r.driver_lama_nama ?? "—"} → {r.driver_baru_nama}
+                      </div>
+                    )}
+                    {(r.uang_jalan_dikembalikan > 0 || r.kasbon > 0) && (
+                      <div>
+                        Uang jalan dikembalikan {formatRupiah(r.uang_jalan_dikembalikan)} · kasbon supir{" "}
+                        {formatRupiah(r.kasbon)}
+                      </div>
+                    )}
+                    {r.job_pengganti_id && (
+                      <div>
+                        Job pengganti:{" "}
+                        <Link to={`/jobs/${r.job_pengganti_id}`} className="mono">
+                          {r.job_pengganti_number ?? "lihat"}
+                        </Link>
+                        {r.job_pengganti_status === "cancelled" && (
+                          <span className="badge badge-cancelled" style={{ marginLeft: 6 }}>
+                            Dibatalkan
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Job pengganti dibatalkan → muatan tetap harus diantar dengan unit lain. */}
+                    {!hanyaLihat && r.job_pengganti_id && penggantiBatal.length > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => setGantiUlang(true)}>
+                          <Truck style={{ width: 14, height: 14 }} />
+                          Selesaikan job dengan unit lain
+                        </button>
                       </div>
                     )}
                     <div style={{ color: "var(--text-secondary)" }}>Alasan: {r.alasan}</div>
@@ -875,13 +982,15 @@ export function JobDetailView({
         jobId={job.id}
         onDone={() => queryClient.invalidateQueries()}
       />
-      {gantiTrukOpen && (
-        <GantiTrukModal
-          job={job}
-          unitKode={unit?.kode_unit}
-          driverNama={driver?.nama}
-          onClose={() => setGantiTrukOpen(false)}
-        />
+      {penggantian === "driver" && (
+        <GantiDriverModal job={job} driverNama={driver?.nama} onClose={() => setPenggantian(null)} />
+      )}
+      {penggantian === "trailer" && <GantiTrailerModal job={job} onClose={() => setPenggantian(null)} />}
+      {gantiUlang && (
+        <GantiUnitUlangModal job={job} penggantiBatal={penggantiBatal} onClose={() => setGantiUlang(false)} />
+      )}
+      {penggantian === "unit" && (
+        <GantiUnitModal job={job} unitKode={unit?.kode_unit} onClose={() => setPenggantian(null)} />
       )}
       <ConfirmDialog
         open={deletePhoto !== null}
@@ -900,12 +1009,6 @@ export function JobDetailView({
         initialIndex={lightbox?.index ?? 0}
       />
 
-      {/* Silence unused imports */}
-      <MapPin style={{ display: "none" }} />
-      <Flag style={{ display: "none" }} />
-      <History style={{ display: "none" }} />
-      <X style={{ display: "none" }} />
-      <Button style={{ display: "none" }} />
     </div>
   );
 }

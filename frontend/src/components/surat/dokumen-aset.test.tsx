@@ -19,6 +19,7 @@ const ASET = {
 
 const JUAL: PenjualanUnit = {
   id: "p1",
+  status_approval: "disetujui",
   nomor_surat: "0001/SPJ/MAS/IX/2026",
   nomor_bast: "0001/BAST/MAS/IX/2026",
   jenis_aset: "unit",
@@ -74,6 +75,7 @@ describe("dokumen aset", () => {
   it("berita acara penghapusan: nomor, alasan, status Diafkirkan", () => {
     const hapus: PenghapusanAset = {
       id: "h1",
+      status_approval: "disetujui",
       nomor_berita_acara: "0001/BAP/MAS/IX/2026",
       jenis_aset: "unit_trailer",
       unit_id: null,

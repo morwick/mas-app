@@ -233,55 +233,57 @@ export function UnitTrailerView() {
         <div style={{ opacity: data.isPlaceholderData ? 0.6 : 1, transition: "opacity 120ms" }}>
           {/* Desktop: tabel */}
           <div className="card hidden lg:block" style={{ overflow: "hidden" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Kode trailer</th>
-                  <th>Jenis unit trailer</th>
-                  <th>Jenis unit</th>
-                  <th style={{ width: 90 }}>Tahun</th>
-                  <th style={{ width: 150 }}>Kapasitas muatan</th>
-                  <th style={{ width: 120 }}>Status</th>
-                  <th>Asuransi</th>
-                  <th style={{ width: 50 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((t) => (
-                  <tr
-                    key={t.id}
-                    className="row-link"
-                    tabIndex={0}
-                    onClick={() => navigate(`/unit-trailer/${t.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") navigate(`/unit-trailer/${t.id}`);
-                    }}
-                  >
-                    <td style={{ fontWeight: 600 }}>
-                      {t.kode_trailer}
-                      {!t.is_active && (
-                        <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
-                          Nonaktif
-                        </span>
-                      )}
-                    </td>
-                    <td>{t.jenis_nama ?? "—"}</td>
-                    <td>{t.jenis_unit_nama ?? "—"}</td>
-                    <td>{t.tahun ?? "—"}</td>
-                    <td>{formatKapasitas(t.kapasitas_ton)}</td>
-                    <td>
-                      <StatusBadge status={t.status} />
-                    </td>
-                    <td>
-                      <AsuransiSel polis={t.polis_terkini} />
-                    </td>
-                    <td>
-                      <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Kode trailer</th>
+                    <th>Jenis unit trailer</th>
+                    <th>Jenis unit</th>
+                    <th style={{ width: 90 }}>Tahun</th>
+                    <th style={{ width: 150 }}>Kapasitas muatan</th>
+                    <th style={{ width: 120 }}>Status</th>
+                    <th>Asuransi</th>
+                    <th style={{ width: 50 }}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((t) => (
+                    <tr
+                      key={t.id}
+                      className="row-link"
+                      tabIndex={0}
+                      onClick={() => navigate(`/unit-trailer/${t.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") navigate(`/unit-trailer/${t.id}`);
+                      }}
+                    >
+                      <td style={{ fontWeight: 600 }}>
+                        {t.kode_trailer}
+                        {!t.is_active && (
+                          <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                            Nonaktif
+                          </span>
+                        )}
+                      </td>
+                      <td>{t.jenis_nama ?? "—"}</td>
+                      <td>{t.jenis_unit_nama ?? "—"}</td>
+                      <td>{t.tahun ?? "—"}</td>
+                      <td>{formatKapasitas(t.kapasitas_ton)}</td>
+                      <td>
+                        <StatusBadge status={t.status} />
+                      </td>
+                      <td>
+                        <AsuransiSel polis={t.polis_terkini} />
+                      </td>
+                      <td>
+                        <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pagination state={pg} label="unit trailer" attached />
           </div>
 

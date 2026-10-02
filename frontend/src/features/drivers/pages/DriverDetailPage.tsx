@@ -2,12 +2,13 @@ import { useParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useDriverAssignments } from "@/features/units/queries";
 import { DriverDetailView } from "../components/driver-detail-view";
-import { useDriver, useDriverJobs } from "../queries";
+import { useDriver, useDriverJobs, useDriverKasbon } from "../queries";
 
 export function DriverDetailPage() {
   const { id } = useParams<{ id: string }>();
   const driver = useDriver(id);
   const jobs = useDriverJobs(id);
+  const kasbon = useDriverKasbon(id);
   const assignments = useDriverAssignments();
 
   if (driver.isPending) return <PageLoading />;
@@ -17,6 +18,7 @@ export function DriverDetailPage() {
       driver={driver.data}
       jobs={jobs.data ?? []}
       unitTetap={assignments.data?.[driver.data.id] ?? null}
+      kasbon={kasbon.data}
     />
   );
 }

@@ -9,9 +9,16 @@ from supabase import AsyncClient
 from app.core.dokumen import BerkasUnggah, PerubahanDokumen, signed_url_dokumen
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
-from app.core.pg import clean_text, rows, single
+from app.core.pg import clean_text, first, num, rows, single
 from app.domain.job_conflicts import ACTIVE_JOB_STATUSES
-from app.modules.drivers.schemas import Driver, DriverCreate, DriverUpdate, KaryawanDriverOption
+from app.modules.drivers.schemas import (
+    Driver,
+    DriverCreate,
+    DriverUpdate,
+    KaryawanDriverOption,
+    KasbonDriver,
+    KasbonDriverRingkas,
+)
 
 
 def _to_driver(row: dict[str, Any]) -> Driver:
@@ -213,3 +220,28 @@ class DriverService:
         """Hash dikerjakan fungsi DB `admin_set_driver_pin`; PIN mentah tidak pernah
         disimpan. Fungsi itu juga mencabut semua sesi lama driver."""
         await self._db.rpc("admin_set_driver_pin", {"p_driver_id": driver_id, "p_pin": pin}).execute()
+
+
+async def kasbon_driver(db: AsyncClient, driver_id: str) -> KasbonDriverRingkas:
+    """Riwayat & total kasbon supir — hanya dicatat & ditampilkan (belum ada pelunasan)."""
+    res = await (
+        db.table("kasbon_driver")
+        .select("id, jumlah, asal, keterangan, job_id, created_at, job:jobs(job_number), oleh:profiles(nama)")
+        .eq("driver_id", driver_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    riwayat = [
+        KasbonDriver(
+            id=r["id"],
+            jumlah=num(r.get("jumlah")),
+            asal=r["asal"],
+            keterangan=r.get("keterangan"),
+            job_id=r.get("job_id"),
+            job_number=(first(r.get("job")) or {}).get("job_number"),
+            created_at=r["created_at"],
+            created_by_nama=(first(r.get("oleh")) or {}).get("nama"),
+        )
+        for r in rows(res)
+    ]
+    return KasbonDriverRingkas(total=sum(k.jumlah for k in riwayat), riwayat=riwayat)

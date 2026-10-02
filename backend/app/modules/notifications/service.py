@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Literal
 
@@ -36,8 +37,13 @@ NotificationKind = Literal[
     "job_diterima",
     "uang_jalan_diajukan",
     "job_menunggu_validasi",
-    # Keadaan: login TrackSolid butuh captcha (superadmin saja)
-    "tracksolid_captcha",
+    # Keputusan akhir pengajuan approval — untuk pengguna ber-role admin
+    # (migration 20261001000020).
+    "approval_disetujui",
+    "approval_ditolak",
+    # Job disetujui admin saat validasi — superadmin, finance, operator berwenang
+    # (migration 20261001000021).
+    "job_divalidasi",
 ]
 Severity = Literal["info", "warning", "danger"]
 
@@ -101,33 +107,8 @@ class NotificationService:
         if ids:
             await self.mark_read(user_id, ids)
 
-    async def _tracksolid_captcha(self, now_iso: str) -> list[AppNotification]:
-        """Superadmin: pelacakan GPS terputus karena login TrackSolid butuh captcha."""
-        try:
-            data = rows(await self._db.rpc("tracksolid_status", {}).execute())
-        except Exception as exc:  # noqa: BLE001 — mis. migrasi belum dijalankan
-            log.warning("status TrackSolid tidak terbaca: %s", exc)
-            return []
-        if not data or not data[0].get("perlu_captcha"):
-            return []
-        return [
-            AppNotification(
-                id="tracksolid-captcha",
-                kind="tracksolid_captcha",
-                severity="danger",
-                title="TrackSolid butuh captcha",
-                body=(
-                    "Lokasi & jarak tempuh GPS berhenti diperbarui. "
-                    "Login ulang TrackSolid dengan mengetik kode captcha."
-                ),
-                # Popup captcha muncul di menu Pantau.
-                href="/tracking",
-                created_at=data[0].get("perlu_captcha_at") or now_iso,
-            )
-        ]
-
     async def page(
-        self, params: PageParams, *, user_id: str | None = None, superadmin: bool = False
+        self, params: PageParams, *, user_id: str | None = None, roles: Iterable[str] = ()
     ) -> Page[AppNotification]:
         """Halaman Notifikasi — isinya sama persis dengan lonceng.
 
@@ -136,15 +117,16 @@ class NotificationService:
         habis, job belum dikonfirmasi) dan tidak punya baris tabel untuk
         di-`range()`. Daftarnya dibatasi per jenis, jadi tetap kecil.
         """
-        semua = await self.build(user_id=user_id, superadmin=superadmin)
+        semua = await self.build(user_id=user_id, roles=roles)
         if params.is_all:
             return build_page(semua, len(semua), params)
         potong = semua[params.offset : params.offset + params.page_size]
         return build_page(potong, len(semua), params)
 
     async def build(
-        self, now: datetime | None = None, *, user_id: str | None = None, superadmin: bool = False
+        self, now: datetime | None = None, *, user_id: str | None = None, roles: Iterable[str] = ()
     ) -> list[AppNotification]:
+        """`roles` = role yang DIMILIKI pengguna (bukan hanya role aktif)."""
         now = now or now_utc()
         now_iso = iso_utc(now)
         db = self._db
@@ -162,15 +144,15 @@ class NotificationService:
 
         out: list[AppNotification] = []
         out.extend(await self._event_notifications(user_id))
-        if superadmin:
-            out.extend(await self._tracksolid_captcha(now_iso))
 
         # Job belum dikonfirmasi / belum berangkat, dokumen jatuh tempo, servis,
         # insiden, dan penawaran (deal belum ada job / hampir kedaluwarsa) tidak
         # jadi notifikasi — sudah tampil di dashboard.
 
         # ── Piutang jatuh tempo ──────────────────────────────────────────────
-        for inv in rows(invoices_res):
+        # BATASAN: hanya untuk pengguna yang punya role superadmin / finance.
+        lihat_piutang = bool({"superadmin", "finance"} & set(roles))
+        for inv in rows(invoices_res) if lihat_piutang else []:
             sisa = num(inv.get("total")) - num(inv.get("dibayar"))
             if sisa <= 0:
                 continue
@@ -202,6 +184,9 @@ _EVENT_SEVERITY: dict[str, Severity] = {
     "job_diterima": "info",
     "uang_jalan_diajukan": "warning",
     "job_menunggu_validasi": "warning",
+    "approval_disetujui": "info",
+    "approval_ditolak": "danger",
+    "job_divalidasi": "info",
 }
 
 

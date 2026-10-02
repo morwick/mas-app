@@ -218,113 +218,115 @@ export function ServicesListView({ units, jenisUnitList, initialStatus }: Props)
         <>
           {/* Desktop: tabel */}
           <div className="card hidden lg:block">
-            <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: 140 }}>Kode</th>
-                <th>Jenis</th>
-                <th style={{ width: 130 }}>Sejak servis</th>
-                <th style={{ minWidth: 220 }}>Progress</th>
-                <th style={{ width: 130 }}>Sisa menuju</th>
-                <th style={{ width: 110 }}>Status</th>
-                <th style={{ width: 50 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pg.items.map((r) => (
-                <tr key={r.unit.id} className="row-link">
-                  <td>
-                    <Link
-                      to={`/units/${r.unit.id}?tab=service`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        textDecoration: "none",
-                        color: "inherit"
-                      }}
-                    >
-                      <div
+            <div className="table-scroll">
+              <table className="table">
+              <thead>
+                <tr>
+                  <th style={{ width: 140 }}>Kode</th>
+                  <th>Jenis</th>
+                  <th style={{ width: 130 }}>Sejak servis</th>
+                  <th style={{ minWidth: 220 }}>Progress</th>
+                  <th style={{ width: 130 }}>Sisa menuju</th>
+                  <th style={{ width: 110 }}>Status</th>
+                  <th style={{ width: 50 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pg.items.map((r) => (
+                  <tr key={r.unit.id} className="row-link">
+                    <td>
+                      <Link
+                        to={`/units/${r.unit.id}?tab=service`}
                         style={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: 6,
-                          background: "var(--bg-subtle)",
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--text-secondary)"
+                          gap: 8,
+                          textDecoration: "none",
+                          color: "inherit"
                         }}
                       >
-                        <Truck style={{ width: 14, height: 14 }} />
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 1
-                        }}
-                      >
-                        <span style={{ fontWeight: 600 }}>
-                          {r.unit.kode_unit}
-                        </span>
-                        <span
-                          className="mono"
+                        <div
                           style={{
-                            fontSize: 11,
-                            color: "var(--text-tertiary)"
+                            width: 28,
+                            height: 28,
+                            borderRadius: 6,
+                            background: "var(--bg-subtle)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--text-secondary)"
                           }}
                         >
-                          {r.unit.no_polisi}
-                        </span>
+                          <Truck style={{ width: 14, height: 14 }} />
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 1
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>
+                            {r.unit.kode_unit}
+                          </span>
+                          <span
+                            className="mono"
+                            style={{
+                              fontSize: 11,
+                              color: "var(--text-tertiary)"
+                            }}
+                          >
+                            {r.unit.no_polisi}
+                          </span>
+                        </div>
+                      </Link>
+                    </td>
+                    <td>{r.unit.jenis_unit_nama}</td>
+                    <td className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+                      {formatKm(r.km_since_last_service)}
+                      <div
+                        style={{
+                          fontSize: 10.5,
+                          color: "var(--text-tertiary)",
+                          marginTop: 2,
+                          fontWeight: 400
+                        }}
+                      >
+                        target {formatKm(r.unit.service_interval_km)}
                       </div>
-                    </Link>
-                  </td>
-                  <td>{r.unit.jenis_unit_nama}</td>
-                  <td className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-                    {formatKm(r.km_since_last_service)}
-                    <div
-                      style={{
-                        fontSize: 10.5,
-                        color: "var(--text-tertiary)",
-                        marginTop: 2,
-                        fontWeight: 400
-                      }}
-                    >
-                      target {formatKm(r.unit.service_interval_km)}
-                    </div>
-                  </td>
-                  <td>
-                    <ProgressCell
-                      percent={r.progress_percent}
-                      status={r.status}
-                      sinceLast={r.km_since_last_service}
-                      interval={r.unit.service_interval_km}
-                    />
-                  </td>
-                  <td className="mono" style={{ fontSize: 12.5 }}>
-                    {r.status === "overdue"
-                      ? `Lewat ${formatKm(Math.abs(r.km_to_next_service))}`
-                      : formatKm(r.km_to_next_service)}
-                  </td>
-                  <td>
-                    <ServiceStatusBadge status={r.status} />
-                  </td>
-                  <td>
-                    <Link
-                      to={`/units/${r.unit.id}?tab=service`}
-                      style={{
-                        color: "var(--text-tertiary)",
-                        display: "inline-flex"
-                      }}
-                    >
-                      <ChevronRight style={{ width: 16, height: 16 }} />
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td>
+                      <ProgressCell
+                        percent={r.progress_percent}
+                        status={r.status}
+                        sinceLast={r.km_since_last_service}
+                        interval={r.unit.service_interval_km}
+                      />
+                    </td>
+                    <td className="mono" style={{ fontSize: 12.5 }}>
+                      {r.status === "overdue"
+                        ? `Lewat ${formatKm(Math.abs(r.km_to_next_service))}`
+                        : formatKm(r.km_to_next_service)}
+                    </td>
+                    <td>
+                      <ServiceStatusBadge status={r.status} />
+                    </td>
+                    <td>
+                      <Link
+                        to={`/units/${r.unit.id}?tab=service`}
+                        style={{
+                          color: "var(--text-tertiary)",
+                          display: "inline-flex"
+                        }}
+                      >
+                        <ChevronRight style={{ width: 16, height: 16 }} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
           </div>
 
           {/* Mobile: card list */}

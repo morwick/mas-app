@@ -31,6 +31,8 @@ function MapLoading() {
 interface Props {
   units: Unit[];
   activeJobs: Job[];
+  /** driver_id → nama driver (popup unit yang sedang bertugas). */
+  driverMap?: Record<string, string>;
 }
 
 interface LocationEntry {
@@ -66,7 +68,7 @@ const STATUS_LABEL: Record<UnitStatus, string> = {
 
 type StatusFilter = "" | UnitStatus;
 
-export function FleetMapView({ units, activeJobs }: Props) {
+export function FleetMapView({ units, activeJobs, driverMap = {} }: Props) {
   // unit_id → job aktif (kalau ada). Dipakai untuk popup quick-link dan
   // render polyline rute saat user fokus ke unit yang sedang bertugas.
   const jobsByUnit = useMemo(() => {
@@ -174,6 +176,7 @@ export function FleetMapView({ units, activeJobs }: Props) {
                   number: job.job_number,
                   customer_nama: job.customer_nama,
                   tujuan: job.tujuan,
+                  driver_nama: driverMap[job.driver_id] ?? null,
                   route: hasRoute
                     ? {
                         asal: { lat: job.asal_lat!, lng: job.asal_lng! },
@@ -185,7 +188,7 @@ export function FleetMapView({ units, activeJobs }: Props) {
               : null
           };
         }),
-    [filteredUnits, locations, jobsByUnit]
+    [filteredUnits, locations, jobsByUnit, driverMap]
   );
 
   return (

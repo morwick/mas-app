@@ -146,7 +146,9 @@ export function UnitDetailView({
                   <StatusBadge status={unit.status} />
                 </div>
                 <div className="body-sm muted">
-                  {unit.jenis_unit_nama} · {unit.no_polisi}
+                  {unit.jenis_unit_nama} ·{" "}
+                  {/* No. polisi tidak boleh terpotong ke baris baru (mis. "BM 9059 / AO"). */}
+                  <span style={{ whiteSpace: "nowrap" }}>{unit.no_polisi}</span>
                   {unit.tahun ? ` · ${unit.tahun}` : ""}
                 </div>
               </div>
@@ -171,7 +173,14 @@ export function UnitDetailView({
             style={{ gap: 16 }}
           >
             <DetailField label="Jenis unit" value={unit.jenis_unit_nama} />
-            <DetailField label="No. polisi" value={unit.no_polisi} mono />
+            <DetailField
+              label="No. polisi"
+              valueNode={
+                <div className="mono" style={{ fontSize: 14, fontWeight: 500, whiteSpace: "nowrap" }}>
+                  {unit.no_polisi || "—"}
+                </div>
+              }
+            />
             <DetailField
               label="Tahun"
               value={unit.tahun ? String(unit.tahun) : "—"}

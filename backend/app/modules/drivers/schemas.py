@@ -89,3 +89,22 @@ class KaryawanDriverOption(BaseModel):
     id: str
     nama: str
     driver_id: str | None = None
+
+
+class KasbonDriver(BaseModel):
+    """Satu catatan kasbon supir (sisa uang jalan yang tidak dikembalikan)."""
+
+    id: str
+    jumlah: float
+    # ganti_driver | ganti_unit
+    asal: str
+    keterangan: str | None = None
+    job_id: str | None = None
+    job_number: str | None = None
+    created_at: str
+    created_by_nama: str | None = None
+
+
+class KasbonDriverRingkas(BaseModel):
+    total: float = 0
+    riwayat: list[KasbonDriver] = []

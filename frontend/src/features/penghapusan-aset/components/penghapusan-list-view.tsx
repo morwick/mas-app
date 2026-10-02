@@ -4,7 +4,6 @@ import { Eye, FileDown, PackageX, Pencil, Plus, Search, Undo2, Upload, X } from 
 import { Button } from "@/components/ui/button";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { UnggahDokumenModal } from "@/components/surat/unggah-dokumen-modal";
-import { DokumenSiapModal } from "@/components/surat/dokumen-siap-modal";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Select } from "@/components/ui/input";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
@@ -29,6 +28,7 @@ import { usePenghapusanList } from "../queries";
 import { BatalPenghapusanModal } from "./batal-penghapusan-modal";
 import { PenghapusanFormModal } from "./penghapusan-form-modal";
 import { StatusDokumen } from "@/features/penjualan-unit/components/status-dokumen";
+import { StatusApprovalBadge } from "@/features/approval/components/status-approval-badge";
 
 const LABEL_JENIS: Record<JenisAset, string> = { unit: "Unit", unit_trailer: "Unit Trailer" };
 
@@ -53,8 +53,6 @@ export function PenghapusanListView() {
   const [form, setForm] = useState<{ penghapusan: PenghapusanAset | null } | null>(null);
   const [unggah, setUnggah] = useState<PenghapusanAset | null>(null);
   const [batal, setBatal] = useState<PenghapusanAset | null>(null);
-  // Penghapusan yang baru tersimpan — tawarkan unduh berita acaranya.
-  const [dokumenBaru, setDokumenBaru] = useState<string | null>(null);
   // Pesan popup loading; null = tidak ada proses yang berjalan.
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -95,8 +93,8 @@ export function PenghapusanListView() {
       toast.error(res.error);
       return false;
     }
-    toast.success("Penghapusan tercatat — status kini Diafkirkan");
-    setDokumenBaru(res.data.id);
+    // Status aset & berita acara menunggu approval (lihat Approval → Penghapusan).
+    toast.success("Penghapusan diajukan — menunggu approval");
     return true;
   }
 
@@ -144,7 +142,11 @@ export function PenghapusanListView() {
       return;
     }
     setBatal(null);
-    toast.success(`Penghapusan ${p.kode_aset} dibatalkan`);
+    toast.success(
+      p.status_approval === "disetujui"
+        ? `Penghapusan ${p.kode_aset} dibatalkan`
+        : `Pengajuan penghapusan ${p.kode_aset} dibatalkan`
+    );
   }
 
   const total = data.data?.total ?? 0;
@@ -165,18 +167,25 @@ export function PenghapusanListView() {
   function Aksi({ p }: { p: PenghapusanAset }) {
     const terkunci = penghapusanTerkunci(p);
     const kunci = "Berita acara bertanda tangan sudah diunggah";
+    // BATASAN: berita acara baru ada setelah disetujui; yang ditolak tidak bisa diedit.
+    const disetujui = p.status_approval === "disetujui";
+    const ditolak = p.status_approval === "ditolak";
     const ikon = (I: typeof FileDown) => <I style={{ width: 14, height: 14 }} />;
     return (
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ActionMenu
           items={[
-            { label: "Unduh berita acara", icon: ikon(FileDown), href: hrefBeritaAcara(p.id) },
-            {
-              label: "Unggah berita acara bertanda tangan",
-              icon: ikon(Upload),
-              onSelect: () => setUnggah(p),
-              disabled: busy !== null
-            },
+            ...(disetujui
+              ? [
+                  { label: "Unduh berita acara", icon: ikon(FileDown), href: hrefBeritaAcara(p.id) },
+                  {
+                    label: "Unggah berita acara bertanda tangan",
+                    icon: ikon(Upload),
+                    onSelect: () => setUnggah(p),
+                    disabled: busy !== null
+                  }
+                ]
+              : []),
             ...(p.bukti_uploaded_at
               ? [{ label: "Lihat berita acara bertanda tangan", icon: ikon(Eye), onSelect: () => lihatBukti(p) }]
               : []),
@@ -184,11 +193,11 @@ export function PenghapusanListView() {
               label: "Edit",
               icon: ikon(Pencil),
               onSelect: () => setForm({ penghapusan: p }),
-              disabled: terkunci || busy !== null,
-              hint: terkunci ? kunci : undefined
+              disabled: terkunci || ditolak || busy !== null,
+              hint: terkunci ? kunci : ditolak ? "Ditolak approver — catat penghapusan baru" : undefined
             },
             {
-              label: "Batalkan penghapusan",
+              label: disetujui ? "Batalkan penghapusan" : ditolak ? "Hapus dari daftar" : "Batalkan pengajuan",
               icon: ikon(Undo2),
               onSelect: () => setBatal(p),
               danger: true,
@@ -262,45 +271,47 @@ export function PenghapusanListView() {
         <div style={{ opacity: data.isPlaceholderData ? 0.6 : 1, transition: "opacity 120ms" }}>
           {/* Desktop: tabel */}
           <div className="card hidden lg:block" style={{ overflow: "hidden" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 190 }}>No. penghapusan / tanggal</th>
-                  <th>Aset</th>
-                  <th>Alasan</th>
-                  <th style={{ width: 150 }}>Dokumen TTD</th>
-                  <th style={{ width: 100 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
-                        {p.nomor_berita_acara ?? "—"}
-                      </div>
-                      <div className="caption">{formatDate(p.tanggal_hapus)}</div>
-                    </td>
-                    <td>
-                      <Link to={hrefAset(p)} style={{ fontWeight: 600 }}>
-                        {p.kode_aset}
-                      </Link>
-                      <div className="caption">{LABEL_JENIS[p.jenis_aset]}</div>
-                    </td>
-                    <td>
-                      <div>{p.alasan}</div>
-                      {p.catatan && <div className="caption">{p.catatan}</div>}
-                    </td>
-                    <td>
-                      <StatusDokumen dokumen={[{ label: "Berita acara", ada: Boolean(p.bukti_uploaded_at) }]} />
-                    </td>
-                    <td>
-                      <Aksi p={p} />
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 190 }}>No. penghapusan / tanggal</th>
+                    <th>Aset</th>
+                    <th>Alasan</th>
+                    <th style={{ width: 150 }}>Dokumen TTD</th>
+                    <th style={{ width: 100 }}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
+                          {p.nomor_berita_acara ?? "—"}
+                        </div>
+                        <div className="caption">{formatDate(p.tanggal_hapus)}</div>
+                      </td>
+                      <td>
+                        <Link to={hrefAset(p)} style={{ fontWeight: 600 }}>
+                          {p.kode_aset}
+                        </Link>
+                        <div className="caption">{LABEL_JENIS[p.jenis_aset]}</div>
+                      </td>
+                      <td>
+                        <div>{p.alasan}</div>
+                        {p.catatan && <div className="caption">{p.catatan}</div>}
+                      </td>
+                      <td>
+                        <StatusPenghapusan p={p} />
+                      </td>
+                      <td>
+                        <Aksi p={p} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pagination state={pg} label="penghapusan" attached />
           </div>
 
@@ -317,7 +328,7 @@ export function PenghapusanListView() {
                 <div className="caption mono">{p.nomor_berita_acara ?? "—"}</div>
                 <div className="caption">{p.alasan}</div>
                 <div>
-                  <StatusDokumen dokumen={[{ label: "Berita acara", ada: Boolean(p.bukti_uploaded_at) }]} />
+                  <StatusPenghapusan p={p} />
                 </div>
                 <Aksi p={p} />
               </div>
@@ -355,15 +366,14 @@ export function PenghapusanListView() {
         onConfirm={konfirmasiBatal}
       />
 
-      <DokumenSiapModal
-        open={dokumenBaru !== null}
-        onClose={() => setDokumenBaru(null)}
-        judul="Penghapusan tercatat"
-        keterangan="Unduh berita acaranya sekarang, atau nanti lewat tombol Berita acara di daftar."
-        dokumen={dokumenBaru ? [{ label: "Berita Acara Penghapusan", href: hrefBeritaAcara(dokumenBaru) }] : []}
-      />
 
       <LoadingOverlay message={busy} />
     </div>
   );
+}
+
+/** Status berita acara bertanda tangan — atau status approval-nya bila belum disetujui. */
+function StatusPenghapusan({ p }: { p: PenghapusanAset }) {
+  if (p.status_approval !== "disetujui") return <StatusApprovalBadge status={p.status_approval} />;
+  return <StatusDokumen dokumen={[{ label: "Berita acara", ada: Boolean(p.bukti_uploaded_at) }]} />;
 }

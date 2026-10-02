@@ -4,19 +4,24 @@ import { Logo } from "./logo";
 import { MobileDrawer } from "./mobile-drawer";
 import { NotificationBell } from "./notification-bell";
 import { ProfileMenu } from "./profile-menu";
-import { navItems, type UserRoleLike } from "./nav-items";
+import { navItems, type NavGroup, type UserRoleLike } from "./nav-items";
 import type { AppNotification } from "@/lib/notifications";
 
 function getPageTitle(pathname: string) {
   const root = navItems.find((n) => n.match?.(pathname));
   if (!root) return "MAS";
   const segments = pathname.split("/").filter(Boolean);
-  if (segments.length <= 1) return root.label;
+  // /approval/:fitur — kode fitur bagian dari menu, bukan halaman detail.
+  if (segments.length <= 1 || (segments[0] === "approval" && segments.length === 2)) return root.label;
   const last = segments[segments.length - 1];
+  // Halaman job (menu Job): /jobs/:id → "Detail job", /jobs/:id/edit → "Edit job".
+  if (segments[0] === "jobs" && segments.length === 2 && last.length > 8 && /[0-9a-f-]/i.test(last)) return "Detail job";
+  if (segments[0] === "jobs" && segments.length === 3 && last === "edit") return "Edit job";
   if (last === "new") return `${root.label} baru`;
   if (last === "edit") return `Edit ${root.label.toLowerCase()}`;
   if (last === "confirmation") return "Konfirmasi job";
   if (last === "utilisasi") return "Utilisasi armada";
+  if (segments[0] === "proyek" && last === "per-unit") return "Proyek per unit";
   if (segments[0] === "reports" && last === "customers")
     return "Riwayat customer";
   return `Detail ${root.label.toLowerCase()}`;
@@ -35,12 +40,14 @@ interface MobileHeaderProps {
     driversAvailable?: number;
   };
   notifications?: AppNotification[];
+  approval?: NavGroup | null;
 }
 
 export function MobileHeader({
   user,
   counts,
-  notifications
+  notifications,
+  approval
 }: MobileHeaderProps) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -60,7 +67,7 @@ export function MobileHeader({
           className="flex items-center min-w-0"
           style={{ gap: 4, flex: 1, minWidth: 0 }}
         >
-          <MobileDrawer user={user} counts={counts} />
+          <MobileDrawer user={user} counts={counts} approval={approval} />
           {isRoot ? (
             <Logo size="sm" />
           ) : (

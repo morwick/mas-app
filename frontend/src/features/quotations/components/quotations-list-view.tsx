@@ -28,8 +28,8 @@ interface Props {
 // Status surat hanya draft / terkirim / completed / kedaluwarsa. Deal &
 // ditolak adalah keputusan per ITEM, jadi chip Deal / Ditolak menyaring surat
 // yang punya minimal satu item deal / ditolak ("ada_item_deal" /
-// "ada_item_ditolak"). "deal_pending" = masih ada item deal tanpa job —
-// daftar kerja admin.
+// "ada_item_ditolak"). "deal_pending" = punya item deal tetapi belum ada satu
+// pun proyek aktif — daftar kerja admin.
 // Dari kartu monitoring: "ada_item_deal" = punya item disetujui (status
 // penawarannya bisa masih terkirim bila item lain belum diputuskan);
 // "tidak_deal" = ditolak + kedaluwarsa; "ada_item_menunggu" = terkirim & masih
@@ -55,8 +55,9 @@ function akanKedaluwarsa(row: QuotationListRow, hariIni: string, batas: string):
 }
 
 /** Masih punya item deal yang belum dibuatkan job (apa pun status suratnya). */
-function dealBelumJob(row: QuotationListRow): boolean {
-  return (row.jumlah_item_deal_belum_job ?? 0) > 0;
+/** BATASAN: per penawaran — cukup satu proyek aktif, tidak terhitung lagi. */
+function dealBelumAdaProyek(row: QuotationListRow): boolean {
+  return row.deal_belum_ada_proyek ?? false;
 }
 
 const NAMA_BULAN = [
@@ -109,26 +110,18 @@ interface Pelaksanaan {
 }
 
 /**
- * Ringkas kemajuan pelaksanaan sebuah penawaran.
+ * Kolom Pelaksanaan: berapa proyek yang sudah terbentuk dari penawaran ini
+ * (status item deal / ditolak sudah tampil di bawah nama customer). Dihitung
+ * server dari job aktif penawaran ini (item penawaran ↔ job ↔ proyek).
  *
  * Hanya relevan untuk penawaran yang sudah deal — sebelum itu memang belum
- * boleh ada job, jadi menampilkan "belum ada job" justru menyesatkan.
+ * boleh ada proyek, jadi menampilkan "belum ada proyek" justru menyesatkan.
  */
-function pelaksanaan(row: QuotationListRow): Pelaksanaan {
+export function pelaksanaan(row: QuotationListRow): Pelaksanaan {
   if (!(row.jumlah_item_deal ?? 0)) return { label: "—", tone: "netral" };
-  if (row.jumlah_job === 0) return { label: "Belum ada job", tone: "belum" };
-
-  const { jumlah_job, jumlah_job_selesai, jumlah_item } = row;
-  // Tuntas hanya kalau setiap rute sudah punya job DAN semuanya selesai.
-  // Tanpa syarat pertama, penawaran 3 rute yang baru dijalankan 1 rute akan
-  // terlihat selesai begitu job tunggal itu rampung.
-  if (jumlah_job_selesai === jumlah_job && jumlah_job >= jumlah_item)
-    return { label: "Selesai", tone: "selesai" };
-
-  return {
-    label: `${jumlah_job_selesai} dari ${jumlah_job} job selesai`,
-    tone: "jalan"
-  };
+  const jumlah = row.jumlah_proyek ?? 0;
+  if (jumlah === 0) return { label: "Belum ada proyek", tone: "belum" };
+  return { label: `${jumlah} proyek`, tone: "jalan" };
 }
 
 interface BagianItem {
@@ -138,7 +131,7 @@ interface BagianItem {
 
 const WARNA_ITEM = {
   tindakan: "var(--status-pickup-text)",
-  deal: "var(--status-standby-text)",
+  deal: "var(--status-selesai-text)",
   ditolak: "var(--status-cancelled-text)",
   netral: "var(--text-tertiary)"
 };
@@ -306,7 +299,7 @@ export function QuotationsListView({
     const needle = q.trim().toLowerCase();
     return periode.filter((row) => {
       if (filter === "deal_pending") {
-        if (!dealBelumJob(row)) return false;
+        if (!dealBelumAdaProyek(row)) return false;
       } else if (filter === "akan_kedaluwarsa") {
         if (!akanKedaluwarsa(row, hariIni, batasKedaluwarsa)) return false;
       } else if (filter === "ada_item_deal") {
@@ -335,7 +328,7 @@ export function QuotationsListView({
     [filtered]
   );
 
-  const dealBelumJalan = useMemo(() => periode.filter(dealBelumJob).length, [periode]);
+  const dealBelumJalan = useMemo(() => periode.filter(dealBelumAdaProyek).length, [periode]);
   const jumlahAkanKedaluwarsa = useMemo(
     () => periode.filter((r) => akanKedaluwarsa(r, hariIni, batasKedaluwarsa)).length,
     [periode, hariIni, batasKedaluwarsa]
@@ -476,7 +469,7 @@ export function QuotationsListView({
           { key: "ada_item_deal", label: "Deal", count: counts.adaItemDeal },
           {
             key: "deal_pending",
-            label: "Deal — belum ada job",
+            label: "Deal — belum ada proyek",
             count: dealBelumJalan
           },
           {
@@ -520,113 +513,115 @@ export function QuotationsListView({
         <>
           {/* Desktop */}
           <div className="card hidden lg:block">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 180 }}>Nomor surat</th>
-                  <th>Customer</th>
-                  <th style={{ width: 110 }}>Tanggal</th>
-                  <th style={{ width: 110 }}>Berlaku s.d.</th>
-                  <th style={{ width: 150, textAlign: "right" }}>Nilai</th>
-                  <th style={{ width: 120 }}>Status</th>
-                  <th style={{ width: 170 }}>Pelaksanaan</th>
-                  <th style={{ width: 44 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {pg.items.map((row) => (
-                  <tr key={row.id} className="row-link">
-                    <td>
-                      <Link
-                        to={`/quotations/${row.id}`}
-                        className="mono"
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 180 }}>Nomor surat</th>
+                    <th>Customer</th>
+                    <th style={{ width: 110 }}>Tanggal</th>
+                    <th style={{ width: 110 }}>Berlaku s.d.</th>
+                    <th style={{ width: 150, textAlign: "right" }}>Nilai</th>
+                    <th style={{ width: 120 }}>Status</th>
+                    <th style={{ width: 170 }}>Pelaksanaan</th>
+                    <th style={{ width: 44 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pg.items.map((row) => (
+                    <tr key={row.id} className="row-link">
+                      <td>
+                        <Link
+                          to={`/quotations/${row.id}`}
+                          className="mono"
+                          style={{
+                            textDecoration: "none",
+                            color: "var(--text-primary)",
+                            fontSize: 12.5,
+                            fontWeight: 600
+                          }}
+                        >
+                          {row.quote_number}
+                        </Link>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: 13.5 }} title={row.objek ?? undefined}>
+                          {row.customer_nama}
+                        </div>
+                        <RingkasanItem row={row} />
+                      </td>
+                      <td className="muted" style={{ fontSize: 12.5 }}>
+                        {formatDate(row.tanggal)}
+                      </td>
+                      <td
                         style={{
-                          textDecoration: "none",
-                          color: "var(--text-primary)",
                           fontSize: 12.5,
-                          fontWeight: 600
+                          color: row.status === "kedaluwarsa" ? "#C13838" : "var(--text-secondary)",
+                          fontWeight: row.status === "kedaluwarsa" ? 600 : 400
                         }}
                       >
-                        {row.quote_number}
-                      </Link>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600, fontSize: 13.5 }} title={row.objek ?? undefined}>
-                        {row.customer_nama}
-                      </div>
-                      <RingkasanItem row={row} />
-                    </td>
-                    <td className="muted" style={{ fontSize: 12.5 }}>
-                      {formatDate(row.tanggal)}
-                    </td>
-                    <td
-                      style={{
-                        fontSize: 12.5,
-                        color: row.status === "kedaluwarsa" ? "#C13838" : "var(--text-secondary)",
-                        fontWeight: row.status === "kedaluwarsa" ? 600 : 400
-                      }}
-                    >
-                      {row.berlaku_sampai ? formatDate(row.berlaku_sampai) : "—"}
+                        {row.berlaku_sampai ? formatDate(row.berlaku_sampai) : "—"}
+                      </td>
+                      <td
+                        className="mono"
+                        style={{ textAlign: "right", fontSize: 12.5, fontWeight: 600 }}
+                      >
+                        {formatRupiah(row.total)}
+                      </td>
+                      <td>
+                        <QuotationStatusBadge status={row.status} />
+                      </td>
+                      <td style={{ fontSize: 12.5 }}>
+                        {(() => {
+                          const p = pelaksanaan(row);
+                          return (
+                            <span
+                              style={{
+                                color: toneColor[p.tone],
+                                fontWeight: p.tone === "belum" ? 600 : 400,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 5
+                              }}
+                            >
+                              {p.tone === "selesai" && (
+                                <CheckCircle2 style={{ width: 13, height: 13 }} />
+                              )}
+                              {p.label}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td>
+                        <Link
+                          to={`/quotations/${row.id}`}
+                          style={{
+                            color: "var(--text-tertiary)",
+                            display: "inline-flex"
+                          }}
+                        >
+                          <ChevronRight style={{ width: 16, height: 16 }} />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={4} style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                      {filtered.length} penawaran ditampilkan
                     </td>
                     <td
                       className="mono"
-                      style={{ textAlign: "right", fontSize: 12.5, fontWeight: 600 }}
+                      style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}
                     >
-                      {formatRupiah(row.total)}
+                      {formatRupiah(totalNilai)}
                     </td>
-                    <td>
-                      <QuotationStatusBadge status={row.status} />
-                    </td>
-                    <td style={{ fontSize: 12.5 }}>
-                      {(() => {
-                        const p = pelaksanaan(row);
-                        return (
-                          <span
-                            style={{
-                              color: toneColor[p.tone],
-                              fontWeight: p.tone === "belum" ? 600 : 400,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 5
-                            }}
-                          >
-                            {p.tone === "selesai" && (
-                              <CheckCircle2 style={{ width: 13, height: 13 }} />
-                            )}
-                            {p.label}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td>
-                      <Link
-                        to={`/quotations/${row.id}`}
-                        style={{
-                          color: "var(--text-tertiary)",
-                          display: "inline-flex"
-                        }}
-                      >
-                        <ChevronRight style={{ width: 16, height: 16 }} />
-                      </Link>
-                    </td>
+                    <td colSpan={3} />
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={4} style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                    {filtered.length} penawaran ditampilkan
-                  </td>
-                  <td
-                    className="mono"
-                    style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}
-                  >
-                    {formatRupiah(totalNilai)}
-                  </td>
-                  <td colSpan={3} />
-                </tr>
-              </tfoot>
-            </table>
+                </tfoot>
+              </table>
+            </div>
           </div>
 
           {/* Mobile */}

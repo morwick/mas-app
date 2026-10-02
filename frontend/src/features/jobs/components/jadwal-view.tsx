@@ -102,7 +102,7 @@ export function JadwalView({ units, jobs, weekStart }: Props) {
         <div style={{ flex: 1 }} />
         <Link to="/jobs/new">
           <Button leftIcon={<Plus style={{ width: 16, height: 16 }} />}>
-            Job baru
+            Proyek baru
           </Button>
         </Link>
       </div>

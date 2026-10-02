@@ -4,7 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.domain.uang_jalan import UangJalanJenis, UangJalanRingkasan
+from app.domain.uang_jalan import UangJalanJenis, UangJalanJenisInput, UangJalanRingkasan
+from app.modules.approval.schemas import StatusApprovalData
 
 
 class SumberDana(BaseModel):
@@ -34,6 +35,8 @@ class UangJalan(BaseModel):
     bukti_transfer_path: str | None = None
     bukti_transfer_url: str | None = None
     request_id: str | None = None
+    # Tambahan uang jalan butuh approval; pencairan selalu "disetujui".
+    status_approval: StatusApprovalData = "disetujui"
 
 
 RequestStatus = Literal["diajukan", "dicairkan", "ditolak"]
@@ -76,7 +79,7 @@ class RejectRequestInput(BaseModel):
 
 class UangJalanInput(BaseModel):
     job_id: str = Field(min_length=1)
-    jenis: UangJalanJenis
+    jenis: UangJalanJenisInput
     tanggal: str = Field(min_length=1)
     # Rupiah penuh — kolomnya BIGINT. Sengaja int, bukan float: pecahan yang
     # lolos ke sini akan dibulatkan diam-diam oleh Postgres, jadi lebih baik
@@ -92,11 +95,24 @@ class SetUangJalanAwalRequest(BaseModel):
     uang_jalan_awal: int = Field(ge=0)
 
 
+class TambahanDibatalkan(BaseModel):
+    """Pengajuan tambahan uang jalan yang dihapus selama menunggu approval."""
+
+    id: str
+    tanggal: str
+    jumlah: float
+    keperluan: str | None = None
+    catatan: str | None = None
+    created_at: str
+
+
 class JobUangJalan(BaseModel):
     transaksi: list[UangJalan]
     ringkasan: UangJalanRingkasan
     pengajuan: list[UangJalanRequest] = Field(default_factory=list)
     posisi: UangJalanPosisi | None = None
+    # Riwayat saja — tidak ikut dihitung ke ringkasan (migration 20261001000024).
+    dibatalkan: list[TambahanDibatalkan] = Field(default_factory=list)
 
 
 class UangJalanJobRow(BaseModel):
@@ -113,3 +129,5 @@ class UangJalanJobRow(BaseModel):
     pencairan_terakhir: str | None
     # Pengajuan driver yang belum dicairkan (perlu tindakan kasir).
     pengajuan_menunggu: int = 0
+    # Tambahan uang jalan yang masih menunggu approval.
+    tambahan_menunggu_approval: int = 0

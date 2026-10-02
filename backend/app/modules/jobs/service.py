@@ -26,8 +26,11 @@ from app.modules.jobs.schemas import (
     ActiveJobByUnit,
     CancelRequest,
     ConflictCheckRequest,
+    GantiDriverRequest,
+    GantiTrailerRequest,
     GantiTrukEntry,
-    GantiTrukRequest,
+    GantiUnitRequest,
+    GantiUnitUlangRequest,
     Job,
     JobCreate,
     JobCreated,
@@ -39,7 +42,8 @@ from app.modules.jobs.schemas import (
 )
 
 _GANTI_TRUK_SELECT = """
-  id, diganti_pada, status_job_saat_ganti, alasan,
+  id, jenis, diganti_pada, status_job_saat_ganti, alasan, uang_jalan_dikembalikan, kasbon, job_pengganti_id,
+  pengganti:jobs!job_ganti_unit_job_pengganti_id_fkey(job_number, status_job),
   unit_lama:units!job_ganti_unit_unit_lama_id_fkey(kode_unit),
   unit_baru:units!job_ganti_unit_unit_baru_id_fkey(kode_unit),
   driver_lama:drivers!job_ganti_unit_driver_lama_id_fkey(nama),
@@ -56,6 +60,7 @@ def _to_ganti_truk(r: dict[str, Any]) -> GantiTrukEntry:
 
     return GantiTrukEntry(
         id=r["id"],
+        jenis=r.get("jenis") or "ganti_truk",
         diganti_pada=r["diganti_pada"],
         status_job_saat_ganti=r["status_job_saat_ganti"],
         alasan=r["alasan"],
@@ -66,6 +71,11 @@ def _to_ganti_truk(r: dict[str, Any]) -> GantiTrukEntry:
         unit_trailer_lama_kode=ambil("trailer_lama", "kode_trailer"),
         unit_trailer_baru_kode=ambil("trailer_baru", "kode_trailer"),
         diganti_oleh_nama=ambil("oleh", "nama"),
+        uang_jalan_dikembalikan=num(r.get("uang_jalan_dikembalikan")),
+        kasbon=num(r.get("kasbon")),
+        job_pengganti_id=r.get("job_pengganti_id"),
+        job_pengganti_number=ambil("pengganti", "job_number"),
+        job_pengganti_status=ambil("pengganti", "status_job"),
     )
 
 
@@ -149,13 +159,23 @@ class JobService:
         customer_id: str | None,
         q: str | None,
         select: str,
+        proyek_id: str | None = None,
         quotation_ids: list[str] | None = None,
+        proyek_ids: list[str] | None = None,
         count: CountMethod | None = None,
         head: bool = False,
     ):
         """Query daftar job dengan seluruh filternya — dipakai bersama oleh
         pengambilan halaman dan penghitungan baris, supaya keduanya tidak
         pernah memakai kriteria yang berbeda."""
+        if customer_id:
+            # Customer tersimpan di proyek: embed proyek dijadikan inner join
+            # supaya filter customer menyaring baris job, bukan hanya embed-nya.
+            select = (
+                select.replace("proyek:proyek(", "proyek:proyek!inner(", 1)
+                if "proyek:proyek(" in select
+                else f"{select}, proyek:proyek!inner(customer_id)"
+            )
         query = (
             self._db.table("jobs").select(select, count=count, head=head)
             if count is not None
@@ -167,11 +187,15 @@ class JobService:
         elif status in ("menunggu_validasi", "selesai", "cancelled"):
             query = query.eq("status_job", status)
         if customer_id:
-            query = query.eq("customer_id", customer_id)
+            query = query.eq("proyek.customer_id", customer_id)
+        if proyek_id:
+            query = query.eq("proyek_id", proyek_id)
         if q and q.strip():
             filters = ilike_any(self._SEARCH_COLUMNS, q)
             if quotation_ids:
                 filters += f",quotation_id.in.({','.join(quotation_ids)})"
+            if proyek_ids:
+                filters += f",proyek_id.in.({','.join(proyek_ids)})"
             query = query.or_(filters)
         return query
 
@@ -188,6 +212,37 @@ class JobService:
             .execute()
         )
         return [r["id"] for r in rows(res)]
+
+    async def _proyek_ids_matching(self, q: str | None) -> list[str]:
+        """Id proyek yang nomor / PIC-nya cocok dengan pencarian — sama seperti
+        nomor penawaran, dicari dulu lalu ikut ke grup `or=`."""
+        if not q or not q.strip():
+            return []
+        res = await (
+            self._db.table("proyek").select("id").or_(ilike_any(["nomor_proyek", "pic_nama"], q)).limit(200).execute()
+        )
+        return [r["id"] for r in rows(res)]
+
+    async def lampirkan_penggantian(self, jobs: list[Job]) -> list[Job]:
+        """Isi tautan ganti unit: job pengganti ↔ job lama — satu query per halaman."""
+        ids = [j.id for j in jobs]
+        if not ids:
+            return jobs
+        lama_ids = [j.menggantikan_job_id for j in jobs if j.menggantikan_job_id]
+        filter_or = f"menggantikan_job_id.in.({','.join(ids)})"
+        if lama_ids:
+            filter_or += f",id.in.({','.join(lama_ids)})"
+        res = await self._db.table("jobs").select("id, job_number, menggantikan_job_id").or_(filter_or).execute()
+        nomor = {r["id"]: r["job_number"] for r in rows(res)}
+        pengganti = {r["menggantikan_job_id"]: r for r in rows(res) if r.get("menggantikan_job_id")}
+        for j in jobs:
+            if j.menggantikan_job_id:
+                j.menggantikan_job_number = nomor.get(j.menggantikan_job_id)
+            p = pengganti.get(j.id)
+            if p:
+                j.diganti_oleh_job_id = p["id"]
+                j.diganti_oleh_job_number = p["job_number"]
+        return jobs
 
     async def _lampirkan_tagihan(self, jobs: list[Job], *, lengkap: bool = False) -> list[Job]:
         """Isi info tagihan per job — satu query untuk semua job di halaman.
@@ -234,6 +289,7 @@ class JobService:
         params: PageParams,
         status: JobListFilter = "all",
         customer_id: str | None = None,
+        proyek_id: str | None = None,
         q: str | None = None,
         dengan_tagihan: bool = False,
         tagihan_lengkap: bool = False,
@@ -243,21 +299,25 @@ class JobService:
         query = self._list_query(
             status=status,
             customer_id=customer_id,
+            proyek_id=proyek_id,
             q=q,
             select=JOB_SELECT,
             count=CountMethod.exact,
             quotation_ids=await self._quotation_ids_matching(q),
+            proyek_ids=await self._proyek_ids_matching(q),
         )
         res = await apply_window(query.order("created_at", desc=True), params).execute()
-        jobs = [to_job(r) for r in rows(res)]
+        jobs = await self.lampirkan_penggantian([to_job(r) for r in rows(res)])
         if dengan_tagihan:
             jobs = await self._lampirkan_tagihan(jobs, lengkap=tagihan_lengkap)
         return build_page(jobs, res.count, params)
 
-    async def list_all(self, *, status: JobListFilter = "all", customer_id: str | None = None) -> list[Job]:
-        """Seluruh baris tanpa potongan — untuk deteksi bentrok jadwal dan
-        ekspor, yang memang butuh melihat semuanya."""
-        query = self._list_query(status=status, customer_id=customer_id, q=None, select=JOB_SELECT)
+    async def list_all(
+        self, *, status: JobListFilter = "all", customer_id: str | None = None, proyek_id: str | None = None
+    ) -> list[Job]:
+        """Seluruh baris tanpa potongan — untuk deteksi bentrok jadwal,
+        ekspor, dan daftar job satu proyek."""
+        query = self._list_query(status=status, customer_id=customer_id, proyek_id=proyek_id, q=None, select=JOB_SELECT)
         return [to_job(r) for r in rows(await query.order("created_at", desc=True).execute())]
 
     async def tab_counts(self, *, customer_id: str | None = None, q: str | None = None) -> dict[str, int]:
@@ -266,6 +326,7 @@ class JobService:
         tabs: list[JobListFilter] = ["active", "menunggu_validasi", "selesai", "cancelled"]
         out: dict[str, int] = {}
         quotation_ids = await self._quotation_ids_matching(q)
+        proyek_ids = await self._proyek_ids_matching(q)
         for tab in tabs:
             res = await self._list_query(
                 status=tab,
@@ -275,6 +336,7 @@ class JobService:
                 count=CountMethod.exact,
                 head=True,
                 quotation_ids=quotation_ids,
+                proyek_ids=proyek_ids,
             ).execute()
             out[tab] = res.count or 0
         return out
@@ -288,7 +350,7 @@ class JobService:
         )
         if row is None:
             raise NotFoundError("Job tidak ditemukan")
-        job = to_job(row)
+        job = (await self.lampirkan_penggantian([to_job(row)]))[0]
         if not dengan_tagihan:
             return job
         return (await self._lampirkan_tagihan([job], lengkap=tagihan_lengkap))[0]
@@ -390,7 +452,10 @@ class JobService:
 
     # ── Bentrok jadwal ──────────────────────────────────────────────────────
 
-    async def check_conflicts(self, payload: ConflictCheckRequest) -> ConflictCheckResult:
+    async def check_conflicts(
+        self, payload: ConflictCheckRequest, *, bersama: list[ScheduledJob] | None = None
+    ) -> ConflictCheckResult:
+        """Bentrok dengan job aktif, ditambah `bersama` (job baru lain di form yang sama)."""
         active = await self.list_all(status="active")
         return find_job_conflicts(
             ConflictCandidate(
@@ -412,11 +477,14 @@ class JobService:
                     status=j.status,
                 )
                 for j in active
-            ],
+            ]
+            + (bersama or []),
         )
 
-    async def _reject_if_conflicting(self, payload: ConflictCheckRequest) -> None:
-        conflicts = await self.check_conflicts(payload)
+    async def _reject_if_conflicting(
+        self, payload: ConflictCheckRequest, *, bersama: list[ScheduledJob] | None = None
+    ) -> None:
+        conflicts = await self.check_conflicts(payload, bersama=bersama)
         if conflicts.has_any:
             raise JobConflictError(conflicts)
 
@@ -469,7 +537,70 @@ class JobService:
             )
         return quotation_id, deal[0]["id"]
 
+    async def proyek_aktif(self, proyek_id: str) -> dict[str, Any]:
+        """Proyek tujuan job baru — harus ada dan belum dihapus."""
+        proyek = single(
+            await self._db.table("proyek")
+            .select("id, nomor_proyek, customer_id")
+            .eq("id", proyek_id)
+            .maybe_single()
+            .execute()
+        )
+        if proyek is None:
+            raise NotFoundError("Proyek tidak ditemukan")
+        return proyek
+
     async def create(self, payload: JobCreate, *, created_by: str | None) -> JobCreated:
+        """Tambah job ke proyek yang sudah ada. Job pertama proyek baru dibuat
+        bersama proyeknya lewat ProyekService.create (satu transaksi)."""
+        # BATASAN: job wajib masuk proyek (database juga menolak — trigger
+        # jobs_cek_proyek). Customer & PIC mengikuti proyek.
+        if not payload.proyek_id:
+            raise ValidationError("Job wajib masuk proyek. Buat proyek baru atau tambahkan job dari halaman proyek.")
+        await self.proyek_aktif(payload.proyek_id)
+
+        data = await self.siapkan_baris(payload, created_by=created_by)
+        data["proyek_id"] = payload.proyek_id
+        row = rows(await self._db.table("jobs").insert(data).execute())[0]
+        await self.kabari_driver(row, payload)
+        return JobCreated(id=row["id"], job_number=row["job_number"], share_token=row["share_token"])
+
+    async def siapkan_banyak(self, payloads: list[JobCreate], *, created_by: str | None) -> list[dict[str, Any]]:
+        """Siapkan beberapa job baru sekaligus (form proyek). Selain bentrok
+        dengan job aktif, job dalam satu form juga tidak boleh saling bentrok
+        unit / driver-nya."""
+        hasil: list[dict[str, Any]] = []
+        sebelumnya: list[ScheduledJob] = []
+        for i, payload in enumerate(payloads, start=1):
+            data = await self.siapkan_baris(payload, created_by=created_by, bersama=sebelumnya)
+            hasil.append(data)
+            sebelumnya.append(
+                ScheduledJob(
+                    id=f"baru-{i}",
+                    job_number=f"Job baru ke-{i} di form ini",
+                    customer_nama="",
+                    unit_id=payload.unit_id,
+                    driver_id=payload.driver_id,
+                    etd=data["etd"],
+                    eta=data["eta"],
+                    status="ditugaskan",
+                )
+            )
+        return hasil
+
+    async def siapkan_baris(
+        self,
+        payload: JobCreate,
+        *,
+        created_by: str | None,
+        bersama: list[ScheduledJob] | None = None,
+        kecuali_job_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Validasi isian job baru lalu susun baris `jobs` (tanpa proyek_id).
+
+        Dipakai bersama oleh tambah job ke proyek dan form proyek, supaya
+        aturan job baru (jadwal, bentrok, item penawaran, rute) sama persis
+        di semua jalur. `bersama` = job lain yang disimpan dalam form yang sama."""
         _reject_back_dated_etd(payload.etd)
         _reject_eta_before_etd(payload.etd, payload.eta)
 
@@ -482,7 +613,10 @@ class JobService:
                 driver_id=payload.driver_id,
                 etd=payload.etd,
                 eta=payload.eta,
-            )
+                # Ganti unit: job lama (yang digantikan) tidak dianggap bentrok.
+                exclude_job_id=kecuali_job_id,
+            ),
+            bersama=bersama,
         )
 
         route = await try_get_route(payload.asal_lat, payload.asal_lng, payload.tujuan_lat, payload.tujuan_lng)
@@ -492,9 +626,6 @@ class JobService:
         )
         _require_eta(eta_iso)
         data = {
-            "customer_id": payload.customer_id,
-            "pic_nama": clean_text(payload.pic_nama),
-            "pic_no_hp": clean_text(payload.pic_no_hp),
             "alat_diangkut": payload.alat_diangkut.strip(),
             "asal": payload.asal.strip(),
             "tujuan": payload.tujuan.strip(),
@@ -517,15 +648,16 @@ class JobService:
             "quotation_item_id": quotation_item_id,
             "created_by": created_by,
         }
-        res = await self._db.table("jobs").insert(data).execute()
-        row = rows(res)[0]
+        return data
+
+    async def kabari_driver(self, row: dict[str, Any], payload: JobCreate) -> None:
+        """Push notifikasi job baru ke driver — setelah job tersimpan."""
         await push_to_driver(
             payload.driver_id,
             title="Job baru untuk Anda",
             body=f"{row['job_number']} — {payload.asal.strip()} → {payload.tujuan.strip()}",
             data={"job_id": row["id"], "kind": "job_baru"},
         )
-        return JobCreated(id=row["id"], job_number=row["job_number"], share_token=row["share_token"])
 
     async def update(self, job_id: str, payload: JobUpdate) -> None:
         fields = payload.model_dump(exclude_unset=True)
@@ -546,6 +678,8 @@ class JobService:
             )
             if current is None:
                 raise NotFoundError("Job tidak ditemukan")
+
+        await self._tolak_ganti_penugasan_bila_sudah_cair(job_id, fields)
 
         if touches_schedule and current is not None:
             # ETD/ETA dibandingkan setelah digabung dengan nilai tersimpan, supaya
@@ -572,12 +706,6 @@ class JobService:
         # Diisi hanya bila rute diambil ulang di bawah; None berarti pakai
         # durasi yang sudah tersimpan.
         durasi_baru: float | None = None
-        if fields.get("customer_id"):
-            data["customer_id"] = fields["customer_id"]
-        if "pic_nama" in fields:
-            data["pic_nama"] = clean_text(fields["pic_nama"])
-        if "pic_no_hp" in fields:
-            data["pic_no_hp"] = clean_text(fields["pic_no_hp"])
         for key in ("alat_diangkut", "asal", "tujuan"):
             if fields.get(key):
                 data[key] = fields[key].strip()
@@ -677,59 +805,223 @@ class JobService:
         )
         return [_to_ganti_truk(r) for r in rows(res)]
 
-    async def ganti_truk(self, job_id: str, payload: GantiTrukRequest) -> None:
-        """Ganti truk (dan opsional driver) di tengah perjalanan.
-
-        Satu fungsi database = satu transaksi: riwayat, job, truk baru →
-        Bertugas, truk lama dicatat insiden kerusakan (→ Breakdown). Gagal di
-        tengah → semuanya rollback."""
-        lama = single(
+    async def _job_untuk_ganti(self, job_id: str) -> dict[str, Any]:
+        row = single(
             await self._db.table("jobs")
-            .select("driver_id, job_number, asal, tujuan")
+            .select(
+                "id, job_number, driver_id, proyek_id, alat_diangkut, asal, tujuan, etd,"
+                " asal_lat, asal_lng, tujuan_lat, tujuan_lng, catatan, quotation_id, quotation_item_id"
+            )
             .eq("id", job_id)
             .maybe_single()
             .execute()
         )
-        if lama is None:
+        if row is None:
             raise NotFoundError("Job tidak ditemukan")
+        return row
+
+    @staticmethod
+    def _rute(job: dict[str, Any]) -> str:
+        return f"{job.get('asal') or ''} → {job.get('tujuan') or ''}".strip(" →")
+
+    async def ganti_driver(self, job_id: str, payload: GantiDriverRequest) -> None:
+        """Ganti driver saat job berjalan — job & proyek sama.
+
+        Satu fungsi database = satu transaksi: riwayat, uang jalan yang
+        dikembalikan supir lama, kasbon supir lama, lalu driver job diganti.
+        BATASAN (database): job sedang berjalan; driver baru aktif & bebas;
+        dikembalikan + kasbon ≤ uang jalan yang sudah cair."""
+        lama = await self._job_untuk_ganti(job_id)
         await self._db.rpc(
-            "ganti_unit_job",
+            "ganti_driver_job",
             {
                 "p_job_id": job_id,
-                "p_unit_baru_id": payload.unit_id,
+                "p_driver_baru_id": payload.driver_id,
                 "p_alasan": payload.alasan,
-                "p_driver_baru_id": payload.driver_id or None,
-                "p_unit_trailer_baru_id": payload.unit_trailer_id or None,
+                "p_dikembalikan": payload.uang_jalan_dikembalikan,
+                "p_sumber_dana_id": payload.sumber_dana_id or None,
+                "p_kasbon": payload.kasbon,
+            },
+        ).execute()
+        nomor = lama["job_number"]
+        rute = self._rute(lama)
+        await push_to_driver(
+            payload.driver_id,
+            title="Anda menggantikan driver di job",
+            body=f"{nomor}{f' — {rute}' if rute else ''}",
+            data={"job_id": job_id, "kind": "job_baru"},
+        )
+        if lama.get("driver_id"):
+            await push_to_driver(
+                lama["driver_id"],
+                title="Job dialihkan ke driver lain",
+                body=f"{nomor} dilanjutkan driver lain.",
+                data={"job_id": job_id, "kind": "job_dialihkan"},
+            )
+
+    async def ganti_trailer(self, job_id: str, payload: GantiTrailerRequest) -> None:
+        """Unit trailer rusak saat job berjalan — job & proyek sama; trailer
+        lama dicatat insiden kerusakan (satu transaksi di database)."""
+        lama = await self._job_untuk_ganti(job_id)
+        await self._db.rpc(
+            "ganti_trailer_job",
+            {
+                "p_job_id": job_id,
+                "p_trailer_baru_id": payload.unit_trailer_id,
+                "p_alasan": payload.alasan,
                 "p_insiden_tanggal": _to_iso(payload.insiden_tanggal),
                 "p_insiden_lokasi": clean_text(payload.insiden_lokasi),
                 "p_insiden_deskripsi": payload.insiden_deskripsi,
             },
         ).execute()
-
-        driver_lama = lama.get("driver_id")
-        driver_baru = payload.driver_id or driver_lama
-        nomor = lama.get("job_number") or "Job"
-        if driver_baru and driver_baru != driver_lama:
-            rute = f"{lama.get('asal') or ''} → {lama.get('tujuan') or ''}".strip(" →")
+        if lama.get("driver_id"):
             await push_to_driver(
-                driver_baru,
-                title="Anda menggantikan driver di job",
-                body=f"{nomor}{f' — {rute}' if rute else ''} (ganti truk)",
-                data={"job_id": job_id, "kind": "job_baru"},
-            )
-            if driver_lama:
-                await push_to_driver(
-                    driver_lama,
-                    title="Job dialihkan ke driver lain",
-                    body=f"{nomor}: truk diganti dan job dilanjutkan driver lain.",
-                    data={"job_id": job_id, "kind": "job_dialihkan"},
-                )
-        elif driver_lama:
-            await push_to_driver(
-                driver_lama,
-                title="Truk job Anda diganti",
-                body=f"{nomor}: lanjutkan perjalanan dengan truk pengganti.",
+                lama["driver_id"],
+                title="Unit trailer job Anda diganti",
+                body=f"{lama['job_number']}: lanjutkan perjalanan dengan unit trailer pengganti.",
                 data={"job_id": job_id, "kind": "job_diubah"},
+            )
+
+    async def ganti_unit(self, job_id: str, payload: GantiUnitRequest, *, created_by: str | None) -> JobCreated:
+        """Unit rusak / insiden → job pengganti (mulai dari awal) di proyek yang sama.
+
+        Job pengganti disiapkan dengan aturan job baru yang sama (jadwal,
+        bentrok, rute, item penawaran), lalu satu fungsi database menutup job
+        lama sebagai Selesai ("Unit rusak - diganti JOB-xxx"), membuat job
+        pengganti, mencatat insiden unit lama, pengembalian & kasbon."""
+        lama = await self._job_untuk_ganti(job_id)
+        # BATASAN: ETD job pengganti tidak boleh lebih awal dari ETD job awal.
+        if lama.get("etd") and parse_iso(payload.etd) < parse_iso(lama["etd"]):
+            raise ValidationError(
+                f"ETD job pengganti tidak boleh lebih awal dari ETD job awal {lama['job_number']}."
+            )
+        isian = JobCreate(
+            alat_diangkut=lama["alat_diangkut"],
+            asal=lama["asal"],
+            tujuan=lama["tujuan"],
+            asal_lat=num_or_none(lama.get("asal_lat")),
+            asal_lng=num_or_none(lama.get("asal_lng")),
+            tujuan_lat=num_or_none(lama.get("tujuan_lat")),
+            tujuan_lng=num_or_none(lama.get("tujuan_lng")),
+            unit_id=payload.unit_id,
+            unit_trailer_id=payload.unit_trailer_id,
+            driver_id=payload.driver_id,
+            etd=payload.etd,
+            eta=payload.eta,
+            uang_jalan_awal=payload.uang_jalan_awal,
+            catatan=payload.catatan if payload.catatan is not None else lama.get("catatan"),
+            quotation_id=lama.get("quotation_id"),
+            quotation_item_id=lama.get("quotation_item_id"),
+            proyek_id=lama["proyek_id"],
+        )
+        data = await self.siapkan_baris(isian, created_by=created_by, kecuali_job_id=job_id)
+        res = await self._db.rpc(
+            "ganti_unit_job_baru",
+            {
+                "p_job_id": job_id,
+                "p_job_baru": data,
+                "p_alasan": payload.alasan,
+                "p_insiden_tanggal": _to_iso(payload.insiden_tanggal),
+                "p_insiden_lokasi": clean_text(payload.insiden_lokasi),
+                "p_insiden_deskripsi": payload.insiden_deskripsi,
+                "p_dikembalikan": payload.uang_jalan_dikembalikan,
+                "p_sumber_dana_id": payload.sumber_dana_id or None,
+                "p_kasbon": payload.kasbon,
+            },
+        ).execute()
+        baru_id = str(res.data)
+        baru = single(
+            await self._db.table("jobs")
+            .select("id, job_number, share_token")
+            .eq("id", baru_id)
+            .maybe_single()
+            .execute()
+        )
+        if baru is None:
+            raise NotFoundError("Job pengganti tidak ditemukan")
+        await self.kabari_driver(baru, isian)
+        if lama.get("driver_id") and lama["driver_id"] != payload.driver_id:
+            await push_to_driver(
+                lama["driver_id"],
+                title="Job ditutup — unit diganti",
+                body=f"{lama['job_number']} ditutup karena unit rusak; dilanjutkan {baru['job_number']}.",
+                data={"job_id": job_id, "kind": "job_dialihkan"},
+            )
+        return JobCreated(id=baru["id"], job_number=baru["job_number"], share_token=baru["share_token"])
+
+    async def ganti_unit_ulang(
+        self, job_id: str, payload: GantiUnitUlangRequest, *, created_by: str | None
+    ) -> JobCreated:
+        """Job pengganti (ganti unit) dibatalkan → buat pengganti baru untuk job
+        lama yang sama (proyek, rute, penawaran sama; unit bebas). Job pengganti
+        yang dibatalkan dihapus (soft delete). BATASAN dijaga
+        buat_ulang_job_pengganti (migration 20261001000029)."""
+        lama = await self._job_untuk_ganti(job_id)
+        # BATASAN: ETD pengganti tidak boleh lebih awal dari ETD job awal.
+        if lama.get("etd") and parse_iso(payload.etd) < parse_iso(lama["etd"]):
+            raise ValidationError(
+                f"ETD job pengganti tidak boleh lebih awal dari ETD job awal {lama['job_number']}."
+            )
+        isian = JobCreate(
+            alat_diangkut=lama["alat_diangkut"],
+            asal=lama["asal"],
+            tujuan=lama["tujuan"],
+            asal_lat=num_or_none(lama.get("asal_lat")),
+            asal_lng=num_or_none(lama.get("asal_lng")),
+            tujuan_lat=num_or_none(lama.get("tujuan_lat")),
+            tujuan_lng=num_or_none(lama.get("tujuan_lng")),
+            unit_id=payload.unit_id,
+            unit_trailer_id=payload.unit_trailer_id,
+            driver_id=payload.driver_id,
+            etd=payload.etd,
+            eta=payload.eta,
+            uang_jalan_awal=payload.uang_jalan_awal,
+            catatan=payload.catatan if payload.catatan is not None else lama.get("catatan"),
+            quotation_id=lama.get("quotation_id"),
+            quotation_item_id=lama.get("quotation_item_id"),
+            proyek_id=lama["proyek_id"],
+        )
+        data = await self.siapkan_baris(isian, created_by=created_by, kecuali_job_id=job_id)
+        res = await self._db.rpc(
+            "buat_ulang_job_pengganti",
+            {"p_job_id": job_id, "p_job_baru": data, "p_alasan": payload.alasan},
+        ).execute()
+        baru = single(
+            await self._db.table("jobs")
+            .select("id, job_number, share_token")
+            .eq("id", str(res.data))
+            .maybe_single()
+            .execute()
+        )
+        if baru is None:
+            raise NotFoundError("Job pengganti tidak ditemukan")
+        await self.kabari_driver(baru, isian)
+        return JobCreated(id=baru["id"], job_number=baru["job_number"], share_token=baru["share_token"])
+
+    async def _tolak_ganti_penugasan_bila_sudah_cair(self, job_id: str, fields: dict[str, Any]) -> None:
+        """BATASAN: setelah ada uang jalan keluar (pencairan aktif), unit, unit
+        trailer, dan driver job tidak bisa diubah lewat edit job — gunakan Ganti
+        driver / Ganti unit trailer / Ganti unit (uang jalan supir lama dicatat)."""
+        kolom = [k for k in ("unit_id", "unit_trailer_id", "driver_id") if k in fields]
+        if not kolom:
+            return
+        res = await (
+            self._db.table("jobs")
+            .select("unit_id, unit_trailer_id, driver_id, uang_jalan(jenis)")
+            .eq("id", job_id)
+            .eq("uang_jalan.status", AKTIF)
+            .eq("uang_jalan.jenis", "pencairan")
+            .maybe_single()
+            .execute()
+        )
+        job = single(res)
+        if job is None or not (job.get("uang_jalan") or []):
+            return
+        berubah = [k for k in kolom if (fields[k] or None) != (job.get(k) or None)]
+        if berubah:
+            raise ValidationError(
+                "Unit, unit trailer, dan driver tidak bisa diubah karena uang jalan sudah dicairkan. "
+                "Gunakan Ganti driver / Ganti unit di detail job."
             )
 
     async def update_status(self, job_id: str, payload: UpdateStatusRequest) -> None:

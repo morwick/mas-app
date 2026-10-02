@@ -8,7 +8,7 @@ from supabase import AsyncClient
 
 from app.core.errors import NotFoundError, ValidationError
 from app.core.paging import Page, PageParams, apply_window, build_page, ilike_any
-from app.core.pg import clean_text, rows, single
+from app.core.pg import clean_text, first, rows, single
 from app.modules.customers.schemas import Customer, CustomerCreate, CustomerUpdate
 
 # Field opsional bertipe teks — dinormalkan seragam ("" → None).
@@ -99,8 +99,10 @@ class CustomerService:
 
     async def job_counts(self) -> dict[str, int]:
         # Job yang dibatalkan tidak ikut dihitung.
-        res = await self._db.table("jobs").select("customer_id").neq("status_job", "cancelled").execute()
-        return dict(Counter(r["customer_id"] for r in rows(res)))
+        # Customer job tersimpan di proyeknya; proyek tanpa customer tidak dihitung.
+        res = await self._db.table("jobs").select("proyek:proyek(customer_id)").neq("status_job", "cancelled").execute()
+        ids = ((first(r.get("proyek")) or {}).get("customer_id") for r in rows(res))
+        return dict(Counter(i for i in ids if i))
 
     async def quotation_counts(self) -> dict[str, int]:
         res = await self._db.table("quotations").select("customer_id").execute()

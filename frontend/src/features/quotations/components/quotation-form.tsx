@@ -24,8 +24,6 @@ interface Props {
   customers: Customer[];
   /** Diisi saat mode edit. Kosong = buat penawaran baru. */
   quotation?: Quotation;
-  /** Pratinjau nomor untuk mode buat baru — nomor final ditetapkan saat simpan. */
-  nextNumber?: string;
   defaultTtdNama: string;
 }
 
@@ -122,7 +120,6 @@ function besok(iso: string): string {
 export function QuotationForm({
   customers,
   quotation,
-  nextNumber,
   defaultTtdNama
 }: Props) {
   const navigate = useNavigate();
@@ -353,17 +350,12 @@ export function QuotationForm({
           Kembali
         </Link>
         <div style={{ flex: 1 }} />
-        <span className="mono" style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
-          {isEdit ? quotation!.quote_number : nextNumber}
-        </span>
+        {isEdit && (
+          <span className="mono" style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
+            {quotation!.quote_number}
+          </span>
+        )}
       </div>
-
-      {!isEdit && (
-        <p className="caption" style={{ color: "var(--text-tertiary)" }}>
-          Nomor di atas adalah perkiraan. Nomor final ditetapkan saat penawaran
-          disimpan, supaya tidak ada nomor yang hangus kalau form ini ditutup.
-        </p>
-      )}
 
       {/* ── Tujuan surat ─────────────────────────────────────────────── */}
       <div className="card card-pad">

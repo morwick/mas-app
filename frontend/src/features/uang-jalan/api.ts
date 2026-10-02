@@ -21,11 +21,23 @@ export interface UangJalanInput {
   catatan?: string | null;
 }
 
+/** Pengajuan tambahan uang jalan yang dihapus selama menunggu approval. */
+export interface TambahanDibatalkan {
+  id: string;
+  tanggal: string;
+  jumlah: number;
+  keperluan?: string | null;
+  catatan?: string | null;
+  created_at: string;
+}
+
 export interface JobUangJalan {
   transaksi: UangJalan[];
   ringkasan: UangJalanRingkasan;
   pengajuan: UangJalanRequest[];
   posisi: UangJalanPosisi | null;
+  /** Riwayat saja — tidak dihitung ke ringkasan. */
+  dibatalkan?: TambahanDibatalkan[];
 }
 
 export const listSumberDana = () => api.get<SumberDana[]>("/sumber-dana");
@@ -66,8 +78,10 @@ export function updateUangJalan(id: string, input: UangJalanInput): Promise<Acti
   return mutate(api.put(`/uang-jalan/${id}`, input));
 }
 
-export function deleteUangJalan(id: string, _jobId?: string): Promise<ActionResult<unknown>> {
-  return mutate(api.delete(`/uang-jalan/${id}`));
+export function deleteUangJalan(id: string, jobId?: string): Promise<ActionResult<unknown>> {
+  // Detail job memuat banyak data: cukup tunggu kartu uang jalan job ini segar,
+  // sisanya (dashboard, approval, dll.) menyusul di latar belakang.
+  return mutate(api.delete(`/uang-jalan/${id}`), jobId ? { tungguKunci: [["uang-jalan", "job", jobId]] } : {});
 }
 
 export function setUangJalanAwal(jobId: string, uangJalanAwal: number): Promise<ActionResult<unknown>> {

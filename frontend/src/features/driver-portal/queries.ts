@@ -29,6 +29,8 @@ export const useDriverNotifications = () =>
   useQuery({
     queryKey: ["driver", "notifications"],
     queryFn: driverNotifications,
+    // Notifikasi diperbarui di latar — tidak memunculkan popup loading halaman.
+    meta: { latar: true },
     refetchInterval: NOTIFIKASI_POLL_MS,
     refetchIntervalInBackground: true
   });

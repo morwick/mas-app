@@ -59,4 +59,17 @@ describe("info tagihan di detail job", () => {
     tampil({ id: "j2", status: "selesai", info_tagihan: false } as unknown as Job);
     expect(screen.queryByText(/tagih/i)).toBeNull();
   });
+
+  it("job selesai belum ditagih: tampil 'Belum ditagihkan'; kosongan (tanpa customer): tidak tampil", () => {
+    const belum = { ...JOB, invoice_id: null, invoice_number: null, customer_id: "c1" } as unknown as Job;
+    const { unmount } = render(
+      <MemoryRouter>
+        <TagihanJobInfo job={belum} />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("Belum ditagihkan")).toBeTruthy();
+    unmount();
+    tampil({ ...belum, customer_id: null } as unknown as Job);
+    expect(screen.queryByText("Belum ditagihkan")).toBeNull();
+  });
 });

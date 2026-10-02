@@ -138,7 +138,7 @@ export function UangJalanModal({
         ? "Perubahan tersimpan"
         : pencairan
           ? "Sudah dicatat"
-          : "Uang jalan ditambah"
+          : "Tambahan uang jalan diajukan — menunggu approval"
     );
     onSaved();
     onClose();
@@ -149,12 +149,12 @@ export function UangJalanModal({
       open={open}
       onClose={onClose}
       title={
-        existing ? "Ubah catatan uang jalan" : request ? "Cairkan pengajuan driver" : "Catat uang jalan"
+        existing ? "Ubah catatan uang jalan" : request ? "Cairkan pengajuan driver" : "Pengajuan uang jalan"
       }
       description={
         pencairan
           ? "Uang yang benar-benar keluar dari kas ke supir — wajib dengan foto bukti transfer."
-          : "Kesepakatan menambah uang jalan — belum ada uang yang berpindah."
+          : "Kesepakatan menambah uang jalan — belum ada uang yang berpindah. Diajukan ke approver; uang jalan job baru bertambah setelah disetujui."
       }
       footer={
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -303,7 +303,7 @@ export function UangJalanModal({
           }}
         >
           Jumlah ini melebihi sisa uang jalan {formatRupiah(Math.max(batasPemberian, 0))} dan tidak bisa
-          disimpan. Bila memang perlu lebih, catat dulu sebagai tambah uang jalan.
+          disimpan. Bila memang perlu lebih, silakan ajukan tambahan uang jalan.
         </div>
       )}
     </Modal>

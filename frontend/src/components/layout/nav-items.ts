@@ -25,6 +25,9 @@ import {
   ShieldCheck,
   Hammer,
   HardHat,
+  UserCheck,
+  ClipboardCheck,
+  FolderKanban,
   type LucideIcon
 } from "lucide-react";
 
@@ -37,6 +40,8 @@ export interface NavItem {
   match?: (pathname: string) => boolean;
   /** Role yang boleh melihat menu ini. Kosong/undefined = semua role login. */
   roles?: UserRoleLike[];
+  /** Angka tindakan yang menunggu (mis. pengajuan approval) — tampil bila > 0. */
+  badge?: number;
 }
 
 /** Induk menu yang hanya menampung submenu — bukan tautan. */
@@ -137,6 +142,17 @@ const penawaran: NavItem = {
   roles: ["superadmin", "admin", "finance"]
 };
 
+// Menu Proyek: daftar proyek (/proyek) & halaman proyek.
+const proyek: NavItem = {
+  href: "/proyek",
+  label: "Proyek",
+  icon: FolderKanban,
+  match: (p) => p.startsWith("/proyek"),
+  roles: ["superadmin", "admin"]
+};
+
+// Menu Job (di bawah Proyek): daftar job = isi tab Proyek Detail (Job) (/jobs)
+// & semua halaman job. Badge "job aktif" ada di sini.
 const job: NavItem = {
   href: "/jobs",
   label: "Job",
@@ -265,6 +281,27 @@ export const profileItem: NavItem = {
   match: (p) => p.startsWith("/profil")
 };
 
+// Master approver per fitur — superadmin saja.
+const approver: NavItem = {
+  href: "/approver",
+  label: "Approver",
+  icon: UserCheck,
+  match: (p) => p.startsWith("/approver"),
+  roles: ["superadmin"]
+};
+
+/**
+ * Halaman Approval tidak ada di pohon statis: grupnya dibuat per pengguna dari
+ * fitur yang ia pegang sebagai approver (lihat buatGrupApproval). Item ini
+ * hanya untuk judul halaman / breadcrumb.
+ */
+export const approvalItem: NavItem = {
+  href: "/approval",
+  label: "Approval",
+  icon: ClipboardCheck,
+  match: (p) => p.startsWith("/approval/")
+};
+
 // ── Susunan menu ───────────────────────────────────────────────────────────
 export const navTree: NavEntry[] = [
   dashboard,
@@ -275,6 +312,7 @@ export const navTree: NavEntry[] = [
     items: [
       karyawan,
       pengguna,
+      approver,
       jenisUnit,
       unit,
       unitTrailer,
@@ -289,7 +327,7 @@ export const navTree: NavEntry[] = [
     key: "monitoring",
     label: "Monitoring",
     icon: Activity,
-    items: [penawaran, job, pantau, uangJalan, service, tagihan, piutang, penjualan, penghapusan]
+    items: [penawaran, proyek, job, pantau, uangJalan, service, tagihan, piutang, penjualan, penghapusan]
   },
   laporan,
   logSistem,
@@ -299,8 +337,38 @@ export const navTree: NavEntry[] = [
 /** Semua item dalam satu larik datar — dipakai pencarian judul halaman. */
 export const navItems: NavItem[] = [
   ...navTree.flatMap((e) => (isNavGroup(e) ? e.items : [e])),
-  profileItem
+  profileItem,
+  approvalItem
 ];
+
+/**
+ * Grup menu "Approval" untuk karyawan yang menjadi approver — di role apa pun.
+ * Satu submenu per fitur, dengan angka pengajuan yang menunggu keputusannya.
+ * null bila ia tidak memegang fitur apa pun (menu tidak tampil).
+ */
+export function buatGrupApproval(menu: { kode: string; nama: string; menunggu_saya: number }[]): NavGroup | null {
+  if (menu.length === 0) return null;
+  return {
+    key: "approval",
+    label: "Approval",
+    icon: ClipboardCheck,
+    items: menu.map((m) => ({
+      href: `/approval/${m.kode}`,
+      label: m.nama,
+      icon: ClipboardCheck,
+      match: (p: string) => p.startsWith(`/approval/${m.kode}`),
+      badge: m.menunggu_saya
+    }))
+  };
+}
+
+/** Sisipkan grup Approval tepat setelah Monitoring (atau di akhir bila tidak ada). */
+export function sisipkanGrupApproval(entries: NavEntry[], grup: NavGroup | null | undefined): NavEntry[] {
+  if (!grup) return entries;
+  const i = entries.findIndex((e) => isNavGroup(e) && e.key === "monitoring");
+  if (i < 0) return [...entries, grup];
+  return [...entries.slice(0, i + 1), grup, ...entries.slice(i + 1)];
+}
 
 // Dicari lewat href, bukan indeks: menyisipkan menu baru di navItems dulu
 // diam-diam menggeser isi bottom nav karena indeksnya ikut bergeser.

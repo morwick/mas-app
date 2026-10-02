@@ -162,6 +162,19 @@ async def require_auth(
     return AuthContext(user=user, token=token)
 
 
+async def require_auth_segar(
+    request: Request,
+    factory: SupabaseClientFactory = Depends(get_client_factory),
+) -> AuthContext:
+    """Seperti require_auth, tetapi profil selalu dibaca ulang dari database
+    (melewati cache 60 detik) — untuk /auth/me, supaya perubahan role / nama
+    oleh admin langsung terlihat saat aplikasi dibuka ulang."""
+    token = bearer_token(request)
+    if token:
+        forget_cached_identity(token)
+    return await require_auth(request, factory)
+
+
 async def require_superadmin(auth: AuthContext = Depends(require_auth)) -> AuthContext:
     if not auth.user.is_superadmin:
         raise ForbiddenError("Hanya super administrator yang boleh mengakses ini.")

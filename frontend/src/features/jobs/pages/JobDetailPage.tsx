@@ -40,6 +40,7 @@ export function JobDetailPage() {
       uangJalan={uangJalan.data?.transaksi ?? []}
       uangJalanRingkasan={uangJalan.data?.ringkasan ?? EMPTY_RINGKASAN}
       uangJalanPengajuan={uangJalan.data?.pengajuan ?? []}
+      uangJalanDibatalkan={uangJalan.data?.dibatalkan ?? []}
       hanyaLihat={hanyaLihat}
     />
   );

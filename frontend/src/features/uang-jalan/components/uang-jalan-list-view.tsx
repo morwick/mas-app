@@ -1,27 +1,62 @@
 import { useMemo, useState } from "react";
+import { RuteJob } from "@/features/jobs/components/rute-job";
 import { Link } from "react-router-dom";
 import { BellRing, Search, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatRupiah, formatDate, formatDateTime } from "@/lib/utils";
+import { formatRupiah, formatDateTime } from "@/lib/utils";
 import type { UangJalanJobRow, UangJalanRequest } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
 
-type Filter = "semua" | "pengajuan" | "berjalan" | "belum_cair" | "lebih_dari_uang_jalan";
+// BATASAN: uang yang dikasih tidak boleh melebihi uang jalan job (dijaga
+// database) — filter "Lebih dari uang jalan" tidak diperlukan lagi.
+type Filter = "semua" | "pengajuan" | "approval" | "berjalan" | "belum_cair";
 
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: "semua", label: "Semua" },
   { key: "pengajuan", label: "Ada pengajuan driver" },
+  // Tambahan uang jalan yang masih menunggu approval (badge "Approval").
+  { key: "approval", label: "Menunggu approval" },
   { key: "berjalan", label: "Masih jalan" },
-  { key: "belum_cair", label: "Belum dikasih sama sekali" },
-  { key: "lebih_dari_uang_jalan", label: "Lebih dari uang jalan" }
+  { key: "belum_cair", label: "Belum dikasih sama sekali" }
 ];
 
 interface Props {
   rows: UangJalanJobRow[];
   /** Pengajuan driver yang menunggu kasir (Fase 3). */
   pengajuan?: UangJalanRequest[];
+}
+
+/**
+ * Kolom Pengajuan: badge terpisah & ringkas —
+ * "Cair N" (oranye) = pengajuan driver menunggu dicairkan;
+ * "Approval N" (kuning) = tambahan uang jalan menunggu approval.
+ */
+function BadgePengajuan({ pencairan, approval }: { pencairan: number; approval: number }) {
+  if (pencairan === 0 && approval === 0) return <span className="caption">—</span>;
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      {pencairan > 0 && (
+        <span
+          className="badge badge-perbaikan"
+          title={`${pencairan} pengajuan driver menunggu dicairkan`}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          Cair {pencairan}
+        </span>
+      )}
+      {approval > 0 && (
+        <span
+          className="badge badge-menunggu"
+          title={`${approval} tambahan uang jalan menunggu approval`}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          Approval {approval}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function UangJalanListView({ rows, pengajuan = [] }: Props) {
@@ -32,9 +67,9 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
       if (filter === "pengajuan" && r.pengajuan_menunggu === 0) return false;
+      if (filter === "approval" && !(r.tambahan_menunggu_approval ?? 0)) return false;
       if (filter === "berjalan" && r.status === "selesai") return false;
       if (filter === "belum_cair" && r.ringkasan.cair > 0) return false;
-      if (filter === "lebih_dari_uang_jalan" && r.ringkasan.sisa >= 0) return false;
       if (!needle) return true;
       return (
         r.job_number.toLowerCase().includes(needle) ||
@@ -62,9 +97,10 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
 
   const jumlah = useMemo(
     () => ({
+      pengajuan: rows.filter((r) => r.pengajuan_menunggu > 0).length,
+      approval: rows.filter((r) => (r.tambahan_menunggu_approval ?? 0) > 0).length,
       berjalan: rows.filter((r) => r.status !== "selesai").length,
-      belum_cair: rows.filter((r) => r.ringkasan.cair === 0).length,
-      lebih_dari_uang_jalan: rows.filter((r) => r.ringkasan.sisa < 0).length
+      belum_cair: rows.filter((r) => r.ringkasan.cair === 0).length
     }),
     [rows]
   );
@@ -169,7 +205,6 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
                   <th style={{ textAlign: "right" }}>Uang jalan</th>
                   <th style={{ textAlign: "right" }}>Dikasih</th>
                   <th style={{ textAlign: "right" }}>Belum dikasih</th>
-                  <th style={{ textAlign: "right" }}>Terakhir</th>
                   <th>Pengajuan</th>
                 </tr>
               </thead>
@@ -185,13 +220,15 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
                           style={{
                             fontWeight: 600,
                             fontSize: 12.5,
+                            whiteSpace: "nowrap",
                             textDecoration: "none",
                             color: "var(--brand-primary-dark)"
                           }}
                         >
                           {r.job_number}
                         </Link>
-                        <div className="caption">{r.customer_nama ?? "—"}</div>
+                        {/* Tanpa customer = proyek kosongan → biayanya cost perusahaan. */}
+                        <div className="caption">{r.customer_nama ?? "Kosongan · cost perusahaan"}</div>
                       </td>
                       <td>
                         <div style={{ fontSize: 12.5, fontWeight: 600 }}>
@@ -199,8 +236,9 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
                         </div>
                         <div className="caption">{r.driver_nama ?? "—"}</div>
                       </td>
-                      <td style={{ fontSize: 12.5 }}>
-                        {r.asal} → {r.tujuan}
+                      {/* Rute sama dengan daftar Job: asal & tujuan dua baris, dipotong 50 karakter. */}
+                      <td style={{ fontSize: 12 }}>
+                        <RuteJob asal={r.asal} tujuan={r.tujuan} />
                       </td>
                       <td className="mono" style={{ textAlign: "right" }}>
                         {r.ringkasan.uang_jalan > 0
@@ -234,20 +272,11 @@ export function UangJalanListView({ rows, pengajuan = [] }: Props) {
                         {minus ? "-" : ""}
                         {formatRupiah(Math.abs(r.ringkasan.sisa))}
                       </td>
-                      <td
-                        className="caption mono"
-                        style={{ textAlign: "right" }}
-                      >
-                        {r.pencairan_terakhir
-                          ? formatDate(r.pencairan_terakhir)
-                          : "—"}
-                      </td>
                       <td>
-                        {r.pengajuan_menunggu > 0 ? (
-                          <span className="badge badge-perbaikan">{r.pengajuan_menunggu} menunggu</span>
-                        ) : (
-                          <span className="caption">—</span>
-                        )}
+                        <BadgePengajuan
+                          pencairan={r.pengajuan_menunggu}
+                          approval={r.tambahan_menunggu_approval ?? 0}
+                        />
                       </td>
                     </tr>
                   );

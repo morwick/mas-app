@@ -108,6 +108,13 @@ export function formatWaktuWIB(date: Date | string | undefined | null) {
   return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
 }
 
+/** Bulan (1–12) & tahun sebuah waktu menurut WIB; tanpa argumen = saat ini. */
+export function bulanTahunWIB(date: Date | string = new Date()): { bulan: number; tahun: number } {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const p = Object.fromEntries(WIB_PARTS.formatToParts(d).map((x) => [x.type, x.value]));
+  return { bulan: Number(p.month), tahun: Number(p.year) };
+}
+
 export function formatDate(date: Date | string | undefined | null) {
   if (!date) return "-";
   const d = typeof date === "string" ? new Date(date) : date;

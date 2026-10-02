@@ -1,6 +1,6 @@
 import { api, formDenganDokumen } from "@/lib/api/client";
 import { mutate } from "@/lib/api/query";
-import type { ActionResult, Driver, Job } from "@/types";
+import type { ActionResult, Driver, Job, KasbonDriver } from "@/types";
 
 export interface DriverInput {
   /** Driver dipilih dari data karyawan; nama driver mengikuti karyawan. */
@@ -28,6 +28,10 @@ export const getDriver = (id: string) => api.get<Driver>(`/drivers/${id}`);
 
 /** Semua job driver (terbaru dulu) — untuk halaman detail driver. */
 export const getDriverJobs = (id: string) => api.get<Job[]>(`/drivers/${id}/jobs`);
+
+/** Riwayat & total kasbon supir (dari ganti driver / ganti unit). */
+export const getDriverKasbon = (id: string) =>
+  api.get<{ total: number; riwayat: KasbonDriver[] }>(`/drivers/${id}/kasbon`);
 
 /** Dokumen SIM opsional ikut terkirim bersama isian dalam satu permintaan. */
 export function createDriver(input: DriverInput, dokumenSim?: File | null): Promise<ActionResult<Driver>> {

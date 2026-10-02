@@ -87,9 +87,12 @@ async def test_tidak_ada_waktu_di_masa_depan_dan_terbaru_dulu() -> None:
             ],
         }
     )
-    hasil = await NotificationService(db).build(now=NOW)  # type: ignore[arg-type]
+    hasil = await NotificationService(db).build(now=NOW, roles=["finance"])  # type: ignore[arg-type]
     ids = {n.id for n in hasil}
     assert {"invoice-jt-inv1", "invoice-jt-inv2"} <= ids
+    # BATASAN: tagihan jatuh tempo hanya untuk superadmin & finance.
+    tanpa = await NotificationService(db).build(now=NOW, roles=["admin", "operator"])  # type: ignore[arg-type]
+    assert not any(n.id.startswith("invoice-jt-") for n in tanpa)
     waktu = [parse_iso(n.created_at) for n in hasil]
     assert all(w <= NOW for w in waktu), [n.created_at for n in hasil]
     assert waktu == sorted(waktu, reverse=True)

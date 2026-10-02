@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from typing import Any
 
-from app.modules.dashboard.router import penawaran_deal_tanpa_job
+from app.modules.dashboard.router import penawaran_deal_tanpa_proyek
 
 
 class _Q:
@@ -25,32 +25,41 @@ class _Db:
         return _Q(self.data)
 
 
-async def test_hanya_item_deal_tanpa_job_aktif_yang_dihitung() -> None:
+async def test_dihitung_per_penawaran_cukup_satu_proyek_aktif() -> None:
     db = _Db(
         [
             {
-                # 2 item deal: 1 sudah ada job, 1 job-nya dibatalkan → 1 belum; 1 item ditolak diabaikan.
+                # 2 item deal, baru 1 yang punya proyek → TIDAK dihitung (cukup satu proyek).
                 "id": "q1",
                 "quote_number": "0001/SK",
                 "customer_nama": "PT A",
-                "quotation_items": [
-                    {"id": "a", "keputusan": "deal"},
-                    {"id": "b", "keputusan": "deal"},
-                    {"id": "c", "keputusan": "ditolak"},
-                ],
-                "jobs": [
-                    {"quotation_item_id": "a", "status_job": "selesai"},
-                    {"quotation_item_id": "b", "status_job": "cancelled"},
-                ],
+                "quotation_items": [{"id": "a", "keputusan": "deal"}, {"id": "b", "keputusan": "deal"}],
+                "jobs": [{"proyek_id": "p1", "status_job": "selesai"}],
             },
             {
-                # Semua item deal sudah punya job → tidak muncul.
+                # Satu-satunya job dibatalkan → belum ada proyek aktif → dihitung.
                 "id": "q2",
                 "quote_number": "0002/SK",
                 "customer_nama": "PT B",
-                "quotation_items": [{"id": "d", "keputusan": "deal"}],
-                "jobs": [{"quotation_item_id": "d", "status_job": "ditugaskan"}],
+                "quotation_items": [{"id": "c", "keputusan": "deal"}],
+                "jobs": [{"proyek_id": "p2", "status_job": "cancelled"}],
+            },
+            {
+                # Deal tanpa job sama sekali → dihitung.
+                "id": "q3",
+                "quote_number": "0003/SK",
+                "customer_nama": "PT C",
+                "quotation_items": [{"id": "d", "keputusan": "deal"}, {"id": "e", "keputusan": "ditolak"}],
+                "jobs": [],
+            },
+            {
+                # Tidak ada item deal → tidak dihitung.
+                "id": "q4",
+                "quote_number": "0004/SK",
+                "customer_nama": "PT D",
+                "quotation_items": [{"id": "f", "keputusan": "ditolak"}],
+                "jobs": [],
             },
         ]
     )
-    assert await penawaran_deal_tanpa_job(db) == 1  # type: ignore[arg-type]
+    assert await penawaran_deal_tanpa_proyek(db) == 2  # type: ignore[arg-type]

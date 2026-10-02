@@ -14,13 +14,13 @@ import {
   Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { QuotationStatusBadge } from "./quotation-status-badge";
 import { KeputusanItemModal } from "./keputusan-item-modal";
-import { adaRevisi, berlakuSuratAsli } from "../surat-revisi";
+import { adaRevisi, berlakuSuratAsli, suratRevisi } from "../surat-revisi";
 import { CetakRevisiModal } from "./cetak-revisi-modal";
+import { ProyekPenawaran } from "./proyek-penawaran";
 import {
   deleteQuotation,
   setQuotationStatus
@@ -91,9 +91,10 @@ export function QuotationDetailView({
     toast.success("Status penawaran diperbarui");
   }
 
-  // Nomor urut item — untuk kolom "Item" di daftar job.
-  const nomorItem = new Map(q.items.map((it, i) => [it.id, i + 1]));
-  const adaKeputusan = q.items.some((it) => it.keputusan !== "menunggu");
+  // Ada revisi harga atau item ditolak → ringkasan biaya dihitung ulang
+  // (harga final, tanpa item ditolak) dan angka pengajuan awal dicoret.
+  const adaDitolak = q.items.some((it) => it.keputusan === "ditolak");
+  const revisi = adaRevisi(q) || adaDitolak ? suratRevisi(q) : null;
 
   async function onDelete() {
     setLoading(true);
@@ -386,12 +387,18 @@ export function QuotationDetailView({
               </tr>
             </thead>
             <tbody>
-              {q.items.map((it, idx) => (
+              {q.items.map((it, idx) => {
+                // Item ditolak: baris dicoret (kecuali kolom keputusan & job) — tidak ikut total.
+                const coret: React.CSSProperties | undefined =
+                  it.keputusan === "ditolak"
+                    ? { textDecoration: "line-through", color: "var(--text-tertiary)" }
+                    : undefined;
+                return (
                 <tr key={it.id}>
-                  <td>{idx + 1}</td>
-                  <td>{it.dari}</td>
-                  <td>{it.tujuan}</td>
-                  <td>
+                  <td style={coret}>{idx + 1}</td>
+                  <td style={coret}>{it.dari}</td>
+                  <td style={coret}>{it.tujuan}</td>
+                  <td style={coret}>
                     {it.qty} {it.satuan}
                     {it.nama_alat && (
                       <div
@@ -401,17 +408,11 @@ export function QuotationDetailView({
                       </div>
                     )}
                   </td>
-                  <td className="mono" style={{ textAlign: "right" }}>
+                  <td className="mono" style={{ textAlign: "right", ...coret }}>
                     <Harga awal={it.harga_satuan} revisi={it.harga_revisi} />
                   </td>
-                  <td
-                    className="mono"
-                    style={{ textAlign: "right", fontWeight: 600 }}
-                  >
-                    <Harga
-                      awal={it.subtotal}
-                      revisi={it.harga_revisi != null ? it.subtotal_final : null}
-                    />
+                  <td className="mono" style={{ textAlign: "right", fontWeight: 600, ...coret }}>
+                    <Harga awal={it.subtotal} revisi={it.harga_revisi != null ? it.subtotal_final : null} />
                   </td>
                   <td>
                     <KeputusanBadge keputusan={it.keputusan} />
@@ -433,13 +434,15 @@ export function QuotationDetailView({
                     <td>
                       {it.keputusan === "deal" ? (
                         <>
-                          <Link to={`/jobs/new?quotation=${q.id}&item=${it.id}`}>
+                          {/* Unit dipilih di form proyek; bila penawaran & unit itu sudah
+                              punya proyek, form otomatis menggabungkan job ke sana. */}
+                          <Link to={`/proyek/new?quotation=${q.id}&item=${it.id}`}>
                             <Button
                               size="sm"
                               variant={it.jumlah_job > 0 ? "secondary" : "primary"}
                               rightIcon={<ArrowRight style={{ width: 13, height: 13 }} />}
                             >
-                              {it.jumlah_job > 0 ? "Buat job lagi" : "Buat job"}
+                              Buat / Gabung Proyek
                             </Button>
                           </Link>
                           {it.jumlah_job > 0 && (
@@ -454,7 +457,8 @@ export function QuotationDetailView({
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -468,17 +472,14 @@ export function QuotationDetailView({
             gap: 6
           }}
         >
-          <SumRow label="Subtotal" value={q.subtotal} />
+          {/* Ada revisi harga / item ditolak → angka pengajuan awal dicoret, di
+              sampingnya angka baru (hitungan surat revisi: harga final, item deal
+              & menunggu keputusan; item ditolak tidak ikut). */}
+          <SumRow label="Subtotal" value={q.subtotal} baru={revisi?.subtotal} />
           {q.ppn_aktif && (
-            <SumRow
-              label={`PPN ${Number(q.ppn_persen)}%`}
-              value={q.ppn_nominal}
-            />
+            <SumRow label={`PPN ${Number(q.ppn_persen)}%`} value={q.ppn_nominal} baru={revisi?.ppn_nominal} />
           )}
-          <SumRow label="Total" value={q.total} strong />
-          {adaKeputusan && (
-            <SumRow label="Nilai deal (sebelum PPN)" value={q.nilai_deal} />
-          )}
+          <SumRow label="Total" value={q.total} baru={revisi?.total} strong />
         </div>
       </div>
 
@@ -487,56 +488,13 @@ export function QuotationDetailView({
       {jobs.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <p className="eyebrow">Job dari penawaran ini</p>
+            <p className="eyebrow">Proyek dari penawaran ini</p>
             <span className="caption" style={{ color: "var(--text-tertiary)" }}>
-              {jobs.length} job · {q.items.filter((it) => it.keputusan === "deal").length} item deal
+              {new Set(jobs.map((j) => j.proyek_id).filter(Boolean)).size} proyek ·{" "}
+              {q.items.filter((it) => it.keputusan === "deal").length} item deal
             </span>
           </div>
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 150 }}>Nomor job</th>
-                  <th style={{ width: 60 }}>Item</th>
-                  <th>Rute</th>
-                  <th style={{ width: 150 }}>Berangkat</th>
-                  <th style={{ width: 140 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobs.map((j) => (
-                  <tr key={j.id} className="row-link">
-                    <td>
-                      <Link
-                        to={`/jobs/${j.id}`}
-                        className="mono"
-                        style={{
-                          textDecoration: "none",
-                          color: "var(--text-primary)",
-                          fontSize: 12.5,
-                          fontWeight: 600
-                        }}
-                      >
-                        {j.job_number}
-                      </Link>
-                    </td>
-                    <td className="muted" style={{ fontSize: 12.5 }}>
-                      {j.quotation_item_id ? `#${nomorItem.get(j.quotation_item_id) ?? "—"}` : "—"}
-                    </td>
-                    <td style={{ fontSize: 12.5 }}>
-                      {j.asal} → {j.tujuan}
-                    </td>
-                    <td className="muted" style={{ fontSize: 12.5 }}>
-                      {formatDateTime(j.etd)}
-                    </td>
-                    <td>
-                      <StatusBadge status={j.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ProyekPenawaran items={q.items} jobs={jobs} />
         </div>
       )}
 
@@ -598,13 +556,30 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Subtotal, PPN (bila aktif), dan total. `pembanding` = diabu-abukan, total tidak ditebalkan. */
+/** Harga awal; bila direvisi, harga awal dicoret dan "Rev : nominal" tampil di bawahnya. */
+function Harga({ awal, revisi }: { awal: number; revisi?: number | null }) {
+  if (revisi == null) return <>{formatRupiah(awal)}</>;
+  return (
+    <>
+      <div style={{ textDecoration: "line-through", color: "var(--text-tertiary)", fontWeight: 400 }}>
+        {formatRupiah(awal)}
+      </div>
+      <div style={{ whiteSpace: "nowrap" }}>Rev : {formatRupiah(revisi)}</div>
+    </>
+  );
+}
+
 function SumRow({
   label,
   value,
+  baru,
   strong
 }: {
   label: string;
   value: number;
+  /** Angka setelah revisi / keputusan; diisi → `value` dicoret. */
+  baru?: number | null;
   strong?: boolean;
 }) {
   return (
@@ -618,13 +593,22 @@ function SumRow({
       }}
     >
       <span>{label}</span>
-      <span className="mono">{formatRupiah(value)}</span>
+      {baru == null ? (
+        <span className="mono">{formatRupiah(value)}</span>
+      ) : (
+        <span className="mono" style={{ display: "inline-flex", gap: 8, alignItems: "baseline", whiteSpace: "nowrap" }}>
+          <span style={{ textDecoration: "line-through", color: "var(--text-tertiary)", fontWeight: 400, fontSize: 11.5 }}>
+            {formatRupiah(value)}
+          </span>
+          <span>{formatRupiah(baru)}</span>
+        </span>
+      )}
     </div>
   );
 }
 
 const KEPUTUSAN_KELAS: Record<KeputusanItem, string> = {
-  menunggu: "",
+  menunggu: "badge-menunggu",
   deal: "badge-selesai",
   ditolak: "badge-cancelled"
 };
@@ -639,18 +623,6 @@ function KeputusanBadge({ keputusan }: { keputusan: KeputusanItem }) {
 }
 
 /** Harga awal tetap terlihat (dicoret) bila ada revisi. */
-function Harga({ awal, revisi }: { awal: number; revisi?: number | null }) {
-  if (revisi == null) return <>{formatRupiah(awal)}</>;
-  return (
-    <>
-      <div style={{ textDecoration: "line-through", color: "var(--text-tertiary)", fontWeight: 400, fontSize: 11.5 }}>
-        {formatRupiah(awal)}
-      </div>
-      <div>{formatRupiah(revisi)}</div>
-    </>
-  );
-}
-
 /**
  * Panel biru di kartu "Ditujukan kepada": penawaran punya harga revisi —
  * tanggal & masa berlaku surat revisi, serta siapa yang membuatnya.

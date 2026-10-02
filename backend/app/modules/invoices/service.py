@@ -17,8 +17,7 @@ from app.core.storage import remove_object_quietly, unique_object_name, upload_o
 from app.core.supabase import storage_public_url
 from app.core.timeutil import iso_utc, roman_month, today_wib, today_wib_str
 from app.core.transaksi import Transaksi
-
-log = logging.getLogger(__name__)
+from app.domain.uang_jalan import efek_cair
 from app.modules.invoices.schemas import (
     FinanceDashboardSummary,
     Invoice,
@@ -56,7 +55,7 @@ INVOICE_SELECT = """
 ITEM_SELECT = """
   id, invoice_id, urutan, job_id, deskripsi, dari, tujuan,
   qty, satuan, harga_satuan, subtotal,
-  job:jobs(job_number)
+  job:jobs(job_number, proyek:proyek(nomor_proyek))
 """
 
 PAYMENT_SELECT = """
@@ -69,6 +68,8 @@ PAYMENT_SELECT = """
 # Lunas dikunci (angka tidak boleh berubah setelah uang masuk); batal dikunci
 # (kalau perlu ditagih lagi, terbitkan nomor baru supaya arsip bisa ditelusuri).
 EDITABLE_STATUSES: tuple[InvoiceStatus, ...] = ("draft", "terkirim")
+
+log = logging.getLogger(__name__)
 
 
 def derive_tampil(stored: str, jatuh_tempo: str | None) -> tuple[str, int | None]:
@@ -84,7 +85,9 @@ def derive_tampil(stored: str, jatuh_tempo: str | None) -> tuple[str, int | None
 
 
 # Transaksi uang jalan per job: untuk ringkasan (uang jalan & cair) dan rinciannya.
-_UANG_JALAN_EMBED = "uang_jalan(jenis, jumlah, tanggal, keperluan, catatan, bukti_transfer_path, created_at)"
+_UANG_JALAN_EMBED = (
+    "uang_jalan(jenis, jumlah, tanggal, keperluan, catatan, bukti_transfer_path, created_at, status_approval)"
+)
 SIGNED_URL_BUKTI_TTL_S = 60 * 60
 
 
@@ -119,8 +122,13 @@ def _transaksi(transaksi: list[dict[str, Any]], bukti: dict[str, str]) -> list[U
 def _uang_jalan_ringkas(awal: Any, transaksi: list[dict[str, Any]]) -> tuple[float, float]:
     """Uang jalan job (awal + tambahan) & total pencairan dari transaksi uang_jalan job."""
     uang_jalan_awal = num(awal)
-    tambahan = sum(num(t.get("jumlah")) for t in transaksi if t.get("jenis") == "tambahan")
-    cair = sum(num(t.get("jumlah")) for t in transaksi if t.get("jenis") == "pencairan")
+    # Hanya tambahan yang sudah disetujui approver yang menambah uang jalan job.
+    tambahan = sum(
+        num(t.get("jumlah"))
+        for t in transaksi
+        if t.get("jenis") == "tambahan" and (t.get("status_approval") or "disetujui") == "disetujui"
+    )
+    cair = sum(efek_cair(t.get("jenis"), num(t.get("jumlah"))) for t in transaksi)
     return uang_jalan_awal + tambahan, cair
 
 
@@ -131,6 +139,7 @@ def _to_item(r: dict[str, Any], uj: dict[str, Any] | None) -> InvoiceItem:
         urutan=r["urutan"],
         job_id=r.get("job_id"),
         job_number=(first(r.get("job")) or {}).get("job_number"),
+        proyek_nomor=(first((first(r.get("job")) or {}).get("proyek")) or {}).get("nomor_proyek"),
         deskripsi=r["deskripsi"],
         dari=r.get("dari"),
         tujuan=r.get("tujuan"),
@@ -162,6 +171,16 @@ def _to_payment(r: dict[str, Any]) -> InvoicePayment:
         created_by_nama=(first(r.get("created_by_profile")) or {}).get("nama"),
         created_at=r["created_at"],
     )
+
+
+def _nomor_proyek_tagihan(items: list[dict[str, Any]]) -> list[str]:
+    """Nomor proyek unik dari rincian tagihan, urut kemunculan."""
+    out: list[str] = []
+    for it in items:
+        nomor = (first((first(it.get("job")) or {}).get("proyek")) or {}).get("nomor_proyek")
+        if nomor and nomor not in out:
+            out.append(nomor)
+    return out
 
 
 def status_bayar(total: float, dibayar: float) -> str:
@@ -323,7 +342,7 @@ class InvoiceService:
     ) -> list[InvoiceListRow]:
         q = (
             self._db.table("invoices")
-            .select(f"{INVOICE_SELECT}, invoice_items(id)")
+            .select(f"{INVOICE_SELECT}, invoice_items(id, job:jobs(proyek:proyek(nomor_proyek)))")
             .eq("invoice_items.status", AKTIF)
             .order("seq_tahun", desc=True)
             .order("seq_no", desc=True)
@@ -335,7 +354,11 @@ class InvoiceService:
         if limit:
             q = q.limit(limit)
         return [
-            InvoiceListRow(**_base_fields(r), jumlah_item=len(r.get("invoice_items") or []))
+            InvoiceListRow(
+                **_base_fields(r),
+                jumlah_item=len(r.get("invoice_items") or []),
+                proyek_nomor=_nomor_proyek_tagihan(r.get("invoice_items") or []),
+            )
             for r in rows(await q.execute())
         ]
 
@@ -449,7 +472,10 @@ class InvoiceService:
         q = (
             self._db.table("jobs")
             .select(
-                "id, customer_id, job_number, asal, tujuan, alat_diangkut, etd, completed_at,"
+                "id, job_number, asal, tujuan, alat_diangkut, etd, completed_at,"
+                # Customer tersimpan di proyek job; proyek tanpa customer (unit
+                # jalan kosongan) tidak punya pihak yang ditagih → tidak ikut.
+                " proyek_id, proyek:proyek!inner(nomor_proyek, customer_id),"
                 f" uang_jalan_awal, {_UANG_JALAN_EMBED},"
                 " job_photos(file_path, slot, stage)"
             )
@@ -461,14 +487,23 @@ class InvoiceService:
             .eq("job_photos.slot", "surat_jalan")
             .order("completed_at", desc=True)
         )
+        q = q.not_.is_("proyek.customer_id", "null")
         if customer_id:
-            q = q.eq("customer_id", customer_id)
+            q = q.eq("proyek.customer_id", customer_id)
 
-        data = [r for r in rows(await q.execute()) if r["id"] not in sudah]
+        diganti = await self._job_yang_diganti()
+        data = [r for r in rows(await q.execute()) if r["id"] not in sudah and r["id"] not in diganti]
+        # BATASAN: proyek baru bisa ditagih setelah SEMUA job-nya (selain yang
+        # dibatalkan) selesai — job proyek yang masih berjalan menahan seluruh proyek.
+        job_proyek = await self._job_per_proyek({r["proyek_id"] for r in data if r.get("proyek_id")})
+        data = [r for r in data if not job_proyek.get(r.get("proyek_id") or "", (0, []))[1]]
         bukti = await self._bukti_transfer_urls([t for r in data for t in (r.get("uang_jalan") or [])])
+        tagihan_proyek = await self._tagihan_per_proyek({r["proyek_id"] for r in data if r.get("proyek_id")})
         out: dict[str, list[JobBelumDitagihRow]] = {}
         for r in data:
-            cid = r.pop("customer_id")
+            proyek = first(r.pop("proyek", None)) or {}
+            cid = proyek["customer_id"]
+            inv_proyek = tagihan_proyek.get(r.get("proyek_id") or "")
             foto = r.pop("job_photos") or []
             uang_jalan_awal = r.pop("uang_jalan_awal")
             transaksi = r.pop("uang_jalan") or []
@@ -481,8 +516,65 @@ class InvoiceService:
                     uang_jalan_awal=num(uang_jalan_awal),
                     uang_jalan_transaksi=_transaksi(transaksi, bukti),
                     **_surat_jalan(foto, self._photos_bucket),
+                    proyek_nomor=proyek.get("nomor_proyek"),
+                    proyek_invoice_id=inv_proyek[0] if inv_proyek else None,
+                    proyek_invoice_number=inv_proyek[1] if inv_proyek else None,
+                    proyek_jumlah_job=job_proyek.get(r.get("proyek_id") or "", (0, []))[0],
                 )
             )
+        return out
+
+    async def _job_per_proyek(self, proyek_ids: set[str]) -> dict[str, tuple[int, list[str]]]:
+        """Per proyek: (jumlah job tidak dibatalkan, nomor job yang belum selesai)."""
+        if not proyek_ids:
+            return {}
+        res = await (
+            self._db.table("jobs")
+            .select("job_number, proyek_id, status_job")
+            .in_("proyek_id", sorted(proyek_ids))
+            .eq("status", AKTIF)
+            .neq("status_job", "cancelled")
+            .execute()
+        )
+        out: dict[str, tuple[int, list[str]]] = {pid: (0, []) for pid in proyek_ids}
+        for r in rows(res):
+            jumlah, belum = out[r["proyek_id"]]
+            if r.get("status_job") != "selesai":
+                belum = [*belum, r["job_number"]]
+            out[r["proyek_id"]] = (jumlah + 1, belum)
+        return out
+
+    async def _job_yang_diganti(self) -> set[str]:
+        """Job lama yang unitnya rusak & sudah punya job pengganti.
+
+        BATASAN: tidak ditagih — yang ditagih job penggantinya (database juga
+        menolak, trigger invoice_item_cek_proyek)."""
+        res = (
+            await self._db.table("jobs").select("menggantikan_job_id").not_.is_("menggantikan_job_id", "null").execute()
+        )
+        return {r["menggantikan_job_id"] for r in rows(res) if r.get("menggantikan_job_id")}
+
+    async def _tagihan_per_proyek(self, proyek_ids: set[str]) -> dict[str, tuple[str, str]]:
+        """Tagihan aktif (tidak batal) yang sudah memuat job dari tiap proyek:
+        {proyek_id: (invoice_id, invoice_number)}. Satu proyek paling banyak
+        satu tagihan (BATASAN, dijaga database)."""
+        if not proyek_ids:
+            return {}
+        res = await (
+            self._db.table("invoice_items")
+            .select("invoice_id, job:jobs!inner(proyek_id), invoice:invoices!inner(invoice_number)")
+            .in_("job.proyek_id", sorted(proyek_ids))
+            .eq("job.status", AKTIF)
+            .eq("invoice.status", AKTIF)
+            .neq("invoice.status_tagihan", "batal")
+            .execute()
+        )
+        out: dict[str, tuple[str, str]] = {}
+        for r in rows(res):
+            pid = (first(r.get("job")) or {}).get("proyek_id")
+            nomor = (first(r.get("invoice")) or {}).get("invoice_number")
+            if pid and nomor:
+                out.setdefault(pid, (r["invoice_id"], nomor))
         return out
 
     async def piutang_summary(self) -> list[PiutangSummaryRow]:
@@ -564,6 +656,9 @@ class InvoiceService:
                 uang_jalan=num(r.get("uang_jalan")),
                 biaya_insiden=num(r.get("biaya_insiden")),
                 laba=num(r.get("laba")),
+                proyek_nomor=r.get("proyek_nomor"),
+                kosongan=bool(r.get("kosongan")),
+                diganti_oleh=r.get("diganti_oleh"),
             )
             for r in rows(res)
         ]
@@ -590,6 +685,42 @@ class InvoiceService:
             nomor = (first(r.get("invoice")) or {}).get("invoice_number") or "lain"
             raise ValidationError(
                 f"Job {job} sudah ditagihkan di tagihan {nomor}. Satu job hanya boleh ditagihkan satu kali."
+            )
+        await self._cek_proyek_satu_tagihan(job_ids, kecuali_invoice=kecuali_invoice)
+        await self._cek_proyek_semua_selesai(job_ids)
+
+    async def _cek_proyek_semua_selesai(self, job_ids: list[str]) -> None:
+        """BATASAN: proyek hanya bisa ditagih bila semua job-nya (selain yang
+        dibatalkan) sudah selesai."""
+        res = await self._db.table("jobs").select("proyek_id, proyek:proyek(nomor_proyek)").in_("id", job_ids).execute()
+        nomor_proyek = {
+            r["proyek_id"]: (first(r.get("proyek")) or {}).get("nomor_proyek") or ""
+            for r in rows(res)
+            if r.get("proyek_id")
+        }
+        for pid, (_, belum) in (await self._job_per_proyek(set(nomor_proyek))).items():
+            if belum:
+                raise ValidationError(
+                    f"Proyek {nomor_proyek[pid]} belum bisa ditagih: job {', '.join(belum)} belum selesai. "
+                    "Proyek ditagih setelah semua job-nya selesai."
+                )
+
+    async def _cek_proyek_satu_tagihan(self, job_ids: list[str], *, kecuali_invoice: str | None) -> None:
+        """BATASAN: satu proyek hanya boleh masuk satu tagihan (satu tagihan
+        boleh berisi banyak proyek). Database juga menolak — trigger
+        trg_invoice_item_cek_proyek (migration 20261001000012)."""
+        res = await self._db.table("jobs").select("proyek_id, proyek:proyek(nomor_proyek)").in_("id", job_ids).execute()
+        nomor_proyek = {
+            r["proyek_id"]: (first(r.get("proyek")) or {}).get("nomor_proyek") or ""
+            for r in rows(res)
+            if r.get("proyek_id")
+        }
+        for pid, (invoice_id, nomor) in (await self._tagihan_per_proyek(set(nomor_proyek))).items():
+            if invoice_id == kecuali_invoice:
+                continue
+            raise ValidationError(
+                f"Proyek {nomor_proyek[pid]} sudah ditagihkan di tagihan {nomor}. Satu proyek hanya boleh "
+                f"masuk satu tagihan — tambahkan job ini ke tagihan {nomor} tersebut."
             )
 
     async def create(self, payload: InvoiceInput, *, created_by: str | None) -> InvoiceCreated:

@@ -45,13 +45,13 @@ interface Props {
   /** Job ditugaskan tapi drivernya belum menekan Terima Job — perlu di-follow up. */
   jobBelumKonfirmasi?: JobBelumKonfirmasi[];
   /** Job selesai & tervalidasi tapi belum masuk tagihan mana pun. */
-  jobsBelumInvoice?: number;
+  proyekBelumDitagih?: number;
   /** Dokumen kendaraan & SIM yang habis / habis ≤ 30 hari lagi. */
   dokumenJatuhTempo?: DokumenJatuhTempo[];
   /** Unit yang service-nya lewat jadwal / mendekati jadwal. */
   monitoringServis?: MonitoringServis;
   /** Jumlah penawaran deal yang masih punya item deal belum dibuatkan job. */
-  penawaranDealTanpaJob?: number;
+  penawaranDealTanpaProyek?: number;
   /** Jumlah penawaran terkirim yang habis masa berlakunya ≤ 7 hari lagi. */
   penawaranAkanKedaluwarsa?: number;
 }
@@ -63,10 +63,10 @@ export function DashboardView({
   jobsMenungguValidasi = 0,
   uangJalanDiajukan = 0,
   jobBelumKonfirmasi = [],
-  jobsBelumInvoice = 0,
+  proyekBelumDitagih = 0,
   dokumenJatuhTempo = [],
   monitoringServis,
-  penawaranDealTanpaJob = 0,
+  penawaranDealTanpaProyek = 0,
   penawaranAkanKedaluwarsa = 0
 }: Props) {
   const { canManageOperational } = useAuth();
@@ -121,13 +121,14 @@ export function DashboardView({
       : []),
     // Penawaran hanya dibuka admin / superadmin — operator tidak melihat baris
     // ini. Cukup angkanya; daftarnya di halaman Penawaran (sudah terfilter).
-    ...(canManageOperational && penawaranDealTanpaJob > 0
+    ...(canManageOperational && penawaranDealTanpaProyek > 0
       ? [
           {
             key: "penawaran-deal",
             to: "/quotations?filter=deal_pending",
-            judul: `${penawaranDealTanpaJob} penawaran deal belum ada job`,
-            keterangan: "Buatkan job-nya."
+            // Dihitung per penawaran: punya item deal tetapi belum ada satu pun proyek aktif.
+            judul: `${penawaranDealTanpaProyek} penawaran yang belum ada proyek`,
+            keterangan: "Ada item deal — buatkan proyeknya."
           }
         ]
       : []),
@@ -174,12 +175,12 @@ export function DashboardView({
           }
         ]
       : []),
-    ...(canManageOperational && jobsBelumInvoice > 0
+    ...(canManageOperational && proyekBelumDitagih > 0
       ? [
           {
             key: "invoice",
             to: "/invoices",
-            judul: `${jobsBelumInvoice} job belum ditagih`,
+            judul: `${proyekBelumDitagih} proyek belum ditagih`,
             keterangan: "Buatkan tagihannya."
           }
         ]
@@ -203,6 +204,8 @@ export function DashboardView({
 
   return (
     <div className="flex flex-col" style={{ gap: 20 }}>
+      {/* Perlu tindakan paling atas — tepat di bawah widget "Perlu approval" (DashboardPage). */}
+      <PerluTindakanCard items={tindakan} />
       {/* Stat cards */}
       <div className="stat-grid">
         <StatCard
@@ -247,7 +250,6 @@ export function DashboardView({
         />
       </div>
 
-      <PerluTindakanCard items={tindakan} />
       <DokumenJatuhTempoModal
         open={modalDokumen.open}
         onClose={modalDokumen.tutup}
@@ -526,7 +528,7 @@ export function DashboardView({
                     textDecoration: "none"
                   }}
                 >
-                  Job baru
+                  Proyek baru
                   <ArrowRight style={{ width: 14, height: 14 }} />
                 </Link>
               </div>
@@ -535,7 +537,7 @@ export function DashboardView({
         </div>
       </div>
 
-      <Fab href="/jobs/new" label="Job baru" />
+      <Fab href="/jobs/new" label="Proyek baru" />
     </div>
   );
 }

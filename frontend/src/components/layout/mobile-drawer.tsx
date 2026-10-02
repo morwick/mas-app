@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { kunciScroll } from "@/lib/kunci-scroll";
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
@@ -6,7 +7,9 @@ import {
   isNavGroup,
   navTree,
   profileItem,
+  sisipkanGrupApproval,
   visibleNavTree,
+  type NavGroup,
   type NavItem,
   type UserRoleLike
 } from "./nav-items";
@@ -24,6 +27,8 @@ interface MobileDrawerProps {
     jobsActive?: number;
     driversAvailable?: number;
   };
+  /** Grup Approval milik pengguna ini (dibuat dari fitur yang ia pegang). */
+  approval?: NavGroup | null;
 }
 
 const COUNT_KEY: Record<string, "units" | "jobsActive" | "driversAvailable"> = {
@@ -34,7 +39,7 @@ const COUNT_KEY: Record<string, "units" | "jobsActive" | "driversAvailable"> = {
 
 const BADGE_KEYS = new Set(["/jobs"]);
 
-export function MobileDrawer({ user, counts }: MobileDrawerProps) {
+export function MobileDrawer({ user, counts, approval }: MobileDrawerProps) {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
 
@@ -50,10 +55,10 @@ export function MobileDrawer({ user, counts }: MobileDrawerProps) {
       if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", handler);
-    document.body.style.overflow = "hidden";
+    const lepas = kunciScroll();
     return () => {
       window.removeEventListener("keydown", handler);
-      document.body.style.overflow = "";
+      lepas();
     };
   }, [open]);
 
@@ -63,8 +68,8 @@ export function MobileDrawer({ user, counts }: MobileDrawerProps) {
       : pathname.startsWith(item.href);
     const Icon = item.icon;
     const countKey = COUNT_KEY[item.href];
-    const count = countKey ? counts?.[countKey] : undefined;
-    const badge = BADGE_KEYS.has(item.href);
+    const count = countKey ? counts?.[countKey] : item.badge ? item.badge : undefined;
+    const badge = BADGE_KEYS.has(item.href) || Boolean(item.badge);
     return (
       <Link
         key={item.href}
@@ -192,7 +197,7 @@ export function MobileDrawer({ user, counts }: MobileDrawerProps) {
                 gap: 2
               }}
             >
-              {visibleNavTree(navTree, user?.role).map((entry) =>
+              {sisipkanGrupApproval(visibleNavTree(navTree, user?.role), approval).map((entry) =>
                 isNavGroup(entry) ? (
                   <div key={entry.key} style={{ display: "contents" }}>
                     {/* Di laci mobile grup jadi label seksi, bukan tombol

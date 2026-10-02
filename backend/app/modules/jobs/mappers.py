@@ -8,12 +8,16 @@ from app.core.config import get_settings
 from app.core.pg import first, num_or_none
 from app.core.soft_delete import AKTIF, STATUS
 from app.core.supabase import storage_public_url
+from app.domain.uang_jalan import efek_cair
 from app.modules.jobs.schemas import Job, JobPhoto
+
+# Label customer untuk proyek tanpa customer (unit jalan kosongan).
+TANPA_CUSTOMER = "Tanpa customer"
 
 _PHOTO_COLUMNS = "id, type, stage, slot, file_path, uploaded_at, sharpness_score, kualitas_rendah, taken_at, lat, lng"
 
 _BASE_COLUMNS = """
-  id, job_number, share_token, customer_id, pic_nama, pic_no_hp,
+  id, job_number, share_token,
   alat_diangkut, asal, tujuan,
   asal_lat, asal_lng, tujuan_lat, tujuan_lng,
   route_polyline, route_distance_km, route_duration_min,
@@ -22,7 +26,8 @@ _BASE_COLUMNS = """
   pod_penerima_nama, pod_penerima_jabatan, pod_signature_path,
   pod_catatan, pod_at,
   created_at, completed_at,
-  customer:customers(nama_perusahaan)"""
+  proyek_id, menggantikan_job_id,
+  proyek:proyek(nomor_proyek, customer_id, pic_nama, pic_no_hp, customer:customers(nama_perusahaan))"""
 
 # Kolom internal: tidak boleh sampai ke pelanggan.
 # `uang_jalan_requests` ikut supaya daftar job bisa menandai driver yang sedang
@@ -31,6 +36,7 @@ _INTERNAL_COLUMNS = """,
   catatan, uang_jalan_awal,
   validated_at, validation_note,
   validator:profiles!jobs_validated_by_fkey(nama),
+  pembuat:profiles!jobs_created_by_fkey(nama),
   quotation_id,
   quotation_item_id,
   quotation:quotations(quote_number),
@@ -57,6 +63,17 @@ _CHILD_LISTS: dict[str, tuple[str, ...]] = {
     PUBLIC_JOB_SELECT: ("photos",),
     DRIVER_JOB_SELECT: ("photos",),
 }
+
+
+# Nama customer job untuk query ringkas di modul lain — customer tersimpan di
+# proyek job (migration 20261001000012).
+PROYEK_CUSTOMER_EMBED = "proyek:proyek(customer:customers(nama_perusahaan))"
+
+
+def nama_customer_job(row: dict[str, Any]) -> str | None:
+    """Nama customer dari embed PROYEK_CUSTOMER_EMBED; None = tanpa customer."""
+    proyek = first(row.get("proyek")) or {}
+    return (first(proyek.get("customer")) or {}).get("nama_perusahaan")
 
 
 def active_children(query: Any, select: str) -> Any:
@@ -101,24 +118,26 @@ def to_job(row: dict[str, Any]) -> Job:
     )
     # Uang yang sudah benar-benar ditransfer ke driver. Dipakai daftar & detail
     # job untuk menutup tombol Batalkan begitu ada isinya.
-    uj_cair = sum(
-        num_or_none(r.get("jumlah")) or 0.0 for r in (row.get("uang_jalan") or []) if r.get("jenis") == "pencairan"
-    )
+    # Cair bersih: pengembalian (saat ganti driver/unit) mengurangi; kasbon tidak.
+    uj_cair = sum(efek_cair(r.get("jenis"), num_or_none(r.get("jumlah")) or 0.0) for r in (row.get("uang_jalan") or []))
     quotation = first(row.get("quotation"))
-    customer = first(row.get("customer"))
+    # Customer & PIC lapangan tersimpan di proyek job ini.
+    proyek = first(row.get("proyek")) or {}
+    customer = first(proyek.get("customer"))
     unit = first(row.get("unit"))
     trailer = first(row.get("trailer"))
     validator = first(row.get("validator"))
+    pembuat = first(row.get("pembuat"))
     signature_path = row.get("pod_signature_path")
 
     return Job(
         id=row["id"],
         job_number=row["job_number"],
         share_token=row["share_token"],
-        customer_id=row["customer_id"],
-        customer_nama=(customer or {}).get("nama_perusahaan") or "—",
-        pic_nama=row.get("pic_nama"),
-        pic_no_hp=row.get("pic_no_hp"),
+        customer_id=proyek.get("customer_id"),
+        customer_nama=(customer or {}).get("nama_perusahaan") or TANPA_CUSTOMER,
+        pic_nama=proyek.get("pic_nama"),
+        pic_no_hp=proyek.get("pic_no_hp"),
         alat_diangkut=row["alat_diangkut"],
         asal=row["asal"],
         tujuan=row["tujuan"],
@@ -147,6 +166,7 @@ def to_job(row: dict[str, Any]) -> Job:
         pod_catatan=row.get("pod_catatan"),
         pod_at=row.get("pod_at"),
         created_at=row["created_at"],
+        created_by_nama=(pembuat or {}).get("nama"),
         completed_at=row.get("completed_at"),
         validated_at=row.get("validated_at"),
         validated_by_nama=(validator or {}).get("nama"),
@@ -155,7 +175,11 @@ def to_job(row: dict[str, Any]) -> Job:
         quotation_id=row.get("quotation_id"),
         quotation_item_id=row.get("quotation_item_id"),
         quotation_number=(quotation or {}).get("quote_number"),
+        proyek_id=row.get("proyek_id"),
+        proyek_nomor=proyek.get("nomor_proyek"),
+        menggantikan_job_id=row.get("menggantikan_job_id"),
         uang_jalan_cair=uj_cair,
+        ada_pencairan_uang_jalan=any(r.get("jenis") == "pencairan" for r in (row.get("uang_jalan") or [])),
         uang_jalan_pending=pending_uj is not None,
         uang_jalan_pending_nominal=num_or_none((pending_uj or {}).get("nominal")),
         uang_jalan_pending_at=(pending_uj or {}).get("requested_at"),

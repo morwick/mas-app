@@ -170,63 +170,65 @@ export function DaftarPerintahKerja({
       ) : (
         <div style={{ opacity: data.isPlaceholderData ? 0.6 : 1 }}>
           <div className="card hidden lg:block" style={{ overflow: "hidden" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: 190 }}>Nomor</th>
-                  <th style={{ width: 110 }}>Tanggal</th>
-                  {tampilAset && <th style={{ width: 110 }}>Aset</th>}
-                  <th>Pekerjaan</th>
-                  <th>Pelaksana</th>
-                  <th style={{ width: 150 }}>Status</th>
-                  <th style={{ width: 150, textAlign: "right" }}>Biaya</th>
-                  <th style={{ width: 36 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.items.map((w) => (
-                  <tr
-                    key={w.id}
-                    className="row-link"
-                    tabIndex={0}
-                    onClick={() => navigate(`/perintah-kerja/${w.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") navigate(`/perintah-kerja/${w.id}`);
-                    }}
-                  >
-                    <td className="mono" style={{ fontWeight: 600, fontSize: 12 }}>
-                      {w.nomor}
-                    </td>
-                    <td>{formatDate(w.tanggal)}</td>
-                    {tampilAset && <td style={{ fontWeight: 600 }}>{w.kode_aset}</td>}
-                    <td>
-                      <div>{labelDari(JENIS_WO, w.jenis)}</div>
-                      {w.keluhan && (
-                        <div className="caption" style={{ maxWidth: 280, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {w.keluhan}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div>{labelDari(PELAKSANA, w.pelaksana)}</div>
-                      <div className="caption">
-                        {w.pelaksana_nama ?? "—"}
-                        {w.status_klaim && ` · Klaim ${STATUS_KLAIM[w.status_klaim].toLowerCase()}`}
-                      </div>
-                    </td>
-                    <td>
-                      <StatusWoBadge status={w.status_wo} />
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <BiayaRingkas w={w} />
-                    </td>
-                    <td>
-                      <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 190 }}>Nomor</th>
+                    <th style={{ width: 110 }}>Tanggal</th>
+                    {tampilAset && <th style={{ width: 110 }}>Aset</th>}
+                    <th>Pekerjaan</th>
+                    <th>Pelaksana</th>
+                    <th style={{ width: 150 }}>Status</th>
+                    <th style={{ width: 150, textAlign: "right" }}>Biaya</th>
+                    <th style={{ width: 36 }}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pg.items.map((w) => (
+                    <tr
+                      key={w.id}
+                      className="row-link"
+                      tabIndex={0}
+                      onClick={() => navigate(`/perintah-kerja/${w.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") navigate(`/perintah-kerja/${w.id}`);
+                      }}
+                    >
+                      <td className="mono" style={{ fontWeight: 600, fontSize: 12 }}>
+                        {w.nomor}
+                      </td>
+                      <td>{formatDate(w.tanggal)}</td>
+                      {tampilAset && <td style={{ fontWeight: 600 }}>{w.kode_aset}</td>}
+                      <td>
+                        <div>{labelDari(JENIS_WO, w.jenis)}</div>
+                        {w.keluhan && (
+                          <div className="caption" style={{ maxWidth: 280, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {w.keluhan}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div>{labelDari(PELAKSANA, w.pelaksana)}</div>
+                        <div className="caption">
+                          {w.pelaksana_nama ?? "—"}
+                          {w.status_klaim && ` · Klaim ${STATUS_KLAIM[w.status_klaim].toLowerCase()}`}
+                        </div>
+                      </td>
+                      <td>
+                        <StatusWoBadge status={w.status_wo} />
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <BiayaRingkas w={w} />
+                      </td>
+                      <td>
+                        <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <Pagination state={pg} label="perintah kerja" attached />
           </div>
 
