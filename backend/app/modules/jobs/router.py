@@ -19,7 +19,6 @@ from app.modules.jobs.schemas import (
     GantiTrailerRequest,
     GantiTrukEntry,
     GantiUnitRequest,
-    GantiUnitUlangRequest,
     Job,
     JobConflictResponse,
     JobCreate,
@@ -50,8 +49,10 @@ def _boleh_lihat_tagihan(auth: AuthContext) -> bool:
 
 
 def _tagihan_lengkap(auth: AuthContext) -> bool:
-    """Superadmin & finance: nomor tertaut, status tagihan, dan nominal."""
-    return auth.user.role in ("superadmin", "finance")
+    """Superadmin, admin & finance: status tagihan dan nominal sisa. (Nomor yang
+    bisa diklik ke halaman tagihan diatur frontend — admin tidak punya akses
+    menu Tagihan.)"""
+    return auth.user.role in ("superadmin", "admin", "finance")
 
 
 def _bukan_finance(auth: AuthContext = Depends(require_auth)) -> None:
@@ -176,17 +177,6 @@ async def ganti_unit(
     return await svc.ganti_unit(job_id, payload, created_by=auth.user.id)
 
 
-@router.post("/{job_id}/ganti-unit-ulang", response_model=JobCreated, dependencies=[Depends(_bukan_finance)])
-async def ganti_unit_ulang(
-    job_id: str,
-    payload: GantiUnitUlangRequest,
-    auth: AuthContext = Depends(require_auth),
-    svc: JobService = Depends(get_service),
-) -> JobCreated:
-    """Job pengganti dibatalkan → buat job pengganti baru untuk job lama ini."""
-    return await svc.ganti_unit_ulang(job_id, payload, created_by=auth.user.id)
-
-
 @router.post(
     "", response_model=JobCreated, status_code=201, responses=CONFLICT_RESPONSE, dependencies=[Depends(_bukan_finance)]
 )
@@ -201,8 +191,13 @@ async def create_job(
 @router.patch(
     "/{job_id}", response_model=OkResponse, responses=CONFLICT_RESPONSE, dependencies=[Depends(_bukan_finance)]
 )
-async def update_job(job_id: str, payload: JobUpdate, svc: JobService = Depends(get_service)) -> OkResponse:
-    await svc.update(job_id, payload)
+async def update_job(
+    job_id: str,
+    payload: JobUpdate,
+    auth: AuthContext = Depends(require_auth),
+    svc: JobService = Depends(get_service),
+) -> OkResponse:
+    await svc.update(job_id, payload, diubah_oleh=auth.user.id)
     return OkResponse()
 
 

@@ -8,15 +8,15 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { DateTimeInput } from "@/components/ui/datetime-input";
 import { useToast } from "@/components/ui/toast";
-import { useUnits } from "@/features/units/queries";
+import { useUnitIncidents, useUnits } from "@/features/units/queries";
 import { useDrivers } from "@/features/drivers/queries";
 import { useSumberDana } from "@/features/uang-jalan/queries";
 import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
 import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
 import { unitLocation } from "@/features/tracking/api";
-import { formatRupiah, isoToLocalInput, localInputToIso } from "@/lib/utils";
-import type { Job } from "@/types";
-import { gantiDriver, gantiTrailer, gantiUnit, gantiUnitUlang, type GantiTrukEntry, type PengembalianKasbon } from "../api";
+import { formatDateTime, formatRupiah, isoToLocalInput, localInputToIso } from "@/lib/utils";
+import { incidentTypeLabel, labelStatusInsiden, type Incident, type Job } from "@/types";
+import { gantiDriver, gantiTrailer, gantiUnit, type PengembalianKasbon } from "../api";
 
 /**
  * Penggantian hanya untuk job yang sedang berjalan (dijaga juga di database):
@@ -116,6 +116,31 @@ function validasiInsiden(i: Insiden): Record<string, string> {
   if (!i.tanggal) errs.insidenTanggal = "Tanggal & jam insiden wajib diisi";
   if (!i.deskripsi.trim()) errs.insidenDeskripsi = "Deskripsi insiden wajib diisi";
   return errs;
+}
+
+/**
+ * Insiden terbuka yang sudah dicatat untuk job ini (mis. dilaporkan operator)
+ * dan belum dipakai pergantian unit — bisa dipakai saat Ganti unit.
+ */
+export function insidenTerdaftarJob(job: Pick<Job, "id">, incidents: Incident[]): Incident[] {
+  return incidents.filter((i) => i.job_id === job.id && i.status !== "resolved" && !i.dari_ganti_unit);
+}
+
+/** Detail singkat insiden terdaftar di modal Ganti unit. */
+function KartuInsiden({ incident }: { incident: Incident }) {
+  return (
+    <div style={{ display: "grid", gap: 2, fontSize: 12.5 }}>
+      <div style={{ fontWeight: 600 }}>
+        {incidentTypeLabel[incident.tipe]} · {formatDateTime(incident.tanggal)}
+      </div>
+      <div className="caption">
+        {labelStatusInsiden(incident)}
+        {incident.lokasi ? ` · ${incident.lokasi}` : ""}
+        {incident.created_by_nama ? ` · dicatat ${incident.created_by_nama}` : ""}
+      </div>
+      <div style={{ whiteSpace: "pre-wrap" }}>{incident.deskripsi}</div>
+    </div>
+  );
 }
 
 interface IsianKasbon {
@@ -392,6 +417,16 @@ export function GantiUnitModal({
     job.unit_id,
     `Unit ${unitKode ?? ""} rusak saat menjalankan job ${job.job_number}`
   );
+  // Insiden terbuka job ini (mis. dari operator): bisa dipakai, tanpa insiden baru.
+  const incidents = useUnitIncidents(job.unit_id);
+  const terdaftar = useMemo(() => insidenTerdaftarJob(job, incidents.data ?? []), [job, incidents.data]);
+  const [pakaiTerdaftar, setPakaiTerdaftar] = useState(true);
+  const [insidenId, setInsidenId] = useState("");
+  const insidenDipakai = pakaiTerdaftar && terdaftar.length > 0;
+  // Pilihan awal: insiden terdaftar pertama (berubah bila daftar dimuat ulang).
+  useEffect(() => {
+    if (!terdaftar.some((i) => i.id === insidenId)) setInsidenId(terdaftar[0]?.id ?? "");
+  }, [terdaftar, insidenId]);
   const trailer = useTrailerUntukUnit(unitId);
   const [error, setError] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -408,7 +443,11 @@ export function GantiUnitModal({
   async function simpan(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
-    const errs: Record<string, string> = { ...validasiInsiden(insiden), ...validasiKasbon(kasbon, cair) };
+    const errs: Record<string, string> = {
+      ...(insidenDipakai ? {} : validasiInsiden(insiden)),
+      ...validasiKasbon(kasbon, cair)
+    };
+    if (insidenDipakai && !insidenId) errs.insidenId = "Pilih insiden yang dipakai";
     if (!unitId) errs.unit = "Pilih unit pengganti";
     if (trailer.data?.wajib && !trailerId) errs.trailer = "Unit trailer wajib dipilih untuk unit ini";
     if (!driverId) errs.driver = "Pilih driver";
@@ -427,9 +466,13 @@ export function GantiUnitModal({
       eta: eta || null,
       uang_jalan_awal: Math.round(Number(uangJalan)),
       alasan: alasan.trim(),
-      insiden_tanggal: localInputToIso(insiden.tanggal),
-      insiden_lokasi: insiden.lokasi.trim() || null,
-      insiden_deskripsi: insiden.deskripsi.trim(),
+      ...(insidenDipakai
+        ? { insiden_id: insidenId }
+        : {
+            insiden_tanggal: localInputToIso(insiden.tanggal),
+            insiden_lokasi: insiden.lokasi.trim() || null,
+            insiden_deskripsi: insiden.deskripsi.trim()
+          }),
       ...keInputKasbon(kasbon)
     });
     setBusy(null);
@@ -495,164 +538,61 @@ export function GantiUnitModal({
         <Field label="Alasan" required>
           <Textarea value={alasan} onChange={(e) => setAlasan(e.target.value)} placeholder="Mis. gardan patah di KM 120…" error={error.alasan} />
         </Field>
-        <BagianInsiden
-          judul={`Insiden kerusakan unit lama${unitKode ? ` (${unitKode})` : ""}`}
-          insiden={insiden}
-          onChange={(p) => setInsiden((i) => ({ ...i, ...p }))}
-          lokasiStatus={lokasiStatus}
-          error={error}
-        />
-        <BagianPengembalianKasbon cair={cair} value={kasbon} onChange={(p) => setKasbon((k) => ({ ...k, ...p }))} error={error} />
-      </form>
-      <LoadingOverlay message={busy} />
-    </Modal>
-  );
-}
-
-/**
- * Nomor job pengganti (ganti unit) yang dibatalkan untuk job lama `job`.
- * BATASAN: "Selesaikan job dengan unit lain" hanya untuk job Selesai karena
- * ganti unit yang SEMUA job penggantinya dibatalkan (dijaga juga database,
- * buat_ulang_job_pengganti). Unit penggantinya boleh berbeda.
- */
-export function penggantiBatalDariRiwayat(job: Pick<Job, "status">, riwayat: GantiTrukEntry[]): string[] {
-  const pengganti = riwayat.filter((r) => r.job_pengganti_id);
-  if (job.status !== "selesai" || pengganti.length === 0) return [];
-  if (!pengganti.every((r) => r.job_pengganti_status === "cancelled")) return [];
-  return pengganti.map((r) => r.job_pengganti_number ?? "—");
-}
-
-/**
- * Job pengganti (ganti unit) dibatalkan → buat job pengganti baru untuk job
- * lama yang sama: proyek, rute & penawaran sama; unit & driver bebas. Insiden
- * kerusakan & uang jalan supir lama sudah tercatat saat ganti unit pertama.
- * Job pengganti yang dibatalkan dihapus (soft delete) oleh database.
- */
-export function GantiUnitUlangModal({
-  job,
-  penggantiBatal,
-  onClose
-}: {
-  job: Job;
-  /** Nomor job pengganti yang dibatalkan (akan dihapus). */
-  penggantiBatal: string[];
-  onClose: () => void;
-}) {
-  const toast = useToast();
-  const navigate = useNavigate();
-  const units = useUnits();
-  const drivers = useDrivers(false, true);
-  const [unitId, setUnitId] = useState("");
-  const [trailerId, setTrailerId] = useState("");
-  const [driverId, setDriverId] = useState("");
-  // BATASAN: ETD job pengganti tidak boleh lebih awal dari ETD job awal (dijaga juga backend).
-  const etdMinimal = isoToLocalInput(job.etd);
-  const [etd, setEtd] = useState(() => {
-    const sekarang = isoToLocalInput();
-    return sekarang > etdMinimal ? sekarang : etdMinimal;
-  });
-  const [eta, setEta] = useState("");
-  const [uangJalan, setUangJalan] = useState("");
-  const [alasan, setAlasan] = useState("");
-  const trailer = useTrailerUntukUnit(unitId);
-  const [error, setError] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const opsiUnit = (units.data ?? [])
-    .filter((u) => u.is_active && u.status === "standby")
-    .map((u) => ({ value: u.id, label: u.kode_unit, hint: [u.jenis_unit_nama, u.no_polisi].filter(Boolean).join(" · ") }));
-  const opsiDriver = (drivers.data ?? []).map((d) => ({ value: d.id, label: d.nama, hint: d.no_hp }));
-
-  async function simpan(e: React.FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    const errs: Record<string, string> = {};
-    if (!unitId) errs.unit = "Pilih unit pengganti";
-    if (trailer.data?.wajib && !trailerId) errs.trailer = "Unit trailer wajib dipilih untuk unit ini";
-    if (!driverId) errs.driver = "Pilih driver";
-    if (!etd) errs.etd = "ETD wajib diisi";
-    else if (etd < etdMinimal) errs.etd = "ETD tidak boleh lebih awal dari ETD job awal";
-    if (!(Number(uangJalan) > 0)) errs.uangJalan = "Uang jalan job pengganti wajib diisi";
-    if (!alasan.trim()) errs.alasan = "Alasan wajib diisi";
-    setError(errs);
-    if (Object.keys(errs).length > 0) return;
-    setBusy("Membuat job pengganti…");
-    const res = await gantiUnitUlang(job.id, {
-      unit_id: unitId,
-      unit_trailer_id: trailer.data?.wajib ? trailerId : null,
-      driver_id: driverId,
-      etd,
-      eta: eta || null,
-      uang_jalan_awal: Math.round(Number(uangJalan)),
-      alasan: alasan.trim()
-    });
-    setBusy(null);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success(`Job pengganti ${res.data.job_number} dibuat untuk ${job.job_number}.`);
-    onClose();
-    navigate(`/jobs/${res.data.id}`);
-  }
-
-  return (
-    <Modal
-      open
-      onClose={busy ? () => {} : onClose}
-      title="Selesaikan job dengan unit lain"
-      maxWidth="max-w-[880px]"
-      description={`Job pengganti untuk ${job.job_number} (unit rusak) dibatalkan. Dibuat job pengganti baru di proyek yang sama; ${penggantiBatal.join(", ")} yang dibatalkan akan dihapus.`}
-      footer={<FooterModal formId="ganti-unit-ulang-form" label="Buat job pengganti" busy={busy !== null} onClose={onClose} />}
-    >
-      <form id="ganti-unit-ulang-form" onSubmit={simpan} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Unit pengganti" required hint="Hanya unit berstatus Stand by.">
-            <Combobox
-              value={unitId}
-              onChange={(v) => {
-                setUnitId(v);
-                setTrailerId("");
-              }}
-              options={opsiUnit}
-              placeholder={units.isLoading ? "Memuat unit…" : "Pilih unit"}
-              searchPlaceholder="Cari kode unit atau no. polisi…"
-              emptyText="Tidak ada unit Stand by"
-              error={error.unit}
-            />
-          </Field>
-          <Field label="Driver" required>
-            <Combobox
-              value={driverId}
-              onChange={setDriverId}
-              options={opsiDriver}
-              placeholder="Pilih driver"
-              searchPlaceholder="Cari nama driver…"
-              emptyText="Tidak ada driver Stand by"
-              error={error.driver}
-            />
-          </Field>
-          {unitId && (
-            <UnitTrailerField pilihan={trailer.data} loading={trailer.isLoading} value={trailerId} onChange={setTrailerId} error={error.trailer} />
-          )}
-          <Field label="ETD (berangkat)" required>
-            <DateTimeInput value={etd} onChange={setEtd} error={error.etd} min={etdMinimal} />
-          </Field>
-          <Field label="ETA (sampai)" hint="Opsional — dihitung otomatis dari rute.">
-            <DateTimeInput value={eta} onChange={setEta} clearable />
-          </Field>
-          <Field label="Uang jalan job pengganti" required>
-            <CurrencyInput placeholder="2.500.000" value={uangJalan} onChange={setUangJalan} error={error.uangJalan} />
-          </Field>
-        </div>
-        <Field label="Alasan" required>
-          <Textarea
-            value={alasan}
-            onChange={(e) => setAlasan(e.target.value)}
-            placeholder="Mis. job pengganti sebelumnya batal karena unit pengganti ikut rusak…"
-            error={error.alasan}
+        {terdaftar.length > 0 && (
+          <div style={{ display: "grid", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500 }}>
+              <input
+                type="checkbox"
+                checked={pakaiTerdaftar}
+                onChange={(e) => setPakaiTerdaftar(e.target.checked)}
+                style={{ accentColor: "var(--brand-primary)" }}
+              />
+              Gunakan insiden yang sudah terdaftar
+            </label>
+            {pakaiTerdaftar && (
+              <div style={{ display: "grid", gap: 6 }}>
+                {terdaftar.map((inc) => (
+                  <label
+                    key={inc.id}
+                    className="card"
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      padding: 10,
+                      cursor: "pointer",
+                      borderColor: inc.id === insidenId ? "var(--brand-primary)" : undefined
+                    }}
+                  >
+                    {/* Lebih dari satu insiden terbuka → pilih salah satu. */}
+                    {terdaftar.length > 1 && (
+                      <input
+                        type="radio"
+                        name="insiden-terdaftar"
+                        checked={inc.id === insidenId}
+                        onChange={() => setInsidenId(inc.id)}
+                        aria-label={`Pakai insiden ${incidentTypeLabel[inc.tipe]} ${formatDateTime(inc.tanggal)}`}
+                        style={{ accentColor: "var(--brand-primary)" }}
+                      />
+                    )}
+                    <KartuInsiden incident={inc} />
+                  </label>
+                ))}
+                {error.insidenId && <p className="field-error">{error.insidenId}</p>}
+                <p className="caption">Insiden ini dipakai untuk pergantian unit — tidak dibuat insiden baru.</p>
+              </div>
+            )}
+          </div>
+        )}
+        {!insidenDipakai && (
+          <BagianInsiden
+            judul={`Insiden kerusakan unit lama${unitKode ? ` (${unitKode})` : ""}`}
+            insiden={insiden}
+            onChange={(p) => setInsiden((i) => ({ ...i, ...p }))}
+            lokasiStatus={lokasiStatus}
+            error={error}
           />
-        </Field>
+        )}
+        <BagianPengembalianKasbon cair={cair} value={kasbon} onChange={(p) => setKasbon((k) => ({ ...k, ...p }))} error={error} />
       </form>
       <LoadingOverlay message={busy} />
     </Modal>

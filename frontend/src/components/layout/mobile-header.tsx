@@ -1,31 +1,12 @@
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Logo } from "./logo";
 import { MobileDrawer } from "./mobile-drawer";
 import { NotificationBell } from "./notification-bell";
 import { ProfileMenu } from "./profile-menu";
-import { navItems, type NavGroup, type UserRoleLike } from "./nav-items";
+import { bacaJejakAsal, susunJudul } from "./judul-halaman";
+import { type NavGroup, type UserRoleLike } from "./nav-items";
 import type { AppNotification } from "@/lib/notifications";
-
-function getPageTitle(pathname: string) {
-  const root = navItems.find((n) => n.match?.(pathname));
-  if (!root) return "MAS";
-  const segments = pathname.split("/").filter(Boolean);
-  // /approval/:fitur — kode fitur bagian dari menu, bukan halaman detail.
-  if (segments.length <= 1 || (segments[0] === "approval" && segments.length === 2)) return root.label;
-  const last = segments[segments.length - 1];
-  // Halaman job (menu Job): /jobs/:id → "Detail job", /jobs/:id/edit → "Edit job".
-  if (segments[0] === "jobs" && segments.length === 2 && last.length > 8 && /[0-9a-f-]/i.test(last)) return "Detail job";
-  if (segments[0] === "jobs" && segments.length === 3 && last === "edit") return "Edit job";
-  if (last === "new") return `${root.label} baru`;
-  if (last === "edit") return `Edit ${root.label.toLowerCase()}`;
-  if (last === "confirmation") return "Konfirmasi job";
-  if (last === "utilisasi") return "Utilisasi armada";
-  if (segments[0] === "proyek" && last === "per-unit") return "Proyek per unit";
-  if (segments[0] === "reports" && last === "customers")
-    return "Riwayat customer";
-  return `Detail ${root.label.toLowerCase()}`;
-}
 
 interface MobileHeaderProps {
   user: {
@@ -49,10 +30,11 @@ export function MobileHeader({
   notifications,
   approval
 }: MobileHeaderProps) {
-  const { pathname } = useLocation();
+  const { pathname, state } = useLocation();
   const navigate = useNavigate();
   const isRoot = ["/dashboard"].includes(pathname);
-  const title = getPageTitle(pathname);
+  // Asal halaman dari link (mis. job dibuka dari detail proyek).
+  const { jejak, judul } = susunJudul(pathname, bacaJejakAsal(state));
 
   return (
     <header
@@ -92,20 +74,52 @@ export function MobileHeader({
               >
                 <ArrowLeft style={{ width: 20, height: 20 }} />
               </button>
-              <h1
-                style={{
-                  fontSize: 16,
-                  fontWeight: 600,
-                  color: "var(--text-primary)",
-                  margin: 0,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  minWidth: 0
-                }}
-              >
-                {title}
-              </h1>
+              {/* Layar sempit: jejak kecil di atas judul ("Menu / Detail"). */}
+              <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+                {jejak.length > 0 && (
+                  <div
+                    style={{
+                      fontSize: 11.5,
+                      color: "var(--text-tertiary)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {jejak.map((j) => (
+                      <span key={j.label}>
+                        {j.href ? (
+                          <Link
+                            to={j.href}
+                            // Asal halaman ikut terbawa (mis. Detail Job tetap di bawah Detail Proyek).
+                            state={state}
+                            className="judul-jejak"
+                          >
+                            {j.label}
+                          </Link>
+                        ) : (
+                          j.label
+                        )}
+                        {" / "}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <h1
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    margin: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    minWidth: 0
+                  }}
+                >
+                  {judul}
+                </h1>
+              </div>
             </>
           )}
         </div>

@@ -1,16 +1,16 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { DateInput } from "@/components/ui/date-input";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronRight, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
-import type { JobProfitabilityRow } from "@/types";
+import type { ProyekProfitabilityRow } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 interface Props {
-  rows: JobProfitabilityRow[];
+  rows: ProyekProfitabilityRow[];
   start: string;
   end: string;
 }
@@ -18,14 +18,15 @@ interface Props {
 type SortKey = "etd" | "laba" | "pendapatan";
 
 /**
- * Laba per job.
+ * Laba per proyek.
  *
- * Pendapatan dan biaya sudah tercatat sejak modul penawaran dan uang jalan,
- * tapi tidak pernah dipertemukan sampai invoice ada. Job yang belum ditagih
- * tetap ditampilkan dengan pendapatan nol — itu justru informasinya: pekerjaan
- * yang sudah keluar biaya tapi belum ditagihkan.
+ * Tagihan ditulis per proyek, jadi pendapatan & biaya dipertemukan per
+ * proyek (semua job-nya dijumlah). Proyek yang belum ditagih tetap
+ * ditampilkan dengan pendapatan nol — itu justru informasinya: pekerjaan yang
+ * sudah keluar biaya tapi belum ditagihkan.
  */
 export function LabaView({ rows, start, end }: Props) {
+  const barisDetail = useBarisDetail();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [range, setRange] = useState({ start, end });
@@ -48,8 +49,8 @@ export function LabaView({ rows, start, end }: Props) {
   );
 
   const belumDitagih = useMemo(
-    // Kosongan & job lama yang unitnya diganti memang tidak ditagih.
-    () => rows.filter((r) => r.pendapatan === 0 && r.status === "selesai" && !r.kosongan && !r.diganti_oleh),
+    // Kosongan memang tidak ditagih.
+    () => rows.filter((r) => !r.invoice_id && r.semua_selesai && !r.kosongan),
     [rows]
   );
 
@@ -95,9 +96,9 @@ export function LabaView({ rows, start, end }: Props) {
           <Button onClick={terapkan}>Terapkan</Button>
         </div>
         <p className="caption" style={{ marginTop: 8, color: "var(--text-tertiary)" }}>
-          Rentang mengikuti tanggal berangkat job (ETD), bukan tanggal tagihan —
-          supaya biaya dan pendapatan satu perjalanan selalu jatuh di periode
-          yang sama.
+          Rentang mengikuti tanggal berangkat job pertama proyek (ETD), bukan
+          tanggal tagihan — seluruh job proyek ikut dihitung, supaya biaya dan
+          pendapatan satu proyek selalu jatuh di periode yang sama.
         </p>
       </div>
 
@@ -133,22 +134,22 @@ export function LabaView({ rows, start, end }: Props) {
             color: "#7A5B12"
           }}
         >
-          {belumDitagih.length} job sudah selesai tapi belum ada tagihannya —
+          {belumDitagih.length} proyek sudah selesai tapi belum ada tagihannya —
           biayanya sudah keluar, pendapatannya belum masuk. Angka laba di atas
-          akan naik setelah job itu ditagihkan.
+          akan naik setelah proyek itu ditagihkan.
         </div>
       )}
 
       {rows.length === 0 ? (
         <EmptyState
           icon={TrendingUp}
-          title="Belum ada job di rentang ini"
-          description="Ubah rentang tanggalnya, atau buat job dulu."
+          title="Belum ada proyek di rentang ini"
+          description="Ubah rentang tanggalnya, atau buat proyek dulu."
         />
       ) : (
         <div className="card">
           <div className="card-header">
-            <p className="eyebrow">Rincian per job</p>
+            <p className="eyebrow">Rincian per proyek</p>
             <div style={{ display: "flex", gap: 6 }}>
               {(
                 [
@@ -180,23 +181,25 @@ export function LabaView({ rows, start, end }: Props) {
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ width: 130 }}>Job</th>
+                  <KepalaKolomLihat />
+                  <th style={{ width: 170 }}>Proyek</th>
                   <th>Customer</th>
-                  <th style={{ width: 80 }}>Unit</th>
+                  <th style={{ width: 100 }}>Unit</th>
                   <th style={{ width: 100 }}>Berangkat</th>
                   <th style={{ width: 130, textAlign: "right" }}>Pendapatan</th>
                   <th style={{ width: 130, textAlign: "right" }}>Uang jalan</th>
                   <th style={{ width: 120, textAlign: "right" }}>Insiden</th>
                   <th style={{ width: 130, textAlign: "right" }}>Laba</th>
-                  <th style={{ width: 44 }} />
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((r) => (
-                  <tr key={r.job_id} className="row-link">
+                  <tr key={r.proyek_id} {...barisDetail(`/proyek/${r.proyek_id}`)}>
+                    <td style={{ width: 44 }}>
+                      <TombolLihat tujuan={`/proyek/${r.proyek_id}`} />
+                    </td>
                     <td>
-                      <Link
-                        to={`/jobs/${r.job_id}`}
+                      <span
                         className="mono"
                         style={{
                           textDecoration: "none",
@@ -205,13 +208,11 @@ export function LabaView({ rows, start, end }: Props) {
                           fontWeight: 600
                         }}
                       >
-                        {r.job_number}
-                      </Link>
-                      {r.proyek_nomor && (
-                        <div className="caption mono" style={{ fontSize: 10.5 }}>
-                          {r.proyek_nomor}
-                        </div>
-                      )}
+                        {r.nomor_proyek}
+                      </span>
+                      <div className="caption" style={{ fontSize: 10.5 }}>
+                        {r.jumlah_job} job
+                      </div>
                     </td>
                     <td style={{ fontSize: 13 }}>
                       {r.kosongan ? <span className="muted">Kosongan · cost perusahaan</span> : r.customer_nama}
@@ -220,7 +221,7 @@ export function LabaView({ rows, start, end }: Props) {
                       {r.unit_kode}
                     </td>
                     <td className="muted" style={{ fontSize: 12 }}>
-                      {formatDate(r.etd)}
+                      {formatDate(r.etd_awal)}
                     </td>
                     <td
                       className="mono"
@@ -237,9 +238,11 @@ export function LabaView({ rows, start, end }: Props) {
                         ? formatRupiah(r.pendapatan)
                         : r.kosongan
                           ? "tidak ditagih"
-                          : r.diganti_oleh
-                            ? `diganti ${r.diganti_oleh}`
-                            : "belum ditagih"}
+                          : r.invoice_id
+                            ? formatRupiah(0)
+                            : r.semua_selesai
+                              ? "belum ditagih"
+                              : "job belum selesai"}
                     </td>
                     <td
                       className="mono"
@@ -275,17 +278,6 @@ export function LabaView({ rows, start, end }: Props) {
                       }}
                     >
                       {formatRupiah(r.laba)}
-                    </td>
-                    <td>
-                      <Link
-                        to={`/jobs/${r.job_id}`}
-                        style={{
-                          color: "var(--text-tertiary)",
-                          display: "inline-flex"
-                        }}
-                      >
-                        <ChevronRight style={{ width: 16, height: 16 }} />
-                      </Link>
                     </td>
                   </tr>
                 ))}

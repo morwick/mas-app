@@ -89,7 +89,7 @@ export function PengajuanDetailView({ p, namaFitur }: Props) {
   }
 
   return (
-    <div className="flex flex-col" style={{ gap: 16, maxWidth: 820 }}>
+    <div className="flex flex-col" style={{ gap: 16 }}>
       <div>
         <Link to={kembali} className="caption" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
           <ArrowLeft style={{ width: 13, height: 13 }} /> Approval {namaFitur}

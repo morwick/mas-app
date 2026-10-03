@@ -1,6 +1,6 @@
 import { useDeferredValue, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, Phone, Plus, Search, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Phone, Plus, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
@@ -11,10 +11,12 @@ import { DEFAULT_PAGE_SIZE, Pagination } from "@/components/ui/pagination";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { serverPageState, tautanWhatsApp } from "@/lib/server-page";
 import { useAsuransiCounts, useAsuransiPage } from "../queries";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
+import { IkonPerusahaan } from "@/components/ui/avatar-inisial";
 
 /** Master Asuransi — daftar perusahaan asuransi beserta PIC utamanya. */
 export function AsuransiListView() {
-  const navigate = useNavigate();
+  const barisDetail = useBarisDetail();
   const { canManageOperational } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -86,11 +88,11 @@ export function AsuransiListView() {
             <table className="table">
               <thead>
                 <tr>
+                  <KepalaKolomLihat />
                   <th>Nama asuransi</th>
                   <th>PIC utama</th>
                   <th style={{ width: 150 }}>Telepon kantor</th>
                   <th style={{ width: 150 }}>Aset terlindungi</th>
-                  <th style={{ width: 40 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -98,22 +100,22 @@ export function AsuransiListView() {
                   const pic = a.pic_utama;
                   const wa = pic ? tautanWhatsApp(pic.no_hp) : null;
                   return (
-                    <tr
-                      key={a.id}
-                      className="row-link"
-                      tabIndex={0}
-                      onClick={() => navigate(`/asuransi/${a.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") navigate(`/asuransi/${a.id}`);
-                      }}
-                    >
+                    <tr key={a.id} {...barisDetail(`/asuransi/${a.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/asuransi/${a.id}`} />
+                      </td>
                       <td style={{ fontWeight: 600 }}>
-                        {a.nama}
-                        {!a.is_active && (
-                          <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
-                            Nonaktif
-                          </span>
-                        )}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <IkonPerusahaan nama={a.nama} redup={!a.is_active} />
+                          <div style={{ minWidth: 0 }}>
+                            {a.nama}
+                            {!a.is_active && (
+                              <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                                Nonaktif
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td>
                         {pic ? (
@@ -140,9 +142,6 @@ export function AsuransiListView() {
                       </td>
                       <td className="mono">{a.telepon ?? "—"}</td>
                       <td>{a.jumlah_aset_aktif > 0 ? `${a.jumlah_aset_aktif} aset` : "—"}</td>
-                      <td>
-                        <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
-                      </td>
                     </tr>
                   );
                 })}

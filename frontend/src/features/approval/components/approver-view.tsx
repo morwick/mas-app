@@ -28,7 +28,7 @@ import { useApproverList, useCalonApprover, useFiturApproval } from "../queries"
 type FormTambah = { fitur: FiturApproval | ""; karyawanId: string; urutan: string };
 
 /**
- * Master → Approver (superadmin): mode approval per fitur dan siapa approvernya.
+ * Master Data → Approver (superadmin): mode approval per fitur dan siapa approvernya.
  *
  * BATASAN (dijaga database, migration 20261001000009):
  * - approver harus karyawan aktif yang punya akun pengguna web aktif;

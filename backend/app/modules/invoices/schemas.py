@@ -32,7 +32,9 @@ class InvoiceItem(BaseModel):
     # Job yang ditagihkan baris ini. None untuk baris di luar job.
     job_id: str | None = None
     job_number: str | None = None
-    # Proyek induk job baris ini (ditampilkan di depan nomor job).
+    # Proyek induk job baris ini (ditampilkan di depan nomor job). proyek_id
+    # dipakai untuk menaruh job di bawah baris proyeknya (InvoiceProyek).
+    proyek_id: str | None = None
     proyek_nomor: str | None = None
     deskripsi: str
     dari: str | None = None
@@ -52,6 +54,19 @@ class InvoiceItem(BaseModel):
     # Rincian uang jalan: uang jalan awal + tiap pencairan / tambahan (dengan bukti transfer).
     uang_jalan_awal: float | None = None
     uang_jalan_transaksi: list[UangJalanTransaksi] = []
+
+
+class InvoiceProyek(BaseModel):
+    """Baris rincian per proyek: teks bebas yang tercetak di invoice + nominal.
+    Job-job proyeknya ada di `items` (proyek_id sama) — nominal dibagi rata."""
+
+    id: str
+    invoice_id: str
+    proyek_id: str
+    proyek_nomor: str | None = None
+    urutan: int
+    uraian: str
+    nominal: float
 
 
 class InvoicePayment(BaseModel):
@@ -88,8 +103,13 @@ class InvoiceBase(BaseModel):
     jatuh_tempo: str | None = None
     ppn_aktif: bool
     ppn_persen: float
+    # Potongan PPh 23 (perusahaan pemberi jasa) — mengurangi total.
+    pph23_aktif: bool = False
+    pph23_persen: float = 2
     subtotal: float
     ppn_nominal: float
+    pph23_nominal: float = 0
+    # subtotal + PPN − PPh 23 = yang dibayar customer.
     total: float
     # Diisi database dari invoice_payments.
     dibayar: float
@@ -117,6 +137,9 @@ class Invoice(InvoiceBase):
     # sementara (bucket privat) jadi tidak masuk akal disimpan di baris list.
     faktur_pajak_uploaded_at: str | None = None
     faktur_pajak_url: str | None = None
+    # Rincian per proyek. Kosong untuk tagihan lama (sebelum rincian per
+    # proyek) — tagihan seperti itu tetap ditampilkan per baris `items`.
+    proyek: list[InvoiceProyek] = Field(default_factory=list)
     items: list[InvoiceItem] = Field(default_factory=list)
     payments: list[InvoicePayment] = Field(default_factory=list)
 
@@ -137,6 +160,16 @@ class InvoiceItemInput(BaseModel):
     harga_satuan: float
 
 
+class InvoiceProyekInput(BaseModel):
+    proyek_id: str = Field(min_length=1)
+    # Teks yang tercetak di invoice untuk proyek ini (boleh beberapa baris).
+    uraian: str
+    nominal: float
+    # Job proyek yang ikut ditagih — disimpan satu baris per job di
+    # invoice_items dengan nominal dibagi rata.
+    job_ids: list[str] = Field(default_factory=list)
+
+
 class InvoiceInput(BaseModel):
     customer_id: str = Field(min_length=1)
     quotation_id: str | None = None
@@ -148,12 +181,16 @@ class InvoiceInput(BaseModel):
     jatuh_tempo: str | None = None
     ppn_aktif: bool = False
     ppn_persen: float = 11
+    pph23_aktif: bool = False
+    pph23_persen: float = 2
     ttd_nama: str | None = None
     ttd_jabatan: str | None = None
     bank_nama: str | None = None
     bank_rekening: str | None = None
     bank_atas_nama: str | None = None
     catatan: str | None = None
+    proyek: list[InvoiceProyekInput] = Field(default_factory=list)
+    # Baris di luar proyek (mis. biaya tambahan).
     items: list[InvoiceItemInput] = Field(default_factory=list)
 
 
@@ -226,6 +263,27 @@ class PiutangSummaryRow(BaseModel):
     umur_1_30: float
     umur_31_60: float
     umur_60_plus: float
+
+
+class ProyekProfitabilityRow(BaseModel):
+    """Laba per proyek: jumlah angka job-job proyek (get_proyek_profitability)."""
+
+    proyek_id: str
+    nomor_proyek: str
+    customer_nama: str
+    # Proyek tanpa customer (unit jalan kosongan): tidak ditagih → cost perusahaan.
+    kosongan: bool = False
+    unit_kode: str
+    # ETD job pertama — dasar rentang tanggal laporan.
+    etd_awal: str
+    jumlah_job: int
+    semua_selesai: bool
+    invoice_id: str | None = None
+    invoice_number: str | None = None
+    pendapatan: float
+    uang_jalan: float
+    biaya_insiden: float
+    laba: float
 
 
 class JobProfitabilityRow(BaseModel):

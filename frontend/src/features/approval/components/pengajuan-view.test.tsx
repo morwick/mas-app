@@ -66,10 +66,16 @@ describe("PengajuanView (daftar)", () => {
     expect(screen.queryByRole("button", { name: "Setujui" })).toBeNull();
   });
 
-  it("klik pengajuan membuka halaman detail", () => {
+  it("baris tabel: klik 1 kali tidak apa-apa, klik 2 kali membuka halaman detail", () => {
     items = [pengajuan()];
     tampil();
-    fireEvent.click(screen.getAllByText("Tambahan uang jalan JOB-001 · Ban pecah")[0]);
+    const baris = screen
+      .getAllByText("Tambahan uang jalan JOB-001 · Ban pecah")
+      .map((el) => el.closest("tr"))
+      .find(Boolean) as HTMLElement;
+    fireEvent.click(baris);
+    expect(screen.queryByText("HALAMAN DETAIL")).toBeNull();
+    fireEvent.doubleClick(baris);
     expect(screen.getByText("HALAMAN DETAIL")).toBeTruthy();
   });
 

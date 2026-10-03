@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { queryClient } from "@/lib/api/query";
 import {
   AlertTriangle,
@@ -34,8 +34,6 @@ import {
   GantiDriverModal,
   GantiTrailerModal,
   GantiUnitModal,
-  GantiUnitUlangModal,
-  penggantiBatalDariRiwayat,
   bolehPenggantian
 } from "@/features/jobs/components/penggantian-modal";
 import { useRiwayatGantiTruk } from "@/features/jobs/queries";
@@ -55,6 +53,7 @@ import type {
   Unit
 } from "@/types";
 import { UangJalanCard } from "@/features/uang-jalan/components/uang-jalan-card";
+import { BiayaLainCard } from "@/features/biaya-lain/components/biaya-lain-card";
 import type { TambahanDibatalkan } from "@/features/uang-jalan/api";
 import { formatDateTime, formatRupiah, TZ_WIB } from "@/lib/utils";
 
@@ -69,8 +68,13 @@ interface Props {
   uangJalanPengajuan?: UangJalanRequest[];
   /** Pengajuan tambahan yang dibatalkan — riwayat di kartu uang jalan. */
   uangJalanDibatalkan?: TambahanDibatalkan[];
-  /** Finance: hanya melihat — tidak ada tombol aksi apa pun. */
+  /** Finance & operator: hanya melihat — tidak ada tombol aksi apa pun. */
   hanyaLihat?: boolean;
+  /**
+   * Info internal (sales, No HP sales, catatan internal, biaya lain).
+   * BATASAN: operator tidak melihatnya; finance, admin & superadmin melihat.
+   */
+  tampilInfoInternal?: boolean;
 }
 
 function driverInitials(nama: string) {
@@ -82,6 +86,9 @@ function driverInitials(nama: string) {
     .join("")
     .toUpperCase();
 }
+
+export const PESAN_MENUNGGU_VALIDASI =
+  "Job ini sedang menunggu validasi Anda — statusnya tidak bisa diubah. Silakan Approve atau Kembalikan ke driver di panel validasi.";
 
 const JUDUL_PENGGANTIAN: Record<string, string> = {
   ganti_truk: "Ganti truk",
@@ -100,9 +107,12 @@ export function JobDetailView({
   uangJalanRingkasan,
   uangJalanPengajuan = [],
   uangJalanDibatalkan = [],
-  hanyaLihat = false
+  hanyaLihat = false,
+  tampilInfoInternal = true
 }: Props) {
   const toast = useToast();
+  // Asal halaman (mis. dibuka dari detail proyek) ikut ke halaman edit job.
+  const { state: asalHalaman } = useLocation();
 
   const photos = job.photos ?? [];
   // Foto lama (sebelum v2) tanpa slot tetap ditampilkan sebagai arsip.
@@ -114,9 +124,6 @@ export function JobDetailView({
   // Penggantian saat job berjalan: driver (sakit/kabur), unit trailer, atau unit (job pengganti).
   const [penggantian, setPenggantian] = useState<"driver" | "trailer" | "unit" | null>(null);
   const riwayatGantiTruk = useRiwayatGantiTruk(job.id);
-  // Job lama yang job penggantinya dibatalkan → "Selesaikan job dengan unit lain".
-  const [gantiUlang, setGantiUlang] = useState(false);
-  const penggantiBatal = penggantiBatalDariRiwayat(job, riwayatGantiTruk.data ?? []);
   const [lightbox, setLightbox] = useState<{
     images: string[];
     index: number;
@@ -314,6 +321,7 @@ export function JobDetailView({
             </Link>
             <Link
               to={`/jobs/${job.id}/edit`}
+              state={asalHalaman}
               className="btn btn-secondary btn-sm"
               style={{ textDecoration: "none" }}
             >
@@ -353,26 +361,24 @@ export function JobDetailView({
                 </button>
               </>
             )}
-            {penggantiBatal.length > 0 && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => setGantiUlang(true)}
-                title={`Job pengganti ${penggantiBatal.join(", ")} dibatalkan: buat job baru dengan unit lain.`}
-              >
-                <Truck style={{ width: 14, height: 14 }} />
-                Selesaikan job dengan unit lain
-              </button>
-            )}
             {!closed && (
               // Membuka UpdateStatusModal: ubah status manual, termasuk
               // membatalkan job. Modalnya sendiri yang menyaring opsi
-              // "Batalkan job" begitu uang jalan sudah cair.
+              // "Batalkan job" begitu uang jalan sudah cair atau bila job
+              // ini job pengganti (ganti unit).
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
                 style={{ marginLeft: "auto" }}
-                onClick={() => setStatusOpen(true)}
+                onClick={() => {
+                  // BATASAN: job Menunggu validasi diputuskan admin lewat panel
+                  // validasi (Approve / Kembalikan), bukan diubah statusnya manual.
+                  if (job.status === "menunggu_validasi") {
+                    toast.error(PESAN_MENUNGGU_VALIDASI);
+                    return;
+                  }
+                  setStatusOpen(true);
+                }}
               >
                 <RefreshCw style={{ width: 14, height: 14 }} />
                 Update Status Job
@@ -423,6 +429,12 @@ export function JobDetailView({
               <DetailField label="Tujuan" value={job.tujuan} />
               <DetailField label="ETD" value={formatDateTime(job.etd)} mono />
               <DetailField label="ETA" value={job.eta ? formatDateTime(job.eta) : "—"} mono />
+              {tampilInfoInternal && (
+                <>
+                  <DetailField label="Sales" value={job.sales_nama || "—"} />
+                  <DetailField label="No HP Sales" value={job.sales_no_hp || "—"} mono />
+                </>
+              )}
             </div>
             {/* Unit & driver menjadi bagian detail pengiriman, di atas catatan internal. */}
             {(unit || driver) && (
@@ -591,7 +603,7 @@ export function JobDetailView({
                 </div>
               </>
             )}
-            {job.catatan && (
+            {tampilInfoInternal && job.catatan && (
               <>
                 <div className="divider" style={{ margin: "14px 0" }} />
                 <DetailField
@@ -668,6 +680,13 @@ export function JobDetailView({
               onOpen={(p) => setLightbox({ images: allPhotoUrls, index: allPhotoUrls.indexOf(p.file_url) })}
               onDelete={closed || hanyaLihat ? undefined : (p) => setDeletePhoto({ id: p.id, path: p.file_path })}
               onUpload={closed || hanyaLihat ? undefined : (slot) => setUploadTarget({ stage, slot })}
+              tanggal={
+                stage === "loading"
+                  ? { label: "Tanggal muat", value: job.muat_at }
+                  : stage === "unloading"
+                    ? { label: "Tanggal bongkar", value: job.bongkar_at }
+                    : undefined
+              }
             />
           ))}
           {legacyPhotos.length > 0 && (
@@ -802,6 +821,14 @@ export function JobDetailView({
             dibatalkan={uangJalanDibatalkan}
           />
 
+          {tampilInfoInternal && (
+            <BiayaLainCard
+              jobId={job.id}
+              hanyaLihat={hanyaLihat}
+              nomorTagihan={job.invoice_id ? job.invoice_number : null}
+            />
+          )}
+
           {(riwayatGantiTruk.data ?? []).length > 0 && (
             <div className="card">
               <div style={{ padding: "14px 16px", borderBottom: "0.5px solid var(--border-default)" }}>
@@ -844,15 +871,6 @@ export function JobDetailView({
                             Dibatalkan
                           </span>
                         )}
-                      </div>
-                    )}
-                    {/* Job pengganti dibatalkan → muatan tetap harus diantar dengan unit lain. */}
-                    {!hanyaLihat && r.job_pengganti_id && penggantiBatal.length > 0 && (
-                      <div style={{ marginTop: 4 }}>
-                        <button type="button" className="btn btn-primary btn-sm" onClick={() => setGantiUlang(true)}>
-                          <Truck style={{ width: 14, height: 14 }} />
-                          Selesaikan job dengan unit lain
-                        </button>
                       </div>
                     )}
                     <div style={{ color: "var(--text-secondary)" }}>Alasan: {r.alasan}</div>
@@ -972,6 +990,7 @@ export function JobDetailView({
         onClose={() => setStatusOpen(false)}
         current={job.status}
         uangJalanCair={uangJalanCair}
+        jobPengganti={Boolean(job.menggantikan_job_id)}
         onConfirm={onUpdateStatus}
       />
       <UploadPhotoModal
@@ -986,9 +1005,6 @@ export function JobDetailView({
         <GantiDriverModal job={job} driverNama={driver?.nama} onClose={() => setPenggantian(null)} />
       )}
       {penggantian === "trailer" && <GantiTrailerModal job={job} onClose={() => setPenggantian(null)} />}
-      {gantiUlang && (
-        <GantiUnitUlangModal job={job} penggantiBatal={penggantiBatal} onClose={() => setGantiUlang(false)} />
-      )}
       {penggantian === "unit" && (
         <GantiUnitModal job={job} unitKode={unit?.kode_unit} onClose={() => setPenggantian(null)} />
       )}

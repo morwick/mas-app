@@ -7,7 +7,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui/toast";
 import { labelStatusInsiden, type Incident } from "@/types";
-import { BANTU_TANPA_PERBAIKAN, IncidentActionButtons, useIncidentActions } from "./incident-actions";
+import { BANTU_TANPA_PERBAIKAN, IncidentActionButtons, PESAN_DARI_GANTI_UNIT, useIncidentActions } from "./incident-actions";
 
 const insiden = (status: Incident["status"]) => ({ id: "i1", status }) as Incident;
 
@@ -69,5 +69,42 @@ describe("Selesaikan Tanpa Perbaikan", () => {
     expect(labelStatusInsiden({ status: "resolved", ditutup_karena: "tanpa_perbaikan" })).toBe(
       "Selesai (tanpa perbaikan)"
     );
+  });
+});
+
+describe("hapus insiden", () => {
+  function tampil(incident: Incident) {
+    render(
+      <ToastProvider>
+        <Uji incident={incident} />
+      </ToastProvider>
+    );
+  }
+
+  it("sukses: insiden biasa yang Terbuka → konfirmasi hapus lalu DELETE ke server", async () => {
+    tampil(insiden("open"));
+    fireEvent.click(screen.getByRole("button", { name: /Hapus/ }));
+    expect(screen.getByText("Hapus catatan insiden?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ya, hapus" }));
+    await waitFor(() => expect(panggilan).toContainEqual({ method: "DELETE", path: "/api/incidents/i1" }));
+  });
+
+  it("edge: insiden operator yang terkait job (bukan ganti unit) tetap bisa dihapus", () => {
+    tampil({ id: "i1", status: "open", job_id: "j1", dari_ganti_unit: false } as Incident);
+    fireEvent.click(screen.getByRole("button", { name: /Hapus/ }));
+    expect(screen.getByText("Hapus catatan insiden?")).toBeTruthy();
+  });
+
+  it("gagal: insiden dari ganti unit — tombol ada, tapi diklik langsung ditolak tanpa ke server", async () => {
+    tampil({ id: "i1", status: "open", job_id: "j1", dari_ganti_unit: true } as Incident);
+    fireEvent.click(screen.getByRole("button", { name: /Hapus/ }));
+    expect(await screen.findByText(PESAN_DARI_GANTI_UNIT)).toBeTruthy();
+    expect(screen.queryByText("Hapus catatan insiden?")).toBeNull();
+    expect(panggilan).toEqual([]);
+  });
+
+  it("edge: insiden Dalam penanganan tidak punya tombol Hapus", () => {
+    tampil(insiden("in_progress"));
+    expect(screen.queryByRole("button", { name: /Hapus/ })).toBeNull();
   });
 });

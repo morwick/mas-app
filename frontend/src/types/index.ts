@@ -118,6 +118,12 @@ export interface Customer {
   pic_email?: string | null;
 }
 
+/**
+ * Master vendor (Master Data → Vendor). Sementara strukturnya disamakan
+ * dengan customer — akan dirombak sesuai kebutuhan.
+ */
+export type Vendor = Customer;
+
 export interface JobPhoto {
   id: string;
   job_id: string;
@@ -198,6 +204,16 @@ export interface Job {
   route_duration_min?: number | null;
   /** Borongan uang jalan yang disepakati di awal. */
   uang_jalan_awal?: number | null;
+  /** Sales job (master sales) — hanya data internal. */
+  sales_id?: string | null;
+  sales_nama?: string | null;
+  sales_no_hp?: string | null;
+  /**
+   * Waktu sampai lokasi muat / bongkar (pertama kali Loading / Unloading;
+   * ganti unit memakai tanggal insiden). Diisi database, tidak pernah diubah.
+   */
+  muat_at?: string | null;
+  bongkar_at?: string | null;
   unit_id: string;
   /** Unit trailer yang ditarik (wajib bila jenis unit-nya punya jenis unit trailer). */
   unit_trailer_id?: string | null;
@@ -285,8 +301,11 @@ export interface Incident {
   unit_kode?: string;
   unit_trailer_id?: string | null;
   unit_trailer_kode?: string | null;
+  /** Job yang sedang memakai unit saat insiden dicatat (diisi otomatis). */
   job_id?: string | null;
   job_number?: string | null;
+  /** Dipakai / dicatat oleh Ganti unit di job — tidak bisa dihapus. */
+  dari_ganti_unit?: boolean;
   tipe: IncidentType;
   tanggal: string;
   lokasi?: string | null;
@@ -737,7 +756,8 @@ export interface InvoiceItem {
   /** Job yang ditagihkan baris ini. Null untuk baris di luar job. */
   job_id?: string | null;
   job_number?: string | null;
-  /** Proyek induk job baris ini. */
+  /** Proyek induk job baris ini — job ditaruh di bawah baris proyeknya. */
+  proyek_id?: string | null;
   proyek_nomor?: string | null;
   deskripsi: string;
   dari?: string | null;
@@ -757,6 +777,20 @@ export interface InvoiceItem {
   /** Rincian uang jalan: uang jalan awal + tiap pencairan / tambahan (dengan bukti transfer). */
   uang_jalan_awal?: number | null;
   uang_jalan_transaksi?: UangJalanTransaksi[];
+}
+
+/**
+ * Baris rincian per proyek: teks bebas yang tercetak di invoice + nominal.
+ * Job-jobnya ada di `Invoice.items` (proyek_id sama), nominal dibagi rata.
+ */
+export interface InvoiceProyek {
+  id: string;
+  invoice_id: string;
+  proyek_id: string;
+  proyek_nomor?: string | null;
+  urutan: number;
+  uraian: string;
+  nominal: number;
 }
 
 export interface InvoicePayment {
@@ -797,8 +831,14 @@ export interface Invoice {
 
   ppn_aktif: boolean;
   ppn_persen: number;
+  /** Potongan PPh 23 (perusahaan pemberi jasa), default mati, 2%. */
+  pph23_aktif: boolean;
+  pph23_persen: number;
   subtotal: number;
   ppn_nominal: number;
+  /** ROUND(subtotal × pph23_persen / 100) — mengurangi total. */
+  pph23_nominal: number;
+  /** subtotal + PPN − PPh 23 = yang dibayar customer. */
   total: number;
   /** Jumlah pembayaran masuk. Diisi database dari invoice_payments. */
   dibayar: number;
@@ -831,6 +871,8 @@ export interface Invoice {
   faktur_pajak_uploaded_at?: string | null;
   faktur_pajak_url?: string | null;
 
+  /** Rincian per proyek; kosong untuk tagihan lama (tampil per baris `items`). */
+  proyek?: InvoiceProyek[];
   items: InvoiceItem[];
   payments: InvoicePayment[];
 }
@@ -856,24 +898,93 @@ export interface PiutangSummaryRow {
 }
 
 /** Satu baris per job di laporan laba, dari get_job_profitability(). */
-export interface JobProfitabilityRow {
-  job_id: string;
-  job_number: string;
+/** Laba per proyek: jumlah angka job-job proyek. */
+export interface ProyekProfitabilityRow {
+  proyek_id: string;
+  nomor_proyek: string;
   customer_nama: string;
+  /** Proyek tanpa customer (unit jalan kosongan) → cost perusahaan, tidak ditagih. */
+  kosongan: boolean;
   unit_kode: string;
-  etd: string;
-  status: JobStatus;
-  /** Nilai baris invoice untuk job ini, di luar PPN. */
+  /** ETD job pertama — dasar rentang tanggal laporan. */
+  etd_awal: string;
+  jumlah_job: number;
+  /** Semua job selesai (job yang unitnya diganti dianggap selesai). */
+  semua_selesai: boolean;
+  invoice_id: string | null;
+  invoice_number: string | null;
+  /** Nilai tagihan proyek, di luar PPN. */
   pendapatan: number;
   /** Uang jalan yang benar-benar terpakai (pencairan − pengembalian; kasbon tidak mengurangi). */
   uang_jalan: number;
   biaya_insiden: number;
   laba: number;
-  proyek_nomor: string | null;
-  /** Proyek tanpa customer (unit jalan kosongan) → cost perusahaan, tidak ditagih. */
-  kosongan: boolean;
-  /** Job lama yang unitnya rusak & sudah diganti job ini — tidak ditagih. */
-  diganti_oleh: string | null;
+}
+
+/**
+ * Laba tahunan per bulan. Dasarnya tagihan: omset dan seluruh biaya proyek
+ * yang ditagih jatuh di bulan tanggal tagihan. Semua angka di luar PPN.
+ */
+export interface LabaBulanRow {
+  /** 1–12. */
+  bulan: number;
+  jumlah_tagihan: number;
+  jumlah_proyek: number;
+  omset: number;
+  /** Porsi DPP dari pembayaran yang sudah masuk. */
+  dibayar: number;
+  /** Total: proyek ditagih + proyek kosongan. */
+  uang_jalan: number;
+  /** Biaya Lain job (total ditagih + kosongan). Biaya repair tidak dihitung. */
+  biaya_lainnya: number;
+  /** Proyek kosongan yang bongkar di bulan ini (tidak ditagih, cost perusahaan). */
+  jumlah_kosongan: number;
+  uang_jalan_kosongan: number;
+  biaya_lainnya_kosongan: number;
+  profit: number;
+  /** Persen profit terhadap omset; null bila omset nol. */
+  margin: number | null;
+}
+
+/** Proyek yang semua job-nya selesai tapi belum ada tagihannya. */
+export interface ProyekBelumDitagihRow {
+  proyek_id: string;
+  nomor_proyek: string;
+  customer_nama: string;
+  unit_kode: string;
+  etd_awal: string;
+  jumlah_job: number;
+  uang_jalan: number;
+  biaya_lainnya: number;
+}
+
+export interface LabaTahunan {
+  tahun: number;
+  bulan: LabaBulanRow[];
+  belum_ditagih: {
+    jumlah: number;
+    uang_jalan: number;
+    biaya_lainnya: number;
+    daftar: ProyekBelumDitagihRow[];
+  };
+}
+
+/** Master jenis biaya (Master Data → Jenis Biaya). */
+export interface JenisBiaya {
+  id: string;
+  nama: string;
+}
+
+/** Biaya lain per job — murni biaya perusahaan, tidak masuk tagihan. */
+export interface BiayaLain {
+  id: string;
+  job_id: string;
+  jenis_biaya_id: string;
+  jenis_biaya_nama: string;
+  nominal: number;
+  catatan: string | null;
+  created_by_nama: string | null;
+  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,8 +1127,37 @@ export interface ProyekRingkas {
   invoice_number: string | null;
 }
 
+/** Tagihan yang pernah dibuat untuk proyek, termasuk yang dibatalkan. */
+export interface ProyekTagihan {
+  id: string;
+  invoice_number: string;
+  tanggal: string;
+  created_at: string;
+  status_tampil: InvoiceTampilStatus;
+  status_bayar: StatusBayar;
+  alasan_batal: string | null;
+  /** Nominal hanya untuk superadmin & finance; admin menerima null. */
+  total: number | null;
+  dibayar: number | null;
+  sisa: number | null;
+}
+
+/** Uang jalan & biaya lain satu job — angka sama dengan kartu di detail job. */
+export interface ProyekBiayaJob {
+  /** Uang jalan job = awal + tambahan disetujui. */
+  uang_jalan: number;
+  /** Sudah diberikan ke driver (pencairan − pengembalian). */
+  cair: number;
+  sisa: number;
+  biaya_lain: number;
+}
+
 export interface ProyekDetail extends ProyekRingkas {
   jobs: Job[];
+  /** Per job_id. */
+  biaya_job?: Record<string, ProyekBiayaJob>;
+  /** Urut dibuat paling awal di atas; kosong untuk operator. */
+  tagihan: ProyekTagihan[];
 }
 
 export interface UangJalanJobRow {

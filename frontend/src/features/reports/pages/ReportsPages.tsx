@@ -1,19 +1,27 @@
 import { useMemo } from "react";
 import { hariIniWIB, tambahHari } from "@/lib/utils";
 import { Link, useSearchParams } from "react-router-dom";
-import { BarChart3, Users, ArrowRight, TrendingUp, Wrench } from "lucide-react";
+import { BarChart3, Users, ArrowRight, TrendingUp, Wrench, CalendarRange } from "lucide-react";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { useCurrentUser } from "@/lib/auth/AuthContext";
 import { useCustomers } from "@/features/customers/queries";
 import { useDrivers } from "@/features/drivers/queries";
 import { useJobs } from "@/features/jobs/queries";
 import { useUnits } from "@/features/units/queries";
-import { useJobProfitability } from "@/features/invoices/queries";
+import { useProyekProfitability } from "@/features/invoices/queries";
 import type { UserRole } from "@/types";
 import { CustomerReportView } from "../components/customer-report-view";
+import { LabaTahunanView } from "../components/laba-tahunan-view";
 import { LabaView } from "../components/laba-view";
 import { UtilizationView } from "../components/utilization-view";
-import { useUtilizationReport } from "../queries";
+import { useLabaTahunan, useUtilizationReport } from "../queries";
+
+/**
+ * BATASAN: "Laporan laba" (per proyek) disembunyikan dulu atas permintaan user
+ * (2026-10-03). Ubah ke true untuk memunculkan lagi kartunya dan membuka
+ * kembali rute /reports/laba (selama false, rute itu dialihkan ke /reports).
+ */
+export const TAMPILKAN_LAPORAN_LABA = false;
 
 const items: {
   href: string;
@@ -32,9 +40,16 @@ const items: {
   },
   {
     href: "/reports/laba",
-    title: "Laba per job",
-    description: "Pendapatan dari tagihan dikurangi uang jalan dan biaya insiden, per job.",
+    title: "Laporan laba",
+    description: "Pendapatan dari tagihan dikurangi uang jalan dan biaya insiden, per proyek.",
     icon: TrendingUp,
+    roles: ["superadmin", "admin", "finance"]
+  },
+  {
+    href: "/reports/laba-tahunan",
+    title: "Laba tahunan",
+    description: "Omset, uang jalan, biaya repair, dan profit per bulan dalam satu tahun, berdasarkan tanggal tagihan.",
+    icon: CalendarRange,
     roles: ["superadmin", "admin", "finance"]
   },
   {
@@ -55,9 +70,11 @@ const items: {
 
 export function ReportsIndexPage() {
   const user = useCurrentUser();
-  const visible = items.filter((it) => !it.roles || it.roles.includes(user.role));
+  const visible = items.filter(
+    (it) => (!it.roles || it.roles.includes(user.role)) && (TAMPILKAN_LAPORAN_LABA || it.href !== "/reports/laba")
+  );
   return (
-    <div className="flex flex-col gap-4 max-w-[840px]">
+    <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-h1">Laporan</h1>
         <p className="text-[13px] text-text-muted mt-0.5">
@@ -151,19 +168,46 @@ export function LabaReportPage() {
   const def = defaultRange();
   const start = sp.get("start") || def.start;
   const end = sp.get("end") || def.end;
-  const rows = useJobProfitability(start, end);
+  const rows = useProyekProfitability(start, end);
 
   if (rows.isPending) return <PageLoading />;
   if (rows.isError) return <PageError error={rows.error} onRetry={rows.refetch} />;
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-h1">Laba per job</h1>
+        <h1 className="text-h1">Laporan laba</h1>
         <p className="text-[13px] text-text-muted mt-0.5">
           Pendapatan dari tagihan dikurangi uang jalan dan biaya insiden.
         </p>
       </div>
       <LabaView rows={rows.data} start={start} end={end} />
+    </div>
+  );
+}
+
+/** Laba tahunan: default tahun berjalan (WIB); pilihan 5 tahun ke belakang. */
+export function LabaTahunanReportPage() {
+  const [sp] = useSearchParams();
+  const tahunIni = Number(hariIniWIB().slice(0, 4));
+  const diminta = Number(sp.get("tahun"));
+  const tahun = Number.isInteger(diminta) && diminta >= 2000 && diminta <= 2100 ? diminta : tahunIni;
+  const pilihanTahun = useMemo(() => {
+    const daftar = Array.from({ length: 6 }, (_, i) => tahunIni - i);
+    return daftar.includes(tahun) ? daftar : [...daftar, tahun].sort((a, b) => b - a);
+  }, [tahunIni, tahun]);
+  const data = useLabaTahunan(tahun);
+
+  if (data.isPending) return <PageLoading />;
+  if (data.isError) return <PageError error={data.error} onRetry={data.refetch} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h1 className="text-h1">Laba tahunan</h1>
+        <p className="text-[13px] text-text-muted mt-0.5">
+          Omset dari tagihan dikurangi uang jalan, biaya repair, dan biaya tambahan — dirinci per bulan.
+        </p>
+      </div>
+      <LabaTahunanView data={data.data} pilihanTahun={pilihanTahun} />
     </div>
   );
 }

@@ -65,6 +65,11 @@ def to_unit(row: dict[str, Any]) -> Unit:
     )
 
 
+def kunci_no_polisi(no_polisi: str) -> str:
+    """Bentuk pembanding no polisi: tanpa spasi, huruf besar ("b 1234 xy" → "B1234XY")."""
+    return "".join(no_polisi.split()).upper()
+
+
 class UnitService:
     def __init__(self, client: AsyncClient) -> None:
         self._db = client
@@ -210,6 +215,39 @@ class UnitService:
                 f"Driver sudah jadi driver tetap unit {taken_by}. Lepas dari unit itu dulu sebelum di-assign ke sini."
             )
 
+    async def _pastikan_kode_unik(self, kode_unit: str, *, kecuali_id: str | None = None) -> None:
+        """BATASAN: kode unit unik di antara unit yang belum dihapus — termasuk
+        unit nonaktif / terjual / diafkirkan yang tidak tampil di daftar unit
+        aktif. Unit yang sedang diubah (`kecuali_id`) dikecualikan. Index
+        units_kode_unit_unique di database tetap menjadi penjaga terakhir."""
+        q = self._db.table("units").select("id, is_active, status_operasional").eq("kode_unit", kode_unit)
+        if kecuali_id:
+            q = q.neq("id", kecuali_id)
+        lain = rows(await q.limit(1).execute())
+        if not lain:
+            return
+        u = lain[0]
+        if u.get("status_operasional") in BUKAN_ARMADA:
+            ket = f" (unit {u['status_operasional']})"
+        elif not u.get("is_active", True):
+            ket = " (unit nonaktif — tidak tampil di daftar unit aktif)"
+        else:
+            ket = ""
+        raise ConflictError(f"Kode unit {kode_unit} sudah dipakai unit lain{ket}.")
+
+    async def _pastikan_no_polisi_unik(self, no_polisi: str, *, kecuali_id: str | None = None) -> None:
+        """BATASAN: no polisi unik di antara unit yang belum dihapus — termasuk
+        unit nonaktif / terjual / diafkirkan. Dibandingkan tanpa spasi & tanpa
+        beda huruf besar/kecil ("B 1234 XY" = "b1234xy"). Index
+        units_no_polisi_unique (migration 20261003000011) penjaga terakhir."""
+        kunci = kunci_no_polisi(no_polisi)
+        q = self._db.table("units").select("id, kode_unit, no_polisi")
+        if kecuali_id:
+            q = q.neq("id", kecuali_id)
+        for u in rows(await q.execute()):
+            if kunci_no_polisi(str(u.get("no_polisi") or "")) == kunci:
+                raise ConflictError(f"No polisi {no_polisi.strip()} sudah dipakai unit {u['kode_unit']}.")
+
     async def create(
         self,
         payload: UnitCreate,
@@ -221,6 +259,8 @@ class UnitService:
             raise ValidationError("Kode unit wajib diisi")
         if not payload.no_polisi.strip():
             raise ValidationError("No polisi wajib diisi")
+        await self._pastikan_kode_unik(payload.kode_unit.strip().upper())
+        await self._pastikan_no_polisi_unik(payload.no_polisi)
         if payload.default_driver_id:
             await self._ensure_driver_free(payload.default_driver_id)
 
@@ -262,6 +302,8 @@ class UnitService:
             if exc.code == "23505":
                 if "units_default_driver_unique" in (exc.message or ""):
                     raise ConflictError("Driver sudah dipakai unit lain") from exc
+                if "units_no_polisi_unique" in (exc.message or ""):
+                    raise ConflictError("No polisi sudah dipakai unit lain") from exc
                 raise ConflictError("Kode unit sudah dipakai") from exc
             raise
         except Exception:
@@ -286,10 +328,12 @@ class UnitService:
         data: dict[str, Any] = {}
         if fields.get("kode_unit"):
             data["kode_unit"] = fields["kode_unit"].strip().upper()
+            await self._pastikan_kode_unik(data["kode_unit"], kecuali_id=unit_id)
         if fields.get("jenis_unit_id"):
             data["jenis_unit_id"] = fields["jenis_unit_id"]
         if fields.get("no_polisi"):
             data["no_polisi"] = fields["no_polisi"].strip()
+            await self._pastikan_no_polisi_unik(data["no_polisi"], kecuali_id=unit_id)
         if "tahun" in fields:
             data["tahun"] = fields["tahun"]
         if "default_driver_id" in fields:
@@ -351,8 +395,13 @@ class UnitService:
             await dokumen.batalkan()
             if dokumen_polis_baru:
                 await dokumen_polis_baru.batalkan()
-            if exc.code == "23505" and "units_default_driver_unique" in (exc.message or ""):
-                raise ConflictError("Driver sudah dipakai unit lain") from exc
+            if exc.code == "23505":
+                if "units_default_driver_unique" in (exc.message or ""):
+                    raise ConflictError("Driver sudah dipakai unit lain") from exc
+                if "units_kode_unit_unique" in (exc.message or ""):
+                    raise ConflictError("Kode unit sudah dipakai unit lain") from exc
+                if "units_no_polisi_unique" in (exc.message or ""):
+                    raise ConflictError("No polisi sudah dipakai unit lain") from exc
             raise
         except Exception:
             await dokumen.batalkan()

@@ -29,6 +29,7 @@ import type { JenisUnit } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { Combobox } from "@/components/ui/combobox";
 import { useKaryawanTersedia } from "@/features/settings/queries";
+import { AvatarInisial } from "@/components/ui/avatar-inisial";
 
 interface Props {
   users: UserRow[];
@@ -737,28 +738,7 @@ function UserRowItem({
         opacity: user.is_active ? 1 : 0.55
       }}
     >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 99,
-          background: "var(--brand-primary)",
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 700,
-          fontSize: 12.5,
-          flexShrink: 0
-        }}
-      >
-        {user.nama
-          .split(" ")
-          .slice(0, 2)
-          .map((s) => s[0])
-          .join("")
-          .toUpperCase() || "?"}
-      </div>
+      <AvatarInisial nama={user.nama} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{

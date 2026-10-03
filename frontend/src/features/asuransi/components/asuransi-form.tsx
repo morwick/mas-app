@@ -126,7 +126,7 @@ export function AsuransiForm({ mode, initial }: Props) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-[760px]">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Card>
         <CardHeader title={mode === "new" ? "Tambah asuransi" : "Edit asuransi"} description="Data perusahaan asuransi" />
         <div className="grid gap-4 sm:grid-cols-2">

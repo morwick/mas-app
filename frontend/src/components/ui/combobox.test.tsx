@@ -184,4 +184,41 @@ describe("Combobox", () => {
     expect(screen.getAllByRole("option")).toHaveLength(11);
     expect(screen.queryByText(/ketik lebih spesifik/)).toBeNull();
   });
+
+  describe("isian bebas (onCreate)", () => {
+    function renderCreate(onCreate = vi.fn()) {
+      render(
+        <Combobox
+          value=""
+          onChange={() => {}}
+          options={OPTIONS}
+          onCreate={onCreate}
+          createLabel={(t) => `Tambah "${t}"`}
+        />
+      );
+      openList();
+      return { onCreate, search: screen.getByPlaceholderText("Ketik untuk mencari…") };
+    }
+
+    it("teks yang belum ada bisa dipakai lewat klik", () => {
+      const { onCreate, search } = renderCreate();
+      fireEvent.change(search, { target: { value: "  PT Baru " } });
+      expect(screen.queryByText("Tidak ada hasil")).toBeNull();
+      fireEvent.click(screen.getByText('Tambah "PT Baru"'));
+      expect(onCreate).toHaveBeenCalledWith("PT Baru");
+    });
+
+    it("Enter memakai teks baru bila tidak ada opsi yang cocok", () => {
+      const { onCreate, search } = renderCreate();
+      fireEvent.change(search, { target: { value: "Zeta" } });
+      fireEvent.keyDown(search, { key: "Enter" });
+      expect(onCreate).toHaveBeenCalledWith("Zeta");
+    });
+
+    it("tidak menawarkan isian baru bila namanya sudah ada (beda huruf besar/kecil)", () => {
+      const { search } = renderCreate();
+      fireEvent.change(search, { target: { value: "pt bumi sentosa" } });
+      expect(screen.queryByText(/^Tambah/)).toBeNull();
+    });
+  });
 });

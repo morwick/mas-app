@@ -141,11 +141,13 @@ export function UnitForm({
       navigate("/units");
     } else {
       toast.error(res.error);
+      // Duplikat no polisi (dicek backend) juga ditandai di kolomnya.
+      if (/no polisi/i.test(res.error)) setError((e) => ({ ...e, no_polisi: res.error }));
     }
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-[640px]">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Card>
         <CardHeader
           title={mode === "new" ? "Tambah unit baru" : "Edit unit"}

@@ -124,6 +124,18 @@ function FormProyekAda({ tambahJob }: { tambahJob: boolean }) {
   if (proyek.isPending || data.pending || (!!quotationId && quotation.isPending)) return <PageLoading />;
   if (proyek.isError) return <PageError error={proyek.error} onRetry={proyek.refetch} />;
   if (data.error) return <PageError error={data.error} />;
+  // BATASAN: proyek yang sudah masuk tagihan aktif tidak bisa ditambah job.
+  if (tambahJob && proyek.data.invoice_id) {
+    return (
+      <PageError
+        error={
+          new Error(
+            `Proyek ${proyek.data.nomor_proyek} sudah masuk tagihan ${proyek.data.invoice_number ?? ""} — tidak bisa menambah job. Batalkan tagihannya dulu bila job perlu ditambah.`
+          )
+        }
+      />
+    );
+  }
   return (
     <ProyekFormView
       // Form dibuat ulang bila proyek lain dibuka tanpa pindah halaman.

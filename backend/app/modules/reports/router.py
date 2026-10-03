@@ -1,5 +1,5 @@
-"""Laporan (super administrator & finance): utilisasi armada, laba per job,
-biaya perawatan per aset, dan rekap klaim asuransi."""
+"""Laporan (super administrator & finance): utilisasi armada, laporan laba,
+laba tahunan, biaya perawatan per aset, dan rekap klaim asuransi."""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ from supabase import AsyncClient
 from app.core.auth import AuthContext, require_role, superadmin_or_finance_client
 from app.core.pg import num, rows
 from app.core.supabase import SupabaseClientFactory, get_client_factory
-from app.modules.invoices.schemas import JobProfitabilityRow
+from app.modules.invoices.schemas import JobProfitabilityRow, ProyekProfitabilityRow
 from app.modules.invoices.service import InvoiceService
 from app.modules.perintah_kerja.laporan import BiayaPerawatanRow, KlaimAsuransiRow, biaya_perawatan, rekap_klaim
+from app.modules.reports.laba_tahunan import LabaTahunan, laba_tahunan
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -58,6 +59,25 @@ async def profitability(
     client: AsyncClient = Depends(superadmin_or_finance_client),
 ) -> list[JobProfitabilityRow]:
     return await InvoiceService(client).job_profitability(start=start, end=end)
+
+
+@router.get("/profitability-proyek", response_model=list[ProyekProfitabilityRow])
+async def profitability_proyek(
+    start: str | None = Query(None, description="YYYY-MM-DD"),
+    end: str | None = Query(None, description="YYYY-MM-DD"),
+    client: AsyncClient = Depends(superadmin_or_finance_client),
+) -> list[ProyekProfitabilityRow]:
+    """Laba per proyek. Rentang mengikuti ETD job pertama proyek."""
+    return await InvoiceService(client).proyek_profitability(start=start, end=end)
+
+
+@router.get("/laba-tahunan", response_model=LabaTahunan)
+async def laporan_laba_tahunan(
+    tahun: int = Query(..., ge=2000, le=2100),
+    client: AsyncClient = Depends(superadmin_or_finance_client),
+) -> LabaTahunan:
+    """Laba setahun per bulan, berdasarkan tanggal tagihan."""
+    return await laba_tahunan(client, tahun)
 
 
 async def _laporan_perawatan_client(

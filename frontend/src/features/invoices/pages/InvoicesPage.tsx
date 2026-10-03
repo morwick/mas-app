@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageError, PageLoading } from "@/components/ui/page-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
@@ -10,7 +11,9 @@ import { useInvoices, useJobsBelumDitagih } from "../queries";
 type TabKey = "proyek" | "tagihan";
 
 export function InvoicesPage() {
-  const [tab, setTab] = useState<TabKey>("proyek");
+  // ?tab=tagihan (mis. dari angka omset di Laba tahunan) langsung membuka tab Tagihan.
+  const [sp] = useSearchParams();
+  const [tab, setTab] = useState<TabKey>(sp.get("tab") === "tagihan" ? "tagihan" : "proyek");
   const jobs = useJobsBelumDitagih();
   const customers = useCustomers(true);
   const invoices = useInvoices();
@@ -22,7 +25,7 @@ export function InvoicesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Tagihan"
-        description="Proyek yang semua job-nya selesai dan siap ditagih, serta daftar tagihan yang sudah dibuat."
+        description="Proyek yang sudah selesai dan siap ditagih, serta daftar tagihan yang sudah dibuat."
       />
       <Tabs
         variant="pill"

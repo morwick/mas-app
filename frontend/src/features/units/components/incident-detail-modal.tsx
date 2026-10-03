@@ -101,6 +101,7 @@ export function IncidentDetailModal({ open, onClose, incident, onAction, onEdit 
             {incident.job_number && (
               <Badge variant="neutral">Job {incident.job_number}</Badge>
             )}
+            {incident.dari_ganti_unit && <Badge variant="neutral">Dari pergantian unit</Badge>}
           </div>
 
           <div className="grid gap-3 text-[13px]">

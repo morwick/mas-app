@@ -7,6 +7,7 @@ import { useState } from "react";
 import { CheckCircle2, Undo2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field, Textarea } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useToast } from "@/components/ui/toast";
@@ -35,6 +36,7 @@ export function ValidationPanel({ job, uangJalan }: Props) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [note, setNote] = useState("");
   const [toStatus, setToStatus] = useState<ReturnTo>("serah_terima_pool");
 
@@ -49,13 +51,13 @@ export function ValidationPanel({ job, uangJalan }: Props) {
   const semuaLengkap = kelengkapan.every((k) => k.filled === k.total);
 
   async function approve() {
-    if (!window.confirm(`Approve ${job.job_number}? Driver akan kembali Stand By dan job masuk antrean tagihan.`))
-      return;
     setBusy(true);
     const res = await validateJob(job.id);
     setBusy(false);
-    if (res.ok) toast.success("Job divalidasi — driver kembali Stand By");
-    else toast.error(res.error);
+    if (res.ok) {
+      toast.success("Job divalidasi — driver kembali Stand By");
+      setApproveOpen(false);
+    } else toast.error(res.error);
   }
 
   async function doReturn() {
@@ -87,7 +89,7 @@ export function ValidationPanel({ job, uangJalan }: Props) {
           <Button variant="secondary" onClick={() => setReturnOpen(true)} disabled={busy} leftIcon={<Undo2 className="w-4 h-4" />}>
             Kembalikan ke driver
           </Button>
-          <Button onClick={() => void approve()} loading={busy} leftIcon={<CheckCircle2 className="w-4 h-4" />}>
+          <Button onClick={() => setApproveOpen(true)} disabled={busy} leftIcon={<CheckCircle2 className="w-4 h-4" />}>
             Approve / Validasi
           </Button>
         </div>
@@ -125,6 +127,27 @@ export function ValidationPanel({ job, uangJalan }: Props) {
           </span>
         </div>
       )}
+
+      <ConfirmDialog
+        open={approveOpen}
+        onClose={() => setApproveOpen(false)}
+        title={`Approve ${job.job_number}?`}
+        body={
+          <>
+            Driver akan kembali Stand By dan job masuk antrean tagihan.
+            {(!semuaLengkap || rendah > 0) && (
+              <div className="mt-2 text-status-cancelled-fg">
+                {!semuaLengkap && "Ada slot foto yang kosong. "}
+                {rendah > 0 && `${rendah} foto ditandai kualitas rendah.`}
+              </div>
+            )}
+          </>
+        }
+        confirmText="Ya, approve"
+        variant="primary"
+        loading={busy}
+        onConfirm={() => void approve()}
+      />
 
       <Modal
         open={returnOpen}

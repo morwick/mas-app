@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CalendarDays,
-  ChevronRight,
   FileText,
   Flag,
   FolderKanban,
@@ -27,6 +26,7 @@ import { TagihanJobInfo } from "./tagihan-job-info";
 import { RuteJob } from "./rute-job";
 import { PageHeader } from "@/components/ui/page-header";
 import { NAMA_BULAN, opsiTahun } from "@/features/proyek/components/proyek-list-view";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 /**
  * Filter dua tingkat:
@@ -175,6 +175,16 @@ function takeLastSegment(text: string): string {
   return text.split(",")[0].trim();
 }
 
+/**
+ * BATASAN: filter bulan & tahun memakai tanggal job DIBUAT (diajukan) dalam
+ * WIB — bukan ETD. 0 = semua bulan / semua tahun.
+ */
+export function dibuatDalamPeriode(job: Pick<Job, "created_at">, bulan: number, tahun: number): boolean {
+  if (!bulan && !tahun) return true;
+  const p = bulanTahunWIB(job.created_at);
+  return (!bulan || p.bulan === bulan) && (!tahun || p.tahun === tahun);
+}
+
 export function JobsListView({
   jobs,
   customers,
@@ -183,6 +193,7 @@ export function JobsListView({
   initialCustomerId,
   initialTab
 }: Props) {
+  const barisDetail = useBarisDetail();
   // Default: kelompok Aktif (tanpa job dibatalkan) supaya filter status langsung
   // tampil untuk monitoring. Dari "Total job" di menu Customer jumlahnya pun
   // sama dengan angka yang diklik.
@@ -193,7 +204,7 @@ export function JobsListView({
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
   const [unitId, setUnitId] = useState("");
 
-  // Periode (bulan & tahun ETD, WIB). Dibuka biasa → bulan berjalan. Dibuka lewat
+  // Periode (bulan & tahun job DIBUAT, WIB). Dibuka biasa → bulan berjalan. Dibuka lewat
   // tautan (dashboard ?tab=, "Total job" customer) → semua periode, supaya jumlahnya
   // sama dengan angka yang diklik. 0 = semua bulan/tahun.
   const lewatTautan = Boolean(initialTab || initialCustomerId);
@@ -238,11 +249,7 @@ export function JobsListView({
     const dasar = jobs.filter((j) => {
       if (customerId && j.customer_id !== customerId) return false;
       if (unitId && j.unit_id !== unitId) return false;
-      if (bulan || tahun) {
-        const p = bulanTahunWIB(j.etd);
-        if (bulan && p.bulan !== bulan) return false;
-        if (tahun && p.tahun !== tahun) return false;
-      }
+      if (!dibuatDalamPeriode(j, bulan, tahun)) return false;
       return true;
     });
     const perKelompok = dasar.filter((j) => j.status !== "cancelled");
@@ -288,11 +295,7 @@ export function JobsListView({
         return false;
       if (customerId && j.customer_id !== customerId) return false;
       if (unitId && j.unit_id !== unitId) return false;
-      if (bulan || tahun) {
-        const p = bulanTahunWIB(j.etd);
-        if (bulan && p.bulan !== bulan) return false;
-        if (tahun && p.tahun !== tahun) return false;
-      }
+      if (!dibuatDalamPeriode(j, bulan, tahun)) return false;
       if (q) {
         const t = q.toLowerCase();
         if (
@@ -454,17 +457,18 @@ export function JobsListView({
           {/* Desktop: tabel */}
           <div className="card hidden lg:block">
             <div className="table-scroll">
-              <table className="table">
+              {/* Lebar minimum: layar sempit menggulir ke samping, kolom tidak dijepit. */}
+              <table className="table" style={{ minWidth: 1100 }}>
               <thead>
                 <tr>
+                  <KepalaKolomLihat />
                   <th style={{ width: 140 }}>Job ID</th>
-                  <th>Customer &amp; Alat</th>
+                  <th style={{ width: 240 }}>Customer &amp; Alat</th>
                   <th>Rute</th>
                   <th style={{ width: 130 }}>Unit / Driver</th>
                   <th style={{ width: 100, whiteSpace: "nowrap" }}>ETD</th>
                   <th style={{ width: 100, whiteSpace: "nowrap" }}>ETA</th>
                   <th style={{ width: 150 }}>Status</th>
-                  <th style={{ width: 50 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -472,10 +476,12 @@ export function JobsListView({
                   const u = unitMap[j.unit_id];
                   const driverNama = driverMap[j.driver_id];
                   return (
-                    <tr key={j.id} className="row-link">
+                    <tr key={j.id} {...barisDetail(`/jobs/${j.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/jobs/${j.id}`} />
+                      </td>
                       <td>
-                        <Link
-                          to={`/jobs/${j.id}`}
+                        <span
                           style={{
                             display: "block",
                             textDecoration: "none",
@@ -488,16 +494,24 @@ export function JobsListView({
                           >
                             {j.job_number}
                           </div>
-                        </Link>
+                        </span>
                         <ProyekLink job={j} />
                         <QuotationLink job={j} />
                       </td>
                       <td>
+                        {/* Nama customer maksimal 2 baris; sisanya "…" (nama lengkap di tooltip). */}
                         <div
+                          title={j.customer_nama}
                           style={{
                             fontWeight: 500,
                             fontSize: 13.5,
-                            marginBottom: 2
+                            marginBottom: 2,
+                            width: 216,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            overflowWrap: "anywhere"
                           }}
                         >
                           {j.customer_nama}
@@ -551,17 +565,6 @@ export function JobsListView({
                             />
                           </div>
                         )}
-                      </td>
-                      <td>
-                        <Link
-                          to={`/jobs/${j.id}`}
-                          style={{
-                            color: "var(--text-tertiary)",
-                            display: "inline-flex"
-                          }}
-                        >
-                          <ChevronRight style={{ width: 16, height: 16 }} />
-                        </Link>
                       </td>
                     </tr>
                   );

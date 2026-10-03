@@ -327,8 +327,7 @@ export function InsidenPanel({
   kode,
   labelAset,
   status,
-  incidents,
-  activeJobs
+  incidents
 }: {
   aset: AsetInsiden;
   kode: string;
@@ -336,7 +335,6 @@ export function InsidenPanel({
   labelAset: string;
   status: UnitStatus;
   incidents: Incident[];
-  activeJobs: Job[];
 }) {
   const toast = useToast();
   const { canManageOperational } = useAuth();
@@ -588,7 +586,6 @@ export function InsidenPanel({
         open={incidentFormOpen}
         onClose={() => setIncidentFormOpen(false)}
         aset={aset}
-        activeJobs={activeJobs}
         incident={editIncident}
       />
       <IncidentDetailModal

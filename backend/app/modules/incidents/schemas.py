@@ -26,8 +26,11 @@ class Incident(BaseModel):
     unit_kode: str | None = None
     unit_trailer_id: str | None = None
     unit_trailer_kode: str | None = None
+    # Job yang sedang memakai unit saat insiden dicatat (diisi otomatis).
     job_id: str | None = None
     job_number: str | None = None
+    # Dipakai / dicatat oleh Ganti unit di job. BATASAN: tidak bisa dihapus.
+    dari_ganti_unit: bool = False
     tipe: IncidentType
     tanggal: str
     lokasi: str | None = None
@@ -45,9 +48,10 @@ class Incident(BaseModel):
 
 
 class IncidentCreate(BaseModel):
+    # Job tidak dipilih pengguna: insiden unit yang sedang bertugas otomatis
+    # dikaitkan ke job aktifnya.
     unit_id: str | None = None
     unit_trailer_id: str | None = None
-    job_id: str | None = None
     tipe: IncidentType
     tanggal: str = Field(min_length=1)
     lokasi: str | None = None
@@ -63,7 +67,6 @@ class IncidentCreate(BaseModel):
 
 
 class IncidentUpdate(BaseModel):
-    job_id: str | None = None
     tipe: IncidentType | None = None
     tanggal: str | None = None
     lokasi: str | None = None

@@ -21,6 +21,8 @@ import type { Incident } from "@/types";
  */
 export type IncidentAction = "proses" | "selesai" | "tanpa_perbaikan" | "hapus";
 
+export const PESAN_DARI_GANTI_UNIT = "Insiden ini tercatat dari pergantian unit di job dan tidak bisa dihapus.";
+
 /** Teks bantu tombol "Selesaikan Tanpa Perbaikan". */
 export const BANTU_TANPA_PERBAIKAN =
   "Pakai bila insiden ternyata tidak perlu diperbaiki: insiden langsung ditutup Selesai dan status aset kembali Standby.";
@@ -128,7 +130,15 @@ export function useIncidentActions(
   );
 
   return {
-    request: (action: IncidentAction, incident: Incident) => setPending({ action, incident }),
+    request: (action: IncidentAction, incident: Incident) => {
+      // BATASAN: insiden dari pergantian unit di job tidak bisa dihapus —
+      // tombolnya tetap ada, tapi langsung ditolak (backend & database juga).
+      if (action === "hapus" && incident.dari_ganti_unit) {
+        toast.error(PESAN_DARI_GANTI_UNIT);
+        return;
+      }
+      setPending({ action, incident });
+    },
     node
   };
 }
@@ -193,6 +203,7 @@ export function IncidentActionButtons({ incident, onAction, onEdit }: ButtonsPro
         )}
       </div>
       {isOpen && <p className="caption">{BANTU_TANPA_PERBAIKAN}</p>}
+
     </div>
   );
 }

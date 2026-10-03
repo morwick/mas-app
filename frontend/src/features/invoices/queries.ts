@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { InvoiceStatus } from "@/types";
 import {
   getInvoice,
-  jobProfitability,
+  proyekProfitability,
   jobsBelumDitagih,
   listInvoices,
   peekNextInvoiceNumber,
@@ -30,8 +30,8 @@ export const useJobsBelumDitagih = (customerId?: string) =>
 export const usePiutangSummary = () =>
   useQuery({ queryKey: ["piutang", "summary"], queryFn: piutangSummary });
 
-export const useJobProfitability = (start?: string, end?: string) =>
+export const useProyekProfitability = (start?: string, end?: string) =>
   useQuery({
-    queryKey: ["reports", "profitability", start, end],
-    queryFn: () => jobProfitability(start, end)
+    queryKey: ["reports", "profitability-proyek", start, end],
+    queryFn: () => proyekProfitability(start, end)
   });

@@ -1,6 +1,6 @@
 import { useDeferredValue, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, ClipboardCheck, Search } from "lucide-react";
+import { ClipboardCheck, Search } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Select } from "@/components/ui/input";
 import { PageError } from "@/components/ui/page-state";
@@ -12,6 +12,7 @@ import { STATUS_PENGAJUAN_LABEL, type FiturApproval, type PengajuanApproval, typ
 import { usePengajuanList } from "../queries";
 
 import { StatusBadge } from "./pengajuan-detail-view";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 const NAMA_BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -159,6 +160,7 @@ export function PengajuanView({ fitur, namaFitur, menungguSaya, tabMenunggu }: P
 
 /** Daftar ringkas: klik satu pengajuan untuk membuka halaman detailnya. */
 function DaftarPengajuan({ items, onBuka }: { items: PengajuanApproval[]; onBuka: (p: PengajuanApproval) => void }) {
+  const barisDetail = useBarisDetail();
   return (
     <>
       {/* Desktop */}
@@ -167,17 +169,20 @@ function DaftarPengajuan({ items, onBuka }: { items: PengajuanApproval[]; onBuka
           <table className="table">
             <thead>
               <tr>
+                <KepalaKolomLihat />
                 <th>Pengajuan</th>
                 <th style={{ width: 160 }}>Diajukan oleh</th>
                 <th style={{ width: 160 }}>Tanggal</th>
                 <th style={{ width: 140, textAlign: "right" }}>Nilai</th>
                 <th style={{ width: 130 }}>Status</th>
-                <th style={{ width: 36 }} />
               </tr>
             </thead>
             <tbody>
               {items.map((p) => (
-                <tr key={p.id} className="row-link" onClick={() => onBuka(p)} style={{ cursor: "pointer" }}>
+                <tr key={p.id} {...barisDetail(() => onBuka(p))}>
+                  <td style={{ width: 44 }}>
+                    <TombolLihat tujuan={() => onBuka(p)} />
+                  </td>
                   <td style={{ fontWeight: 600, fontSize: 13.5 }}>{p.judul}</td>
                   <td style={{ fontSize: 13 }}>{p.diajukan_oleh_nama ?? "—"}</td>
                   <td className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
@@ -188,9 +193,6 @@ function DaftarPengajuan({ items, onBuka }: { items: PengajuanApproval[]; onBuka
                   </td>
                   <td>
                     <StatusBadge status={p.status_approval} />
-                  </td>
-                  <td>
-                    <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
                   </td>
                 </tr>
               ))}

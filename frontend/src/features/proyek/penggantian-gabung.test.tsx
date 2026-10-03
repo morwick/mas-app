@@ -126,7 +126,8 @@ const PROYEK_LAIN = {
   invoice_number: null,
   unit_kode: "MAS-01",
   quote_number: "0001/SK/MAS/X/2026",
-  jobs: []
+  jobs: [],
+  tagihan: []
 } as ProyekDetail;
 
 function renderDariPenawaran(unitAwal: string) {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Trash2, TriangleAlert, Truck } from "lucide-react";
+import { Check, Copy, Trash2, TriangleAlert, Truck } from "lucide-react";
 import { AccordionItem } from "@/components/ui/accordion";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -12,6 +12,7 @@ import { LocationPicker, type LocationPickerAvailableUnit } from "@/features/job
 import { unitLocation } from "@/features/tracking/api";
 import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
 import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
+import { SalesField } from "@/features/sales/components/sales-field";
 import { findJobConflicts } from "@/lib/job-conflicts";
 import { minEtdValue } from "@/lib/job-schedule";
 import { formatDate, formatRupiah, formatTime, localInputToIso } from "@/lib/utils";
@@ -59,6 +60,11 @@ interface Props {
    * semua bagian langsung terbuka berurutan.
    */
   tunggal?: boolean;
+  /**
+   * Tombol "Duplikat job sebelumnya" di kartu ini: `sumber` = nomor job
+   * terakhir proyek; `onClick` mengisi kartu ini dari job itu.
+   */
+  duplikat?: { sumber: string; onClick: () => void };
 }
 
 const URUTAN: BagianJob[] = ["pengiriman", "unit", "catatan"];
@@ -188,7 +194,8 @@ export function JobDraftAccordion({
   onRetryConflictCheck,
   mapUnits,
   submitKe,
-  tunggal
+  tunggal,
+  duplikat
 }: Props) {
   const toast = useToast();
   const [bagianAktif, setBagianAktif] = useState<BagianJob | null>("pengiriman");
@@ -335,6 +342,35 @@ export function JobDraftAccordion({
     <>
       <Bagian title="Detail Pengiriman" subtitle={ringkasPengiriman} {...bagian("pengiriman", 1)}>
         <div style={{ display: "grid", gap: 12 }}>
+          {duplikat && (
+            // Isi cepat dari job terakhir proyek — kotak info di awal Detail Pengiriman.
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                flexWrap: "wrap",
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "var(--bg-subtle)",
+                border: "0.5px solid var(--border-default)"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <Copy style={{ width: 15, height: 15, color: "var(--text-tertiary)", flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Mirip job sebelumnya?</div>
+                  <div className="caption">
+                    {`Salin alat, rute, driver, uang jalan, dan sales dari ${duplikat.sumber}.`}
+                  </div>
+                </div>
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={duplikat.onClick}>
+                Duplikat job sebelumnya
+              </button>
+            </div>
+          )}
           {itemPenawaran && (
             // Proyek dari penawaran: job wajib salah satu item deal penawaran itu.
             <Field label="Item penawaran" required>
@@ -357,6 +393,7 @@ export function JobDraftAccordion({
               error={errors.alat_diangkut}
             />
           </Field>
+          <SalesField value={d} onChange={onChange} errors={errors} />
           <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: 12 }}>
             <Field label="Lokasi asal" required>
               <LocationPicker

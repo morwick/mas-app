@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { TriangleAlert, Truck } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,12 @@ import { isoToLocalInput } from "@/lib/utils";
 import type { Driver, Job, Unit } from "@/types";
 import { UnitTrailerField } from "@/features/unit-trailer/components/unit-trailer-field";
 import { useTrailerUntukUnit } from "@/features/unit-trailer/queries";
+import {
+  SalesField,
+  keSalesInput,
+  validasiSales,
+  type IsianSales
+} from "@/features/sales/components/sales-field";
 
 interface Props {
   job: Job;
@@ -53,6 +59,8 @@ export function EditJobView({
   onRetryConflictCheck
 }: Props) {
   const navigate = useNavigate();
+  // Asal halaman (mis. job dibuka dari detail proyek) ikut kembali ke detail job.
+  const { state: asalHalaman } = useLocation();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -69,6 +77,11 @@ export function EditJobView({
     etd: isoToLocalInput(job.etd ?? null),
     eta: isoToLocalInput(job.eta ?? null),
     catatan: job.catatan ?? ""
+  });
+  const [sales, setSales] = useState<IsianSales>({
+    sales_id: job.sales_id ?? "",
+    sales_nama: job.sales_nama ?? "",
+    sales_no_hp: job.sales_no_hp ?? ""
   });
   const [error, setError] = useState<Record<string, string>>({});
   // ETD saat form dibuka. Job yang sudah berjalan wajar punya ETD di masa lalu,
@@ -197,12 +210,16 @@ export function EditJobView({
     setLoading(true);
     const res = await updateJob(
       job.id,
-      { ...form, unit_trailer_id: trailerTampil ? form.unit_trailer_id || null : null }
+      {
+        ...form,
+        unit_trailer_id: trailerTampil ? form.unit_trailer_id || null : null,
+        ...keSalesInput(sales)
+      }
     );
     setLoading(false);
     if (res.ok) {
       toast.success("Perubahan disimpan");
-      navigate(`/jobs/${job.id}`);
+      navigate(`/jobs/${job.id}`, { state: asalHalaman });
       return;
     }
     toast.error(res.conflicts ? BENTROK_JADWAL_MESSAGE : res.error);
@@ -220,6 +237,7 @@ export function EditJobView({
     // ETA kosong hanya boleh bila sistem bisa menghitungnya dari rute.
     if (!form.eta && estimasi.isError && !adaDurasiTersimpan) errs.eta = ETA_TIDAK_TERHITUNG_MESSAGE;
     if (!form.alat_diangkut.trim()) errs.alat_diangkut = "Alat wajib diisi";
+    Object.assign(errs, validasiSales(sales));
     // Sama seperti form tambah: lokasi wajib dipin di peta supaya koordinatnya
     // tersimpan; alamat di kotak teks tetap boleh dilengkapi setelah dipin.
     if (form.asal_lat === null || form.asal_lng === null) errs.asal = "Pin lokasi asal di peta";
@@ -242,7 +260,7 @@ export function EditJobView({
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-[760px]">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Card>
         <CardHeader title={`Edit ${job.job_number}`} description={job.customer_nama} />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -265,6 +283,9 @@ export function EditJobView({
               error={error.alat_diangkut}
             />
           </Field>
+          <div className="sm:col-span-2">
+            <SalesField value={sales} onChange={(patch) => setSales((s) => ({ ...s, ...patch }))} errors={error} />
+          </div>
           <Field label="Lokasi asal" required className="sm:col-span-2">
             <LocationPicker
               value={{
@@ -420,7 +441,7 @@ export function EditJobView({
         )}
       </Card>
       <div className="flex items-center justify-end gap-2">
-        <Link to={`/jobs/${job.id}`}>
+        <Link to={`/jobs/${job.id}`} state={asalHalaman}>
           <Button variant="secondary" type="button">
             Batal
           </Button>

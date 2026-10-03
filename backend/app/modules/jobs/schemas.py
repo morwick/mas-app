@@ -112,6 +112,16 @@ class Job(BaseModel):
     eta_is_estimated: bool = False
     quotation_id: str | None = None
     quotation_number: str | None = None
+    # Sales job (master sales). Hanya payload internal; portal driver &
+    # halaman publik tidak membawanya.
+    sales_id: str | None = None
+    sales_nama: str | None = None
+    sales_no_hp: str | None = None
+    # Waktu sampai lokasi muat / bongkar (pertama kali masuk Loading /
+    # Unloading; ganti unit memakai tanggal insiden). Diisi database
+    # (trigger jobs_catat_muat_bongkar), tidak pernah diubah sesudahnya.
+    muat_at: str | None = None
+    bongkar_at: str | None = None
     # Proyek induk job ini (setiap job wajib punya proyek). Hanya payload
     # internal; portal driver & halaman publik tidak membawanya.
     proyek_id: str | None = None
@@ -191,6 +201,28 @@ class _InsidenPenggantian(BaseModel):
         return v
 
 
+class _InsidenGantiUnit(BaseModel):
+    """Insiden unit lama saat ganti unit: pakai insiden terbuka yang sudah
+    dicatat untuk job ini (`insiden_id`), atau catat insiden baru."""
+
+    insiden_id: str | None = None
+    insiden_tanggal: str | None = None
+    insiden_lokasi: str | None = Field(default=None, max_length=500)
+    insiden_deskripsi: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("insiden_id", "insiden_tanggal", "insiden_deskripsi")
+    @classmethod
+    def _kosong_jadi_none(cls, v: str | None) -> str | None:
+        return (v or "").strip() or None
+
+    @model_validator(mode="after")
+    def _insiden_wajib(self) -> _InsidenGantiUnit:
+        # BATASAN: tanpa insiden terdaftar, tanggal & deskripsi insiden baru wajib.
+        if not self.insiden_id and not (self.insiden_tanggal and self.insiden_deskripsi):
+            raise ValueError("Pilih insiden yang sudah terdaftar, atau isi tanggal & deskripsi insiden")
+        return self
+
+
 class _PengembalianKasbon(BaseModel):
     """Uang jalan di tangan supir lama: dikembalikan ke kas dan/atau jadi kasbon.
 
@@ -220,27 +252,13 @@ class GantiTrailerRequest(_AlasanPenggantian, _InsidenPenggantian):
     unit_trailer_id: str = Field(min_length=1)
 
 
-class GantiUnitRequest(_AlasanPenggantian, _InsidenPenggantian, _PengembalianKasbon):
+class GantiUnitRequest(_AlasanPenggantian, _InsidenGantiUnit, _PengembalianKasbon):
     """Unit rusak / insiden → job pengganti (mulai dari awal) di proyek yang sama.
     Job lama ditutup Selesai dengan catatan "Unit rusak - diganti JOB-xxx"."""
 
     unit_id: str = Field(min_length=1)
     driver_id: str = Field(min_length=1)
     # Wajib bila jenis unit pengganti memakai trailer (dijaga database).
-    unit_trailer_id: str | None = None
-    etd: str = Field(min_length=1)
-    eta: str | None = None
-    uang_jalan_awal: int = Field(gt=0, description="Uang jalan job pengganti (rupiah)")
-    catatan: str | None = None
-
-
-class GantiUnitUlangRequest(_AlasanPenggantian):
-    """Job pengganti (ganti unit) dibatalkan → buat job pengganti baru untuk job
-    lama yang sama. Insiden & uang jalan supir lama sudah tercatat sebelumnya."""
-
-    unit_id: str = Field(min_length=1)
-    driver_id: str = Field(min_length=1)
-    # Wajib bila jenis unit memakai trailer (dijaga database).
     unit_trailer_id: str | None = None
     etd: str = Field(min_length=1)
     eta: str | None = None
@@ -269,7 +287,8 @@ class GantiTrukEntry(BaseModel):
     # Ganti unit: job pengganti yang dibuat.
     job_pengganti_id: str | None = None
     job_pengganti_number: str | None = None
-    # Status job pengganti — "cancelled" memunculkan "Selesaikan job dengan unit lain".
+    # Status job pengganti ("cancelled" hanya ada di data lama — kini job
+    # pengganti tidak bisa dibatalkan).
     job_pengganti_status: str | None = None
 
 
@@ -282,6 +301,25 @@ class _JobFields(BaseModel):
     tujuan_lng: float | None = None
     eta: str | None = None
     catatan: str | None = None
+    # Sales (opsional — ada job tanpa sales). `sales_id` = sales dari daftar;
+    # tanpa `sales_id`, `sales_nama` = nama yang diketik (sales baru bila belum
+    # ada di daftar, disimpan satu transaksi dengan job — lihat SalesService).
+    # Edit job: kirim ketiganya kosong untuk melepas sales dari job.
+    sales_id: str | None = None
+    sales_nama: str | None = Field(default=None, max_length=200)
+    sales_no_hp: str | None = Field(default=None, max_length=30)
+
+    @field_validator("sales_id", "sales_nama", "sales_no_hp")
+    @classmethod
+    def _sales_kosong_jadi_none(cls, v: str | None) -> str | None:
+        return (v or "").strip() or None
+
+    @field_validator("sales_no_hp")
+    @classmethod
+    def _format_hp_sales(cls, v: str | None) -> str | None:
+        if v and not PHONE_RE.match(v):
+            raise ValueError("Format No HP sales: 08xxxxxxxxxx atau +628xxxxxxxxxx")
+        return v
 
 
 class JobCreate(_JobFields):

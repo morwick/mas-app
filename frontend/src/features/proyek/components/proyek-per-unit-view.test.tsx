@@ -18,6 +18,7 @@ vi.mock("../queries", () => ({
   }
 }));
 
+import { TAMPILKAN_PROYEK_PER_UNIT } from "./proyek-menu-header";
 import { ProyekPerUnitView } from "./proyek-per-unit-view";
 
 function tampil() {
@@ -72,7 +73,8 @@ describe("ProyekPerUnitView", () => {
     tampil();
     const { bulan, tahun } = bulanTahunWIB();
     expect(useProyekPerUnit).toHaveBeenCalledWith(expect.objectContaining({ bulan, tahun, statusProyek: "aktif", page: 1 }));
-    expect(screen.getByText("Proyek per unit")).toBeTruthy();
+    // Tab disembunyikan selama TAMPILKAN_PROYEK_PER_UNIT = false.
+    expect(screen.queryByText("Proyek per unit") !== null).toBe(TAMPILKAN_PROYEK_PER_UNIT);
   });
 
   it("unit sebagai kelompok; job di bawahnya: no. proyek, no. job, customer, rute, tanggal saja", () => {

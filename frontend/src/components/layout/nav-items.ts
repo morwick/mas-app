@@ -28,6 +28,8 @@ import {
   UserCheck,
   ClipboardCheck,
   FolderKanban,
+  Coins,
+  Store,
   type LucideIcon
 } from "lucide-react";
 
@@ -93,6 +95,15 @@ const jenisUnit: NavItem = {
   roles: ["superadmin", "admin"]
 };
 
+const jenisBiaya: NavItem = {
+  // Pilihan jenis untuk kartu Biaya Lain di detail job.
+  href: "/jenis-biaya",
+  label: "Jenis Biaya",
+  icon: Coins,
+  match: (p) => p.startsWith("/jenis-biaya"),
+  roles: ["superadmin", "admin"]
+};
+
 const driver: NavItem = {
   href: "/drivers",
   label: "Driver",
@@ -106,6 +117,15 @@ const customer: NavItem = {
   label: "Customer",
   icon: Building2,
   match: (p) => p.startsWith("/customers"),
+  roles: ["superadmin", "admin", "finance"]
+};
+
+const vendor: NavItem = {
+  // Sementara disamakan dengan Customer (akan dirombak sesuai kebutuhan).
+  href: "/vendors",
+  label: "Vendor",
+  icon: Store,
+  match: (p) => p.startsWith("/vendors"),
   roles: ["superadmin", "admin", "finance"]
 };
 
@@ -307,7 +327,7 @@ export const navTree: NavEntry[] = [
   dashboard,
   {
     key: "master",
-    label: "Master",
+    label: "Master Data",
     icon: Boxes,
     items: [
       karyawan,
@@ -319,8 +339,10 @@ export const navTree: NavEntry[] = [
       driver,
       mekanik,
       customer,
+      vendor,
       asuransi,
-      bengkel
+      bengkel,
+      jenisBiaya
     ]
   },
   {

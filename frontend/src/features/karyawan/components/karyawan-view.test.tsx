@@ -50,6 +50,18 @@ const dasar: Karyawan = {
   blacklist_oleh_nama: null
 };
 
+describe("KaryawanView — foto profil", () => {
+  it("menampilkan inisial nama seperti di halaman Pengguna; abu-abu bila di-blacklist", () => {
+    items = [
+      { ...dasar, nama: "Budi Santoso" },
+      { ...dasar, id: "k2", nama: "Andi Wijaya", is_blacklist: true }
+    ];
+    render(<KaryawanView />);
+    expect(screen.getAllByText("BS")[0].getAttribute("style")).toContain("var(--brand-primary)");
+    expect(screen.getAllByText("AW")[0].getAttribute("style")).toContain("var(--text-tertiary)");
+  });
+});
+
 describe("KaryawanView — blacklist", () => {
   beforeEach(() => {
     blacklistKaryawan.mockReset().mockResolvedValue({ ok: true, data: null });

@@ -1,6 +1,6 @@
 import { useDeferredValue, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, ClipboardList, Search, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ClipboardList, Search, X } from "lucide-react";
 import { DateInput } from "@/components/ui/date-input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Select } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
   type PerintahKerjaRingkas,
   type StatusWo
 } from "../api";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 export function StatusWoBadge({ status }: { status: StatusWo }) {
   const s = STATUS_WO[status];
@@ -49,7 +50,7 @@ export function DaftarPerintahKerja({
   tampilAset?: boolean;
   kosong?: string;
 }) {
-  const navigate = useNavigate();
+  const barisDetail = useBarisDetail();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState("");
@@ -174,6 +175,7 @@ export function DaftarPerintahKerja({
               <table className="table">
                 <thead>
                   <tr>
+                    <KepalaKolomLihat />
                     <th style={{ width: 190 }}>Nomor</th>
                     <th style={{ width: 110 }}>Tanggal</th>
                     {tampilAset && <th style={{ width: 110 }}>Aset</th>}
@@ -181,20 +183,14 @@ export function DaftarPerintahKerja({
                     <th>Pelaksana</th>
                     <th style={{ width: 150 }}>Status</th>
                     <th style={{ width: 150, textAlign: "right" }}>Biaya</th>
-                    <th style={{ width: 36 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {pg.items.map((w) => (
-                    <tr
-                      key={w.id}
-                      className="row-link"
-                      tabIndex={0}
-                      onClick={() => navigate(`/perintah-kerja/${w.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") navigate(`/perintah-kerja/${w.id}`);
-                      }}
-                    >
+                    <tr key={w.id} {...barisDetail(`/perintah-kerja/${w.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/perintah-kerja/${w.id}`} />
+                      </td>
                       <td className="mono" style={{ fontWeight: 600, fontSize: 12 }}>
                         {w.nomor}
                       </td>
@@ -220,9 +216,6 @@ export function DaftarPerintahKerja({
                       </td>
                       <td style={{ textAlign: "right" }}>
                         <BiayaRingkas w={w} />
-                      </td>
-                      <td>
-                        <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
                       </td>
                     </tr>
                   ))}

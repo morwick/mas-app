@@ -17,9 +17,11 @@ interface Props {
   onOpen: (photo: JobPhoto) => void;
   onDelete?: (photo: JobPhoto) => void;
   onUpload?: (slot: PhotoSlot) => void;
+  /** Tanggal tahap ini di header kartu, mis. { label: "Tanggal muat", value: job.muat_at }. */
+  tanggal?: { label: string; value: string | null | undefined };
 }
 
-export function PhotoSlots({ stage, photos, reference, onOpen, onDelete, onUpload }: Props) {
+export function PhotoSlots({ stage, photos, reference, onOpen, onDelete, onUpload, tanggal }: Props) {
   const slots = REQUIRED_SLOTS[stage];
   const bySlot = new Map<PhotoSlot, JobPhoto>();
   for (const p of photos) if (p.stage === stage && p.slot) bySlot.set(p.slot, p);
@@ -33,6 +35,14 @@ export function PhotoSlots({ stage, photos, reference, onOpen, onDelete, onUploa
           <div className="caption">
             {filled}/{slots.length} slot terisi
           </div>
+          {tanggal && (
+            <div className="caption" style={{ marginTop: 2 }}>
+              {tanggal.label}:{" "}
+              <span className="mono" style={{ color: "var(--text-primary)" }}>
+                {tanggal.value ? formatDateTime(tanggal.value) : "—"}
+              </span>
+            </div>
+          )}
         </div>
         <span className={`badge ${filled === slots.length ? "badge-selesai" : "badge-perbaikan"}`}>
           {filled === slots.length ? "Lengkap" : "Belum lengkap"}

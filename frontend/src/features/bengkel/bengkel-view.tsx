@@ -23,6 +23,7 @@ import {
   type Bengkel,
   type BengkelInput
 } from "./api";
+import { IkonPerusahaan } from "@/components/ui/avatar-inisial";
 
 const KOSONG: BengkelInput = {
   nama: "",
@@ -146,12 +147,17 @@ export function BengkelView() {
                   return (
                     <tr key={b.id}>
                       <td style={{ fontWeight: 600 }}>
-                        {b.nama}
-                        {!b.is_active && (
-                          <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
-                            Nonaktif
-                          </span>
-                        )}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <IkonPerusahaan nama={b.nama} redup={!b.is_active} />
+                          <div style={{ minWidth: 0 }}>
+                            {b.nama}
+                            {!b.is_active && (
+                              <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                                Nonaktif
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td>
                         <div>{b.pic_nama ?? "—"}</div>

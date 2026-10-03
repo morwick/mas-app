@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  ArrowLeft,
   ArrowRight,
   Check,
   Copy,
   Download,
   ExternalLink,
   Eye,
-  MessageCircle,
-  Plus
+  MessageCircle
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import type { Job } from "@/types";
@@ -22,6 +22,10 @@ interface Props {
 
 export function JobConfirmationView({ job, driverNama, driverNoHp }: Props) {
   const toast = useToast();
+  // Asal halaman (mis. dari proyek) ikut ke detail job.
+  const { state: asalHalaman } = useLocation();
+  // Kembali ke proyek induk job ini (job lama tanpa proyek → detail job).
+  const tujuanKembali = job.proyek_id ? `/proyek/${job.proyek_id}` : `/jobs/${job.id}`;
 
   // Tautan pelacakan mengikuti origin yang sedang dibuka admin — SPA tidak
   // perlu tahu URL publiknya lewat env.
@@ -56,10 +60,7 @@ export function JobConfirmationView({ job, driverNama, driverNoHp }: Props) {
     : `https://wa.me/?text=${encodeURIComponent(waText)}`;
 
   return (
-    <div
-      className="mx-auto"
-      style={{ maxWidth: 820, display: "flex", flexDirection: "column", gap: 16 }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Success banner */}
       <div
         className="card card-pad-lg"
@@ -203,18 +204,15 @@ export function JobConfirmationView({ job, driverNama, driverNoHp }: Props) {
           <div style={{ display: "flex", gap: 8 }}>
             <Link
               to={`/jobs/${job.id}`}
+              state={asalHalaman}
               className="btn btn-secondary"
               style={{ flex: 1, textDecoration: "none" }}
             >
               Lihat detail job <ArrowRight style={{ width: 14, height: 14 }} />
             </Link>
-            <Link
-              to="/jobs/new"
-              className="btn btn-ghost"
-              style={{ textDecoration: "none" }}
-            >
-              <Plus style={{ width: 14, height: 14 }} />
-              Buat job lagi
+            <Link to={tujuanKembali} className="btn btn-ghost" style={{ textDecoration: "none" }}>
+              <ArrowLeft style={{ width: 14, height: 14 }} />
+              Kembali
             </Link>
           </div>
         </div>

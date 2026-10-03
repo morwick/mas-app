@@ -1,6 +1,6 @@
 import { useDeferredValue, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, Container, Plus, Search, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Container, Plus, Search, X } from "lucide-react";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -32,6 +32,7 @@ import { useJenisUnitTrailer, useUnitTrailer } from "../queries";
 import { useJenisUnit } from "@/features/settings/queries";
 import { AsuransiSel } from "@/features/asuransi/components/asuransi-sel";
 import { UnitTrailerFormModal } from "./unit-trailer-form-modal";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 function formatKapasitas(ton: number | null) {
   if (ton == null) return "—";
@@ -41,7 +42,7 @@ function formatKapasitas(ton: number | null) {
 export function UnitTrailerView() {
   const toast = useToast();
   const { canManageOperational } = useAuth();
-  const navigate = useNavigate();
+  const barisDetail = useBarisDetail();
 
   const [tab, setTab] = useState<Kepemilikan>("milik");
   const [page, setPage] = useState(1);
@@ -237,6 +238,7 @@ export function UnitTrailerView() {
               <table className="table">
                 <thead>
                   <tr>
+                    <KepalaKolomLihat />
                     <th>Kode trailer</th>
                     <th>Jenis unit trailer</th>
                     <th>Jenis unit</th>
@@ -244,20 +246,14 @@ export function UnitTrailerView() {
                     <th style={{ width: 150 }}>Kapasitas muatan</th>
                     <th style={{ width: 120 }}>Status</th>
                     <th>Asuransi</th>
-                    <th style={{ width: 50 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((t) => (
-                    <tr
-                      key={t.id}
-                      className="row-link"
-                      tabIndex={0}
-                      onClick={() => navigate(`/unit-trailer/${t.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") navigate(`/unit-trailer/${t.id}`);
-                      }}
-                    >
+                    <tr key={t.id} {...barisDetail(`/unit-trailer/${t.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/unit-trailer/${t.id}`} />
+                      </td>
                       <td style={{ fontWeight: 600 }}>
                         {t.kode_trailer}
                         {!t.is_active && (
@@ -275,9 +271,6 @@ export function UnitTrailerView() {
                       </td>
                       <td>
                         <AsuransiSel polis={t.polis_terkini} />
-                      </td>
-                      <td>
-                        <ChevronRight style={{ width: 16, height: 16, color: "var(--text-tertiary)" }} />
                       </td>
                     </tr>
                   ))}

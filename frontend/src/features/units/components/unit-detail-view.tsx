@@ -20,7 +20,6 @@ import {
   UNIT_STATUS_LABEL,
   UtilisasiCard,
   hitungInsiden,
-  isJobAktif,
   utilisasiSementara
 } from "@/features/units/components/aset-detail-parts";
 import { ServiceHistoryTab } from "@/features/services/components/service-history-tab";
@@ -249,7 +248,6 @@ export function UnitDetailView({
                 labelAset="unit"
                 status={unit.status}
                 incidents={incidents}
-                activeJobs={jobs.filter(isJobAktif)}
               />
             )}
 

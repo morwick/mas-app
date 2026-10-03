@@ -3,7 +3,8 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PeringatanBatal, WatermarkBatal } from "@/components/surat/watermark-batal";
 import { rp, tanggalPanjang, terbilangRupiah } from "@/lib/surat";
-import type { Invoice } from "@/types";
+import type { Invoice, InvoiceItem } from "@/types";
+import { susunRincian } from "../rincian-tagihan";
 
 interface Props {
   invoice: Invoice;
@@ -118,41 +119,25 @@ export function InvoicePrintView({ invoice: inv }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {inv.items.map((it, idx) => (
-                  <tr key={it.id}>
-                    <td className="text-center align-top">{idx + 1}</td>
-                    <td className="align-top">
-                      {it.deskripsi}
-                      {(it.dari || it.tujuan) && (
-                        <>
-                          <br />
-                          <span className="text-[11px]">
-                            {it.dari} → {it.tujuan}
-                          </span>
-                        </>
-                      )}
-                      {it.job_number && (
-                        <>
-                          <br />
-                          <span className="text-[10.5px] text-text-muted">
-                            Ref. job {it.job_number}
-                          </span>
-                        </>
-                      )}
-                    </td>
-                    <td className="align-top">
-                      {it.qty} {it.satuan}
-                    </td>
-                    <td className="align-top text-right whitespace-nowrap">
-                      {rp(it.harga_satuan)}
-                    </td>
-                    <td className="align-top text-right whitespace-nowrap">
-                      {rp(it.subtotal)}
-                    </td>
-                  </tr>
-                ))}
+                {susunRincian(inv).map((baris, idx) =>
+                  baris.jenis === "proyek" ? (
+                    // Baris proyek: teks bebas dari admin + nominal. Job-job
+                    // proyeknya tidak dicetak.
+                    <tr key={baris.key}>
+                      <td className="text-center align-top">{idx + 1}</td>
+                      <td colSpan={3} className="align-top whitespace-pre-line">
+                        {baris.uraian}
+                      </td>
+                      <td className="align-top text-right whitespace-nowrap">
+                        {rp(baris.nominal)}
+                      </td>
+                    </tr>
+                  ) : (
+                    <BarisItemCetak key={baris.key} it={baris.item} no={idx + 1} />
+                  )
+                )}
 
-                {inv.items.length > 1 && (
+                {susunRincian(inv).length > 1 && (
                   <tr>
                     <td colSpan={3} className="text-right font-medium">
                       Subtotal
@@ -176,9 +161,30 @@ export function InvoicePrintView({ invoice: inv }: Props) {
                   </tr>
                 )}
 
+                {/* Potongan PPh 23 (kita pemberi jasa): total sebelum potongan
+                    dulu, lalu potongannya (minus), lalu yang harus dibayar. */}
+                {inv.pph23_aktif && (
+                  <>
+                    <tr>
+                      <td colSpan={3} className="text-right font-medium">
+                        {inv.ppn_aktif ? "TOTAL + PPN" : "TOTAL"}
+                      </td>
+                      <td />
+                      <td className="text-right whitespace-nowrap">{rp(inv.subtotal + inv.ppn_nominal)}</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} className="text-right font-medium">
+                        Pot. PPh 23 ({Number(inv.pph23_persen)}%)
+                      </td>
+                      <td />
+                      <td className="text-right whitespace-nowrap">- {rp(inv.pph23_nominal)}</td>
+                    </tr>
+                  </>
+                )}
+
                 <tr className="total-row">
                   <td colSpan={3} className="text-right font-bold">
-                    {inv.ppn_aktif ? "TOTAL + PPN" : "TOTAL"}
+                    {inv.pph23_aktif ? "TOTAL DIBAYAR" : inv.ppn_aktif ? "TOTAL + PPN" : "TOTAL"}
                   </td>
                   <td />
                   <td className="text-right font-bold whitespace-nowrap">
@@ -291,5 +297,42 @@ export function InvoicePrintView({ invoice: inv }: Props) {
         }
       `}</style>
     </>
+  );
+}
+
+/** Baris rincian biasa (di luar proyek, atau tagihan lama per job). */
+function BarisItemCetak({ it, no }: { it: InvoiceItem; no: number }) {
+  return (
+    <tr>
+      <td className="text-center align-top">{no}</td>
+      <td className="align-top">
+        {it.deskripsi}
+        {(it.dari || it.tujuan) && (
+          <>
+            <br />
+            <span className="text-[11px]">
+              {it.dari} → {it.tujuan}
+            </span>
+          </>
+        )}
+        {it.job_number && (
+          <>
+            <br />
+            <span className="text-[10.5px] text-text-muted">
+              Ref. job {it.job_number}
+            </span>
+          </>
+        )}
+      </td>
+      <td className="align-top">
+        {it.qty} {it.satuan}
+      </td>
+      <td className="align-top text-right whitespace-nowrap">
+        {rp(it.harga_satuan)}
+      </td>
+      <td className="align-top text-right whitespace-nowrap">
+        {rp(it.subtotal)}
+      </td>
+    </tr>
   );
 }

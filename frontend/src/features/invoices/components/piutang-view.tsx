@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { ChevronRight, Search, Wallet } from "lucide-react";
+import { Search, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
@@ -8,14 +7,16 @@ import type { InvoiceListRow, PiutangSummaryRow } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 interface Props {
   summary: PiutangSummaryRow[];
-  /** Tagihan terkirim yang belum lunas, diurut dari yang paling lama menunggak. */
+  /** Tagihan draft / terkirim yang belum lunas, diurut dari yang paling lama menunggak. */
   outstanding: InvoiceListRow[];
 }
 
 export function PiutangView({ summary, outstanding }: Props) {
+  const barisDetail = useBarisDetail();
   const [q, setQ] = useState("");
 
   const total = useMemo(
@@ -48,7 +49,7 @@ export function PiutangView({ summary, outstanding }: Props) {
       <EmptyState
         icon={Wallet}
         title="Tidak ada piutang"
-        description="Semua tagihan yang sudah dikirim sudah lunas."
+        description="Semua tagihan (termasuk draft) sudah lunas."
       />
     );
   }
@@ -59,7 +60,7 @@ export function PiutangView({ summary, outstanding }: Props) {
     <div className="flex flex-col" style={{ gap: 16 }}>
       <PageHeader
         title="Piutang"
-        description="Tagihan yang belum lunas per customer beserta umur piutangnya."
+        description="Tagihan yang belum lunas (termasuk draft) per customer beserta umur piutangnya."
       />
       {/* Ringkasan umur piutang.
           Yang menentukan tindakan bukan total piutangnya, melainkan berapa
@@ -143,20 +144,22 @@ export function PiutangView({ summary, outstanding }: Props) {
           <table className="table">
             <thead>
               <tr>
+                <KepalaKolomLihat />
                 <th style={{ width: 180 }}>Nomor tagihan</th>
                 <th>Customer</th>
                 <th style={{ width: 120 }}>Jatuh tempo</th>
                 <th style={{ width: 140, textAlign: "right" }}>Sisa</th>
                 <th style={{ width: 160 }}>Status</th>
-                <th style={{ width: 44 }} />
               </tr>
             </thead>
             <tbody>
               {pg.items.map((row) => (
-                <tr key={row.id} className="row-link">
+                <tr key={row.id} {...barisDetail(`/invoices/${row.id}`)}>
+                  <td style={{ width: 44 }}>
+                    <TombolLihat tujuan={`/invoices/${row.id}`} />
+                  </td>
                   <td>
-                    <Link
-                      to={`/invoices/${row.id}`}
+                    <span
                       className="mono"
                       style={{
                         textDecoration: "none",
@@ -166,7 +169,7 @@ export function PiutangView({ summary, outstanding }: Props) {
                       }}
                     >
                       {row.invoice_number}
-                    </Link>
+                    </span>
                   </td>
                   <td style={{ fontSize: 13.5 }}>{row.customer_nama}</td>
                   <td style={{ fontSize: 12.5 }}>
@@ -191,17 +194,6 @@ export function PiutangView({ summary, outstanding }: Props) {
                       status={row.status_tampil}
                       hariTerlambat={row.hari_terlambat}
                     />
-                  </td>
-                  <td>
-                    <Link
-                      to={`/invoices/${row.id}`}
-                      style={{
-                        color: "var(--text-tertiary)",
-                        display: "inline-flex"
-                      }}
-                    >
-                      <ChevronRight style={{ width: 16, height: 16 }} />
-                    </Link>
                   </td>
                 </tr>
               ))}

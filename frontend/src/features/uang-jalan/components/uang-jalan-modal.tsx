@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Paperclip, TriangleAlert, Upload, X } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
@@ -57,9 +58,12 @@ export function UangJalanModal({
   const [catatan, setCatatan] = useState("");
   const [bukti, setBukti] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const buktiRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    setErrors({});
     if (existing) {
       setJenis(existing.jenis);
       setTanggal(existing.tanggal.slice(0, 10));
@@ -91,24 +95,20 @@ export function UangJalanModal({
   const melebihiUangJalan = pencairan && angka > batasPemberian;
 
   async function submit() {
-    if (angka <= 0) {
-      toast.error("Jumlah harus diisi");
-      return;
-    }
+    // BATASAN: nominal yang melebihi sisa uang jalan ditolak lebih dulu — itu
+    // alasan utama yang harus diketahui admin; sisanya kesalahan per isian.
     if (melebihiUangJalan) {
       toast.error(
         `Melebihi sisa uang jalan ${formatRupiah(Math.max(batasPemberian, 0))}. Catat tambahan uang jalan dulu bila memang perlu lebih.`
       );
       return;
     }
-    if (pencairan && !existing && !bukti) {
-      toast.error("Foto bukti transfer wajib dilampirkan");
-      return;
-    }
-    if (pencairan && !sumberId) {
-      toast.error("Pilih kas sumber dana");
-      return;
-    }
+    const errs: Record<string, string> = {};
+    if (angka <= 0) errs.jumlah = "Jumlah harus diisi";
+    if (pencairan && !sumberId) errs.sumber = "Pilih kas sumber dana";
+    if (pencairan && !existing && !bukti) errs.bukti = "Foto bukti transfer wajib dilampirkan";
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     setSubmitting(true);
     const input = {
       job_id: jobId,
@@ -144,168 +144,213 @@ export function UangJalanModal({
     onClose();
   }
 
+  const judul = existing ? "Ubah catatan uang jalan" : request ? "Cairkan pengajuan driver" : "Pengajuan uang jalan";
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
-      title={
-        existing ? "Ubah catatan uang jalan" : request ? "Cairkan pengajuan driver" : "Pengajuan uang jalan"
-      }
-      description={
-        pencairan
-          ? "Uang yang benar-benar keluar dari kas ke supir — wajib dengan foto bukti transfer."
-          : "Kesepakatan menambah uang jalan — belum ada uang yang berpindah. Diajukan ke approver; uang jalan job baru bertambah setelah disetujui."
-      }
+      onClose={submitting ? () => {} : onClose}
+      title={judul}
+      maxWidth="max-w-[560px]"
       footer={
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Batal
           </Button>
           <Button onClick={submit} loading={submitting}>
             Simpan
           </Button>
-        </div>
+        </>
       }
     >
-      <Field label="Jenis" required>
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["pencairan", "tambahan"] as const).map((j) => (
-            <button
-              key={j}
-              type="button"
-              disabled={Boolean(request) && j !== "pencairan"}
-              onClick={() => setJenis(j)}
-              className="btn btn-sm"
-              style={{
-                flex: 1,
-                background:
-                  jenis === j ? "var(--brand-primary)" : "var(--bg-subtle)",
-                color: jenis === j ? "#fff" : "var(--text-secondary)",
-                border: "1px solid var(--border-default)",
-                fontWeight: 600
-              }}
-            >
-              {j === "pencairan" ? "Kasih uang" : "Tambah uang jalan"}
-            </button>
-          ))}
+      <div className="flex flex-col gap-4">
+        {/* Posisi uang jalan job saat ini — acuan sebelum mengisi jumlah. */}
+        <div
+          className="grid grid-cols-3"
+          style={{ gap: 8, padding: 12, borderRadius: 10, background: "var(--bg-subtle)" }}
+        >
+          <Ringkas label="Uang jalan" nilai={ringkasan.uang_jalan} />
+          <Ringkas label="Sudah diberikan" nilai={ringkasan.cair} />
+          <Ringkas label="Sisa" nilai={ringkasan.sisa} tegas />
         </div>
-      </Field>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="Tanggal" required>
-          <DateInput
-            value={tanggal}
-            onChange={(v) => setTanggal(v)}
-          />
-        </Field>
-        <Field label="Jumlah" required>
-          <CurrencyInput
-            placeholder="0"
-            value={jumlah}
-            onChange={setJumlah}
-          />
-        </Field>
-      </div>
-
-      {pencairan && (
-        <Field label="Dari kas" required>
-          <Combobox
-            value={sumberId}
-            onChange={setSumberId}
-            options={sumberDana.map((s) => ({ value: s.id, label: s.nama }))}
-            placeholder="— pilih —"
-            searchPlaceholder="Cari kas / rekening…"
-          />
-        </Field>
-      )}
-
-      <Field
-        label={pencairan ? "Keperluan" : "Alasan penambahan"}
-        hint={
-          pencairan
-            ? "Boleh dikosongkan"
-            : "Ini yang nanti menjelaskan kenapa uang jalan bertambah"
-        }
-      >
-        <Input
-          value={keperluan}
-          onChange={(e) => setKeperluan(e.target.value)}
-          placeholder={pencairan ? "Solar Ketengan" : "Ban pecah di Lampung"}
-          list="keperluan-umum"
-        />
-        {pencairan && (
-          <>
-            <datalist id="keperluan-umum">
-              {KEPERLUAN_UMUM.map((k) => (
-                <option key={k} value={k} />
-              ))}
-            </datalist>
-            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-              {KEPERLUAN_UMUM.map((k) => (
+        <Field label="Jenis" required>
+          <div
+            className="grid grid-cols-2"
+            style={{ gap: 4, padding: 4, borderRadius: 10, background: "var(--bg-subtle)" }}
+          >
+            {(["pencairan", "tambahan"] as const).map((j) => {
+              const aktif = jenis === j;
+              return (
                 <button
-                  key={k}
+                  key={j}
                   type="button"
-                  onClick={() => setKeperluan(k)}
-                  className="btn btn-sm"
+                  disabled={Boolean(request) && j !== "pencairan"}
+                  onClick={() => setJenis(j)}
+                  aria-pressed={aktif}
                   style={{
-                    background: "var(--bg-subtle)",
-                    color: "var(--text-secondary)",
-                    border: "1px solid var(--border-default)",
-                    fontSize: 11.5,
-                    padding: "3px 9px"
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: aktif ? "white" : "transparent",
+                    color: aktif ? "var(--brand-primary-dark)" : "var(--text-secondary)",
+                    boxShadow: aktif ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                    opacity: Boolean(request) && j !== "pencairan" ? 0.5 : 1,
+                    cursor: Boolean(request) && j !== "pencairan" ? "not-allowed" : "pointer"
                   }}
                 >
-                  {k}
+                  {j === "pencairan" ? "Kasih uang" : "Tambah uang jalan"}
                 </button>
-              ))}
-            </div>
-          </>
-        )}
-      </Field>
+              );
+            })}
+          </div>
+          <p className="field-helper">
+            {pencairan
+              ? "Uang yang benar-benar keluar dari kas ke supir — wajib dengan foto bukti transfer."
+              : "Kesepakatan menambah uang jalan, belum ada uang yang berpindah. Uang jalan job bertambah setelah disetujui approver."}
+          </p>
+        </Field>
 
-      {pencairan && !existing && (
+        <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
+          <Field label="Tanggal" required>
+            <DateInput value={tanggal} onChange={(v) => setTanggal(v)} />
+          </Field>
+          <Field label="Jumlah" required>
+            <CurrencyInput placeholder="0" value={jumlah} onChange={setJumlah} error={errors.jumlah} />
+          </Field>
+        </div>
+
+        {melebihiUangJalan && (
+          <p
+            className="field-warning"
+            style={{
+              padding: "9px 11px",
+              borderRadius: 8,
+              background: "var(--status-cancelled-bg)",
+              color: "var(--status-cancelled-text)"
+            }}
+          >
+            <TriangleAlert style={{ width: 14, height: 14 }} />
+            <span>
+              Jumlah ini melebihi sisa uang jalan {formatRupiah(Math.max(batasPemberian, 0))} dan tidak bisa
+              disimpan. Bila memang perlu lebih, silakan ajukan tambahan uang jalan.
+            </span>
+          </p>
+        )}
+
+        {pencairan && (
+          <Field label="Dari kas" required>
+            <Combobox
+              value={sumberId}
+              onChange={setSumberId}
+              options={sumberDana.map((s) => ({ value: s.id, label: s.nama }))}
+              placeholder="— pilih —"
+              searchPlaceholder="Cari kas / rekening…"
+              error={errors.sumber}
+            />
+          </Field>
+        )}
+
         <Field
-          label="Foto bukti transfer"
-          required
-          hint="Setelah tersimpan, kunci perjalanan driver terbuka dan driver dapat notifikasi."
+          label={pencairan ? "Keperluan" : "Alasan penambahan"}
+          hint={pencairan ? "Boleh dikosongkan" : "Ini yang nanti menjelaskan kenapa uang jalan bertambah"}
         >
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setBukti(e.target.files?.[0] ?? null)}
-            className="text-[13px]"
+          <Input
+            value={keperluan}
+            onChange={(e) => setKeperluan(e.target.value)}
+            placeholder={pencairan ? "Solar Ketengan" : "Ban pecah di Lampung"}
+            list="keperluan-umum"
           />
-          {bukti && (
-            <div className="caption" style={{ marginTop: 4 }}>
-              {bukti.name}
-            </div>
+          {pencairan && (
+            <>
+              <datalist id="keperluan-umum">
+                {KEPERLUAN_UMUM.map((k) => (
+                  <option key={k} value={k} />
+                ))}
+              </datalist>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {KEPERLUAN_UMUM.map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setKeperluan(k)}
+                    className={`chip${keperluan === k ? " active" : ""}`}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </Field>
-      )}
 
-      <Field label="Catatan (opsional)">
-        <Textarea
-          rows={2}
-          value={catatan}
-          onChange={(e) => setCatatan(e.target.value)}
-        />
-      </Field>
+        {pencairan && !existing && (
+          <Field
+            label="Foto bukti transfer"
+            required
+            hint="Setelah tersimpan, kunci perjalanan driver terbuka dan driver dapat notifikasi."
+          >
+            <input
+              ref={buktiRef}
+              type="file"
+              accept="image/*"
+              hidden
+              aria-label="Foto bukti transfer"
+              onChange={(e) => {
+                setBukti(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
+            {bukti ? (
+              <div
+                className="flex items-center gap-2"
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-default)" }}
+              >
+                <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                <span className="caption" style={{ flex: 1, minWidth: 0, wordBreak: "break-all" }}>
+                  {bukti.name}
+                </span>
+                <button type="button" className="btn-icon" title="Hapus foto" onClick={() => setBukti(null)}>
+                  <X style={{ width: 14, height: 14 }} />
+                </button>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                leftIcon={<Upload style={{ width: 14, height: 14 }} />}
+                onClick={() => buktiRef.current?.click()}
+              >
+                Pilih foto bukti transfer
+              </Button>
+            )}
+            {errors.bukti && <p className="field-error">{errors.bukti}</p>}
+          </Field>
+        )}
 
-      {melebihiUangJalan && (
-        <div
-          style={{
-            background: "#fdf1f1",
-            border: "1px solid #f5c2c2",
-            borderRadius: 8,
-            padding: "9px 11px",
-            fontSize: 12.5,
-            color: "#a32b2b"
-          }}
-        >
-          Jumlah ini melebihi sisa uang jalan {formatRupiah(Math.max(batasPemberian, 0))} dan tidak bisa
-          disimpan. Bila memang perlu lebih, silakan ajukan tambahan uang jalan.
-        </div>
-      )}
+        <Field label="Catatan (opsional)">
+          <Textarea rows={2} value={catatan} onChange={(e) => setCatatan(e.target.value)} />
+        </Field>
+      </div>
     </Modal>
+  );
+}
+
+/** Satu angka ringkasan uang jalan di atas form. */
+function Ringkas({ label, nilai, tegas }: { label: string; nilai: number; tegas?: boolean }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div className="caption">{label}</div>
+      <div
+        className="mono"
+        style={{
+          fontSize: 13.5,
+          fontWeight: tegas ? 700 : 600,
+          color: nilai < 0 ? "var(--status-cancelled-text)" : "var(--text-primary)"
+        }}
+      >
+        {formatRupiah(nilai)}
+      </div>
+    </div>
   );
 }

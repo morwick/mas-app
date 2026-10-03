@@ -15,7 +15,7 @@ import {
   useState
 } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Check, ChevronDown, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ComboboxOption {
@@ -49,6 +49,14 @@ interface ComboboxProps {
    * kecamatan) supaya popup tetap ringan; sisanya dicapai dengan mengetik.
    */
   maxResults?: number;
+  /**
+   * Isian bebas: bila teks yang diketik tidak sama dengan label opsi mana pun,
+   * muncul baris "Pakai …" di akhir daftar. Memilihnya memanggil `onCreate`
+   * dengan teks itu (yang menyimpan/menampilkannya adalah komponen induk).
+   */
+  onCreate?: (text: string) => void;
+  /** Teks baris isian bebas, mis. (t) => `Tambah "${t}" sebagai sales baru`. */
+  createLabel?: (text: string) => string;
   className?: string;
   style?: React.CSSProperties;
   id?: string;
@@ -81,6 +89,8 @@ export function Combobox({
   emptyText = "Tidak ada hasil",
   minQueryLength = 0,
   maxResults,
+  onCreate,
+  createLabel = (text) => `Pakai "${text}"`,
   className,
   style,
   id
@@ -119,6 +129,16 @@ export function Combobox({
       totalMatches: all.length
     };
   }, [options, query, queryTooShort, maxResults]);
+
+  // Baris isian bebas tampil di akhir daftar bila teksnya belum ada di opsi.
+  const createText = query.trim();
+  const showCreate =
+    !!onCreate &&
+    createText !== "" &&
+    !options.some((o) => normalize(o.label.trim()) === normalize(createText));
+  const createIndex = filtered.length;
+  const rowCount = filtered.length + (showCreate ? 1 : 0);
+  const isDisabledRow = (i: number) => i < filtered.length && !!filtered[i].disabled;
 
   const reposition = useCallback(() => {
     const el = triggerRef.current;
@@ -179,8 +199,10 @@ export function Combobox({
     if (!open) return;
     const preferred = filtered.findIndex((o) => o.value === value && !o.disabled);
     const firstEnabled = filtered.findIndex((o) => !o.disabled);
-    setActiveIndex(preferred >= 0 ? preferred : firstEnabled >= 0 ? firstEnabled : 0);
-  }, [open, filtered, value]);
+    setActiveIndex(
+      preferred >= 0 ? preferred : firstEnabled >= 0 ? firstEnabled : showCreate ? createIndex : 0
+    );
+  }, [open, filtered, value, showCreate, createIndex]);
 
   // Jaga baris aktif tetap terlihat saat navigasi keyboard.
   useEffect(() => {
@@ -208,13 +230,18 @@ export function Combobox({
     closePopup();
   }
 
+  function create() {
+    onCreate?.(createText);
+    closePopup();
+  }
+
   /** Geser sorotan ke opsi aktif berikutnya, melewati yang disabled. */
   function move(step: 1 | -1) {
-    if (filtered.length === 0) return;
+    if (rowCount === 0) return;
     let next = activeIndex;
-    for (let i = 0; i < filtered.length; i++) {
-      next = (next + step + filtered.length) % filtered.length;
-      if (!filtered[next].disabled) {
+    for (let i = 0; i < rowCount; i++) {
+      next = (next + step + rowCount) % rowCount;
+      if (!isDisabledRow(next)) {
         setActiveIndex(next);
         return;
       }
@@ -239,14 +266,16 @@ export function Combobox({
         e.preventDefault();
         move(-1);
         break;
-      case "Home":
+      case "Home": {
         e.preventDefault();
-        setActiveIndex(Math.max(0, filtered.findIndex((o) => !o.disabled)));
+        const firstEnabled = filtered.findIndex((o) => !o.disabled);
+        setActiveIndex(firstEnabled >= 0 ? firstEnabled : showCreate ? createIndex : 0);
         break;
+      }
       case "End": {
         e.preventDefault();
-        for (let i = filtered.length - 1; i >= 0; i--) {
-          if (!filtered[i].disabled) {
+        for (let i = rowCount - 1; i >= 0; i--) {
+          if (!isDisabledRow(i)) {
             setActiveIndex(i);
             break;
           }
@@ -255,6 +284,10 @@ export function Combobox({
       }
       case "Enter": {
         e.preventDefault();
+        if (showCreate && activeIndex === createIndex) {
+          create();
+          break;
+        }
         const option = filtered[activeIndex];
         if (option) pick(option);
         break;
@@ -297,7 +330,7 @@ export function Combobox({
               aria-controls={listId}
               aria-autocomplete="list"
               aria-activedescendant={
-                filtered[activeIndex] ? `${listId}-${activeIndex}` : undefined
+                activeIndex < rowCount ? `${listId}-${activeIndex}` : undefined
               }
             />
           </div>
@@ -308,7 +341,7 @@ export function Combobox({
             className="combobox-list"
             style={{ maxHeight: MAX_LIST_HEIGHT }}
           >
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && !showCreate ? (
               <p className="combobox-empty">
                 {queryTooShort
                   ? `Ketik minimal ${minQueryLength} huruf untuk menampilkan pilihan`
@@ -341,6 +374,24 @@ export function Combobox({
                   {option.hint && <span className="combobox-hint">{option.hint}</span>}
                 </div>
               ))
+            )}
+            {showCreate && (
+              <div
+                id={`${listId}-${createIndex}`}
+                data-index={createIndex}
+                role="option"
+                aria-selected={false}
+                data-active={activeIndex === createIndex}
+                className="combobox-option"
+                onMouseEnter={() => setActiveIndex(createIndex)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={create}
+              >
+                <div className="combobox-option-main">
+                  <Plus style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  <span className="combobox-option-label">{createLabel(createText)}</span>
+                </div>
+              </div>
             )}
             {totalMatches > filtered.length && (
               <p className="combobox-empty">

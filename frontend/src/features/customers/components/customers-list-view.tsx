@@ -9,6 +9,8 @@ import { Fab } from "@/components/layout/fab";
 import type { Customer } from "@/types";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
+import { IkonPerusahaan } from "@/components/ui/avatar-inisial";
 
 interface Props {
   customers: Customer[];
@@ -16,15 +18,6 @@ interface Props {
   quotationCounts: Record<string, number>;
 }
 
-function abbr(nama: string) {
-  return nama
-    .replace(/^(PT|CV)\s+/i, "")
-    .split(" ")
-    .slice(0, 2)
-    .map((s) => s[0])
-    .join("")
-    .toUpperCase();
-}
 
 /**
  * Angka total job/penawaran, bisa diklik untuk membuka daftarnya sudah
@@ -58,6 +51,7 @@ function CountLink({ to, count }: { to: string; count: number }) {
 }
 
 export function CustomersListView({ customers, jobCounts, quotationCounts }: Props) {
+  const barisDetail = useBarisDetail();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "inactive">(
     "active"
@@ -138,20 +132,22 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
               <table className="table">
               <thead>
                 <tr>
+                  <KepalaKolomLihat />
                   <th>Nama perusahaan</th>
                   <th>Alamat</th>
                   <th style={{ width: 130 }}>Jumlah penawaran</th>
                   <th style={{ width: 110 }}>Total job</th>
                   <th style={{ width: 100 }}>Status</th>
-                  <th style={{ width: 50 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {pg.items.map((c) => (
-                  <tr key={c.id} className="row-link">
+                  <tr key={c.id} {...barisDetail(`/customers/${c.id}/edit`)}>
+                    <td style={{ width: 44 }}>
+                      <TombolLihat tujuan={`/customers/${c.id}/edit`} />
+                    </td>
                     <td>
-                      <Link
-                        to={`/customers/${c.id}/edit`}
+                      <span
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -160,23 +156,7 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
                           color: "inherit"
                         }}
                       >
-                        <div
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 6,
-                            background: "var(--brand-primary-light)",
-                            color: "var(--brand-primary-dark)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontWeight: 700,
-                            fontSize: 11,
-                            flexShrink: 0
-                          }}
-                        >
-                          {abbr(c.nama_perusahaan)}
-                        </div>
+                        <IkonPerusahaan nama={c.nama_perusahaan} />
                         <div style={{ minWidth: 0 }}>
                           <div
                             style={{
@@ -203,7 +183,7 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
                             </div>
                           )}
                         </div>
-                      </Link>
+                      </span>
                     </td>
                     <td className="muted" style={{ fontSize: 12.5 }}>
                       {c.alamat ?? (
@@ -225,17 +205,6 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
                       ) : (
                         <span className="badge">Nonaktif</span>
                       )}
-                    </td>
-                    <td>
-                      <Link
-                        to={`/customers/${c.id}/edit`}
-                        style={{
-                          color: "var(--text-tertiary)",
-                          display: "inline-flex"
-                        }}
-                      >
-                        <ChevronRight style={{ width: 16, height: 16 }} />
-                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -262,23 +231,7 @@ export function CustomersListView({ customers, jobCounts, quotationCounts }: Pro
                       flex: 1
                     }}
                   >
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 6,
-                        background: "var(--brand-primary-light)",
-                        color: "var(--brand-primary-dark)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontWeight: 700,
-                        fontSize: 12,
-                        flexShrink: 0
-                      }}
-                    >
-                      {abbr(c.nama_perusahaan)}
-                    </div>
+                    <IkonPerusahaan nama={c.nama_perusahaan} ukuran={36} />
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div
                         style={{

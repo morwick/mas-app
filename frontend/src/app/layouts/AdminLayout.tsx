@@ -44,7 +44,9 @@ export function AdminLayout() {
         />
         <MobileHeader user={user} counts={counts} notifications={notifications} approval={approval} />
         <main className="flex-1 pb-20 lg:pb-12">
-          <div className="mx-auto w-full max-w-page px-3 sm:px-6 lg:px-8 py-4 lg:py-6">
+          {/* Isi halaman mengikuti lebar layar (tanpa batas 1200px) supaya layar
+              besar terpakai penuh; HP tetap memakai padding kecil. */}
+          <div className="w-full px-3 sm:px-6 lg:px-8 py-4 lg:py-6">
             <Outlet />
           </div>
         </main>

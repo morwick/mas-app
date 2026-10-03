@@ -24,6 +24,7 @@ import {
   type Mekanik,
   type MekanikInput
 } from "./api";
+import { AvatarInisial } from "@/components/ui/avatar-inisial";
 
 const KOSONG: MekanikInput = { karyawan_id: "", no_hp: null, keahlian: null, catatan: null };
 
@@ -128,17 +129,22 @@ export function MekanikView() {
                   return (
                     <tr key={m.id}>
                       <td style={{ fontWeight: 600 }}>
-                        {m.nama}
-                        {!m.is_active && (
-                          <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
-                            Nonaktif
-                          </span>
-                        )}
-                        {!m.karyawan_aktif && (
-                          <span className="badge badge-cancelled" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
-                            Karyawan nonaktif
-                          </span>
-                        )}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <AvatarInisial nama={m.nama} redup={!m.is_active || !m.karyawan_aktif} />
+                          <div style={{ minWidth: 0 }}>
+                            {m.nama}
+                            {!m.is_active && (
+                              <span className="badge" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                                Nonaktif
+                              </span>
+                            )}
+                            {!m.karyawan_aktif && (
+                              <span className="badge badge-cancelled" style={{ fontSize: 10, height: 18, marginLeft: 8 }}>
+                                Karyawan nonaktif
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td>
                         {m.no_hp ? (

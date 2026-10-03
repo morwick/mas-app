@@ -56,6 +56,10 @@ class _Transaksi(BaseModel):
     status_approval: str = "disetujui"
 
 
+# Nama publik untuk modul lain yang menyusun transaksi sendiri (mis. detail proyek).
+TransaksiRingkas = _Transaksi
+
+
 def hitung_ringkasan(uang_jalan_awal: float, transaksi: Iterable[_Transaksi]) -> UangJalanRingkasan:
     tambahan = 0.0
     tambahan_menunggu = 0.0

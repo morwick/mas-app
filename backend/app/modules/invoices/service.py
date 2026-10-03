@@ -27,11 +27,14 @@ from app.modules.invoices.schemas import (
     InvoiceItemInput,
     InvoiceListRow,
     InvoicePayment,
+    InvoiceProyek,
+    InvoiceProyekInput,
     InvoiceStatus,
     JobBelumDitagihRow,
     JobProfitabilityRow,
     PaymentInput,
     PiutangSummaryRow,
+    ProyekProfitabilityRow,
     SetInvoiceStatusRequest,
     UangJalanTransaksi,
 )
@@ -42,7 +45,7 @@ INVOICE_SELECT = """
   pic_sapaan, pic_nama,
   quotation_id,
   kota_terbit, tanggal, termin_hari, jatuh_tempo,
-  ppn_aktif, ppn_persen, subtotal, ppn_nominal, total, dibayar,
+  ppn_aktif, ppn_persen, pph23_aktif, pph23_persen, subtotal, ppn_nominal, pph23_nominal, total, dibayar,
   status_tagihan, ttd_nama, ttd_jabatan,
   bank_nama, bank_rekening, bank_atas_nama,
   catatan, alasan_batal,
@@ -55,8 +58,10 @@ INVOICE_SELECT = """
 ITEM_SELECT = """
   id, invoice_id, urutan, job_id, deskripsi, dari, tujuan,
   qty, satuan, harga_satuan, subtotal,
-  job:jobs(job_number, proyek:proyek(nomor_proyek))
+  job:jobs(job_number, proyek_id, proyek:proyek(nomor_proyek))
 """
+
+PROYEK_SELECT = "id, invoice_id, proyek_id, urutan, uraian, nominal, proyek:proyek(nomor_proyek)"
 
 PAYMENT_SELECT = """
   id, invoice_id, tanggal, jumlah, sumber_dana_id, metode,
@@ -139,6 +144,7 @@ def _to_item(r: dict[str, Any], uj: dict[str, Any] | None) -> InvoiceItem:
         urutan=r["urutan"],
         job_id=r.get("job_id"),
         job_number=(first(r.get("job")) or {}).get("job_number"),
+        proyek_id=(first(r.get("job")) or {}).get("proyek_id"),
         proyek_nomor=(first((first(r.get("job")) or {}).get("proyek")) or {}).get("nomor_proyek"),
         deskripsi=r["deskripsi"],
         dari=r.get("dari"),
@@ -154,6 +160,18 @@ def _to_item(r: dict[str, Any], uj: dict[str, Any] | None) -> InvoiceItem:
         surat_jalan_unloading_urls=(uj or {}).get("surat_jalan_unloading_urls") or [],
         uang_jalan_awal=(uj or {}).get("uang_jalan_awal"),
         uang_jalan_transaksi=(uj or {}).get("uang_jalan_transaksi") or [],
+    )
+
+
+def _to_proyek(r: dict[str, Any]) -> InvoiceProyek:
+    return InvoiceProyek(
+        id=r["id"],
+        invoice_id=r["invoice_id"],
+        proyek_id=r["proyek_id"],
+        proyek_nomor=(first(r.get("proyek")) or {}).get("nomor_proyek"),
+        urutan=r["urutan"],
+        uraian=r["uraian"],
+        nominal=num(r.get("nominal")),
     )
 
 
@@ -215,8 +233,11 @@ def _base_fields(r: dict[str, Any]) -> dict[str, Any]:
         "jatuh_tempo": r.get("jatuh_tempo"),
         "ppn_aktif": bool(r.get("ppn_aktif")),
         "ppn_persen": num(r.get("ppn_persen")),
+        "pph23_aktif": bool(r.get("pph23_aktif")),
+        "pph23_persen": num(r.get("pph23_persen"), 2),
         "subtotal": num(r.get("subtotal")),
         "ppn_nominal": num(r.get("ppn_nominal")),
+        "pph23_nominal": num(r.get("pph23_nominal")),
         "total": total,
         "dibayar": dibayar,
         "sisa": total - dibayar,
@@ -248,6 +269,29 @@ def alasan_terkunci(dibayar: float, faktur_pajak_path: str | None) -> str | None
     return None
 
 
+def _validate_proyek(payload: InvoiceInput) -> None:
+    """Baris rincian per proyek: uraian wajib, nominal tidak negatif, minimal
+    satu job, dan satu proyek hanya satu baris."""
+    dipakai: set[str] = set()
+    for i, p in enumerate(payload.proyek, start=1):
+        if p.proyek_id in dipakai:
+            raise ValidationError(f"Proyek baris {i} sudah ada di baris lain — satu proyek hanya boleh satu baris")
+        dipakai.add(p.proyek_id)
+        if not p.uraian.strip():
+            raise ValidationError(f"Proyek baris {i}: uraian wajib diisi")
+        if p.nominal < 0:
+            raise ValidationError(f"Proyek baris {i}: nominal tidak valid")
+        if not p.job_ids:
+            raise ValidationError(f"Proyek baris {i}: belum ada job yang ditagihkan")
+
+
+def bagi_rata(nominal: int, jumlah: int) -> list[int]:
+    """Bagi nominal ke `jumlah` job tanpa selisih pembulatan: sisa rupiah
+    diberikan ke job-job pertama, jadi totalnya selalu sama dengan nominal."""
+    dasar, sisa = divmod(nominal, jumlah)
+    return [dasar + (1 if i < sisa else 0) for i in range(jumlah)]
+
+
 def _validate(payload: InvoiceInput) -> None:
     if not payload.tanggal:
         raise ValidationError("Tanggal tagihan wajib diisi")
@@ -274,6 +318,8 @@ def _validate(payload: InvoiceInput) -> None:
         baris_job[it.job_id] = i
     if payload.ppn_aktif and not (0 <= payload.ppn_persen <= 100):
         raise ValidationError("Persentase PPN harus antara 0 dan 100")
+    if payload.pph23_aktif and not (0 <= payload.pph23_persen <= 100):
+        raise ValidationError("Persentase PPh 23 harus antara 0 dan 100")
     if payload.termin_hari is not None and payload.termin_hari < 0:
         raise ValidationError("Termin tidak boleh negatif")
 
@@ -304,6 +350,19 @@ def _item_rows(invoice_id: str, items: list[InvoiceItemInput]) -> list[dict[str,
     ]
 
 
+def _proyek_rows(invoice_id: str, proyek: list[InvoiceProyekInput]) -> list[dict[str, Any]]:
+    return [
+        {
+            "invoice_id": invoice_id,
+            "proyek_id": p.proyek_id,
+            "urutan": idx,
+            "uraian": p.uraian.strip(),
+            "nominal": round(p.nominal),
+        }
+        for idx, p in enumerate(proyek, start=1)
+    ]
+
+
 def _header_payload(payload: InvoiceInput, termin: int | None) -> dict[str, Any]:
     return {
         "quotation_id": payload.quotation_id or None,
@@ -313,6 +372,10 @@ def _header_payload(payload: InvoiceInput, termin: int | None) -> dict[str, Any]
         "jatuh_tempo": hitung_jatuh_tempo(payload.tanggal, termin, payload.jatuh_tempo),
         "ppn_aktif": payload.ppn_aktif,
         "ppn_persen": payload.ppn_persen,
+        # BATASAN: nominal & total dihitung database (recalc_invoice_totals):
+        # total = subtotal + PPN − PPh 23 (PPh 23 dari subtotal).
+        "pph23_aktif": payload.pph23_aktif,
+        "pph23_persen": payload.pph23_persen,
         "ttd_nama": clean_text(payload.ttd_nama),
         "ttd_jabatan": clean_text(payload.ttd_jabatan) or "Admin",
         "bank_nama": clean_text(payload.bank_nama),
@@ -380,8 +443,13 @@ class InvoiceService:
         )
         if row is None:
             raise NotFoundError("Tagihan tidak ditemukan")
-        items_res, payments_res, faktur_url = await asyncio.gather(
+        items_res, proyek_res, payments_res, faktur_url = await asyncio.gather(
             self._db.table("invoice_items").select(ITEM_SELECT).eq("invoice_id", invoice_id).order("urutan").execute(),
+            self._db.table("invoice_proyek")
+            .select(PROYEK_SELECT)
+            .eq("invoice_id", invoice_id)
+            .order("urutan")
+            .execute(),
             self._db.table("invoice_payments")
             .select(PAYMENT_SELECT)
             .eq("invoice_id", invoice_id)
@@ -397,6 +465,7 @@ class InvoiceService:
             **_base_fields(row),
             faktur_pajak_uploaded_at=row.get("faktur_pajak_uploaded_at"),
             faktur_pajak_url=faktur_url,
+            proyek=[_to_proyek(p) for p in rows(proyek_res)],
             items=[_to_item(i, uj_by_job.get(i.get("job_id"))) for i in item_rows],
             payments=[_to_payment(p) for p in rows(payments_res)],
         )
@@ -663,7 +732,71 @@ class InvoiceService:
             for r in rows(res)
         ]
 
+    async def proyek_profitability(self, *, start: str | None, end: str | None) -> list[ProyekProfitabilityRow]:
+        res = await self._db.rpc("get_proyek_profitability", {"p_start": start, "p_end": end}).execute()
+        return [
+            ProyekProfitabilityRow(
+                proyek_id=str(r["proyek_id"]),
+                nomor_proyek=str(r["nomor_proyek"]),
+                customer_nama=str(r.get("customer_nama") or "—"),
+                kosongan=bool(r.get("kosongan")),
+                unit_kode=str(r.get("unit_kode") or "—"),
+                etd_awal=str(r["etd_awal"]),
+                jumlah_job=int(r.get("jumlah_job") or 0),
+                semua_selesai=bool(r.get("semua_selesai")),
+                invoice_id=r.get("invoice_id"),
+                invoice_number=r.get("invoice_number"),
+                pendapatan=num(r.get("pendapatan")),
+                uang_jalan=num(r.get("uang_jalan")),
+                biaya_insiden=num(r.get("biaya_insiden")),
+                laba=num(r.get("laba")),
+            )
+            for r in rows(res)
+        ]
+
     # ── Tulis ───────────────────────────────────────────────────────────────
+
+    async def _rincian_lengkap(self, payload: InvoiceInput) -> InvoiceInput:
+        """Ubah baris per proyek menjadi baris per job di invoice_items.
+
+        Nominal proyek dibagi rata ke job-jobnya supaya kuncian per job di
+        database (satu job satu tagihan, satu proyek satu tagihan, job harus
+        tervalidasi) dan pendapatan per job tetap berlaku. Baris job ditaruh
+        lebih dulu, baris di luar proyek setelahnya."""
+        _validate_proyek(payload)
+        if not payload.proyek:
+            return payload
+        semua = [jid for p in payload.proyek for jid in p.job_ids]
+        res = await (
+            self._db.table("jobs")
+            .select("id, job_number, proyek_id, asal, tujuan, alat_diangkut")
+            .in_("id", semua)
+            .execute()
+        )
+        job_by_id = {r["id"]: r for r in rows(res)}
+        baris: list[InvoiceItemInput] = []
+        for i, p in enumerate(payload.proyek, start=1):
+            # BATASAN: job di bawah baris proyek harus benar-benar job proyek itu.
+            for jid in p.job_ids:
+                job = job_by_id.get(jid)
+                if job is None:
+                    raise ValidationError(f"Proyek baris {i}: job tidak ditemukan")
+                if job.get("proyek_id") != p.proyek_id:
+                    raise ValidationError(f"Proyek baris {i}: job {job['job_number']} bukan bagian dari proyek ini")
+            for jid, harga in zip(p.job_ids, bagi_rata(round(p.nominal), len(p.job_ids)), strict=True):
+                job = job_by_id[jid]
+                baris.append(
+                    InvoiceItemInput(
+                        job_id=jid,
+                        deskripsi=f"Pengangkutan {job.get('alat_diangkut') or ''}".strip(),
+                        dari=job.get("asal"),
+                        tujuan=job.get("tujuan"),
+                        qty=1,
+                        satuan="Unit",
+                        harga_satuan=harga,
+                    )
+                )
+        return payload.model_copy(update={"items": baris + list(payload.items)})
 
     async def _cek_job_belum_ditagih(self, payload: InvoiceInput, *, kecuali_invoice: str | None = None) -> None:
         """Tolak job yang sudah ada di tagihan lain yang tidak dibatalkan."""
@@ -724,6 +857,7 @@ class InvoiceService:
             )
 
     async def create(self, payload: InvoiceInput, *, created_by: str | None) -> InvoiceCreated:
+        payload = await self._rincian_lengkap(payload)
         _validate(payload)
         await self._cek_job_belum_ditagih(payload)
         cust = single(
@@ -758,12 +892,15 @@ class InvoiceService:
                 "created_by": created_by,
             },
         )
+        if payload.proyek:
+            tx.insert("invoice_proyek", _proyek_rows(inv["id"], payload.proyek))
         tx.insert("invoice_items", _item_rows(inv["id"], payload.items))
         hasil = await tx.jalankan()
         row = hasil[1][0]
         return InvoiceCreated(id=row["id"], invoice_number=row["invoice_number"])
 
     async def update(self, invoice_id: str, payload: InvoiceInput) -> None:
+        payload = await self._rincian_lengkap(payload)
         _validate(payload)
         await self._cek_job_belum_ditagih(payload, kecuali_invoice=invoice_id)
         existing = single(
@@ -798,7 +935,10 @@ class InvoiceService:
             },
             {"id": invoice_id},
         )
+        tx.hapus("invoice_proyek", {"invoice_id": invoice_id})
         tx.hapus("invoice_items", {"invoice_id": invoice_id})
+        if payload.proyek:
+            tx.insert("invoice_proyek", _proyek_rows(invoice_id, payload.proyek))
         tx.insert("invoice_items", _item_rows(invoice_id, payload.items))
         await tx.jalankan()
 

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ChevronRight,
   MapPin,
   Plus,
   Search,
@@ -21,6 +20,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { PageHeader } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
 import { AsuransiSel } from "@/features/asuransi/components/asuransi-sel";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 /** Tab halaman: unit yang masih milik perusahaan, atau yang sudah terjual. */
 type Kepemilikan = "milik" | "terjual";
@@ -42,6 +42,7 @@ interface LocationEntry {
 const LOCATION_POLL_MS = 30_000;
 
 export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
+  const barisDetail = useBarisDetail();
   const { canManageOperational } = useAuth();
   const [q, setQ] = useState("");
   const [jenis, setJenis] = useState("");
@@ -212,6 +213,7 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
               <table className="table">
                 <thead>
                   <tr>
+                    <KepalaKolomLihat />
                     <th style={{ width: 130 }}>Kode</th>
                     <th>Jenis</th>
                     <th>No. Polisi</th>
@@ -219,15 +221,16 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
                     <th style={{ width: 140 }}>Status</th>
                     <th>Driver default</th>
                     <th>Asuransi</th>
-                    <th style={{ width: 50 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {pg.items.map((u) => (
-                    <tr key={u.id} className="row-link">
+                    <tr key={u.id} {...barisDetail(`/units/${u.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/units/${u.id}`} />
+                      </td>
                       <td>
-                        <Link
-                          to={`/units/${u.id}`}
+                        <span
                           style={{
                             display: "flex",
                             alignItems: "center",
@@ -259,7 +262,7 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
                               Nonaktif
                             </span>
                           )}
-                        </Link>
+                        </span>
                       </td>
                       <td>{u.jenis_unit_nama}</td>
                       <td className="mono" style={{ fontSize: 13 }}>
@@ -282,17 +285,6 @@ export function UnitsListView({ units, jenisUnitList, initialStatus }: Props) {
                       </td>
                       <td>
                         <AsuransiSel polis={u.polis_terkini} />
-                      </td>
-                      <td>
-                        <Link
-                          to={`/units/${u.id}`}
-                          style={{
-                            color: "var(--text-tertiary)",
-                            display: "inline-flex"
-                          }}
-                        >
-                          <ChevronRight style={{ width: 16, height: 16 }} />
-                        </Link>
                       </td>
                     </tr>
                   ))}

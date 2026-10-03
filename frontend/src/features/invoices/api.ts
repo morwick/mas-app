@@ -6,7 +6,7 @@ import type {
   InvoiceListRow,
   InvoiceStatus,
   JobBelumDitagihRow,
-  JobProfitabilityRow,
+  ProyekProfitabilityRow,
   PiutangSummaryRow
 } from "@/types";
 
@@ -21,6 +21,14 @@ export interface InvoiceItemInput {
   harga_satuan: number;
 }
 
+/** Baris rincian per proyek; job-jobnya disimpan backend dengan nominal dibagi rata. */
+export interface InvoiceProyekInput {
+  proyek_id: string;
+  uraian: string;
+  nominal: number;
+  job_ids: string[];
+}
+
 export interface InvoiceInput {
   customer_id: string;
   quotation_id?: string | null;
@@ -32,12 +40,16 @@ export interface InvoiceInput {
   jatuh_tempo?: string | null;
   ppn_aktif: boolean;
   ppn_persen: number;
+  pph23_aktif: boolean;
+  pph23_persen: number;
   ttd_nama?: string | null;
   ttd_jabatan?: string | null;
   bank_nama?: string | null;
   bank_rekening?: string | null;
   bank_atas_nama?: string | null;
   catatan?: string | null;
+  proyek: InvoiceProyekInput[];
+  /** Baris di luar proyek (mis. biaya tambahan). */
   items: InvoiceItemInput[];
 }
 
@@ -65,8 +77,8 @@ export const jobsBelumDitagih = (customerId?: string) =>
 
 export const piutangSummary = () => api.get<PiutangSummaryRow[]>("/piutang/summary");
 
-export const jobProfitability = (start?: string, end?: string) =>
-  api.get<JobProfitabilityRow[]>("/reports/profitability", { start, end });
+export const proyekProfitability = (start?: string, end?: string) =>
+  api.get<ProyekProfitabilityRow[]>("/reports/profitability-proyek", { start, end });
 
 export function createInvoice(
   input: InvoiceInput

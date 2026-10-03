@@ -35,6 +35,14 @@ export interface JobInput {
   quotation_item_id?: string | null;
   /** Wajib saat menambah job ke proyek yang sudah ada (POST /jobs). */
   proyek_id?: string | null;
+  /**
+   * Sales (opsional). sales_id = sales dari daftar; tanpa sales_id,
+   * sales_nama = sales baru (disimpan bersama job). Edit job: semua null =
+   * lepas sales.
+   */
+  sales_id?: string | null;
+  sales_nama?: string | null;
+  sales_no_hp?: string | null;
 }
 
 /** Hasil mutasi job — membawa `conflicts` saat server menolak karena bentrok (409). */
@@ -167,7 +175,7 @@ export interface GantiTrukEntry {
   /** Ganti unit: job pengganti yang dibuat. */
   job_pengganti_id: string | null;
   job_pengganti_number: string | null;
-  /** Status job pengganti (cancelled → bisa "Selesaikan job dengan unit lain"). */
+  /** Status job pengganti — "Dibatalkan" untuk data lama (kini job pengganti tidak bisa dibatalkan). */
   job_pengganti_status?: string | null;
 }
 
@@ -206,8 +214,10 @@ export function gantiTrailer(
 /** Unit rusak: job pengganti di proyek yang sama; job lama ditutup Selesai. */
 export function gantiUnit(
   id: string,
-  input: InsidenPenggantian &
+  input: Partial<InsidenPenggantian> &
     PengembalianKasbon & {
+      /** Insiden terbuka job ini yang dipakai; kosong = catat insiden baru. */
+      insiden_id?: string | null;
       unit_id: string;
       driver_id: string;
       unit_trailer_id: string | null;
@@ -219,31 +229,6 @@ export function gantiUnit(
 ): Promise<ActionResult<{ id: string; job_number: string; share_token: string }>> {
   return mutate(
     api.post<{ id: string; job_number: string; share_token: string }>(`/jobs/${id}/ganti-unit`, {
-      ...input,
-      etd: localInputToIso(input.etd),
-      eta: input.eta ? localInputToIso(input.eta) : null
-    })
-  );
-}
-
-/**
- * Job pengganti (ganti unit) dibatalkan → buat pengganti baru untuk job lama
- * `id`. Job pengganti yang dibatalkan dihapus (soft delete) oleh database.
- */
-export function gantiUnitUlang(
-  id: string,
-  input: {
-    unit_id: string;
-    driver_id: string;
-    unit_trailer_id: string | null;
-    etd: string;
-    eta: string | null;
-    uang_jalan_awal: number;
-    alasan: string;
-  }
-): Promise<ActionResult<{ id: string; job_number: string; share_token: string }>> {
-  return mutate(
-    api.post<{ id: string; job_number: string; share_token: string }>(`/jobs/${id}/ganti-unit-ulang`, {
       ...input,
       etd: localInputToIso(input.etd),
       eta: input.eta ? localInputToIso(input.eta) : null

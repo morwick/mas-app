@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
+from app.modules.invoices.schemas import InvoiceTampilStatus, StatusBayar
 from app.modules.jobs.schemas import PHONE_RE, Job, JobCreate, JobCreated
 
 # Filter "status tagih" di Tab Proyek: sudah / belum masuk tagihan aktif.
@@ -64,12 +65,43 @@ class ProyekPerUnit(BaseModel):
     jobs: list[JobUnitBaris] = Field(default_factory=list)
 
 
+class ProyekTagihan(BaseModel):
+    """Tagihan yang pernah dibuat untuk proyek ini, termasuk yang dibatalkan.
+    Nominal hanya untuk superadmin & finance (admin: nomor & status saja)."""
+
+    id: str
+    invoice_number: str
+    tanggal: str
+    created_at: str
+    status_tampil: InvoiceTampilStatus
+    status_bayar: StatusBayar
+    alasan_batal: str | None = None
+    total: float | None = None
+    dibayar: float | None = None
+    sisa: float | None = None
+
+
+class ProyekBiayaJob(BaseModel):
+    """Uang jalan & biaya lain satu job — angka sama dengan kartu di detail job."""
+
+    # Uang jalan job = awal + tambahan disetujui; cair = pencairan − pengembalian.
+    uang_jalan: float = 0
+    cair: float = 0
+    sisa: float = 0
+    biaya_lain: float = 0
+
+
 class ProyekDetail(ProyekRingkas):
     jobs: list[Job] = Field(default_factory=list)
+    # Per job_id.
+    biaya_job: dict[str, ProyekBiayaJob] = Field(default_factory=dict)
+    # Urut dibuat paling awal di atas; kosong untuk operator.
+    tagihan: list[ProyekTagihan] = Field(default_factory=list)
 
 
 class _ProyekKlien(BaseModel):
-    """Customer & PIC lapangan proyek (dipindah dari job)."""
+    """Customer & PIC lapangan proyek (dipindah dari job). PIC & No HP PIC
+    opsional; No HP yang diisi harus berformat benar."""
 
     customer_id: str | None = None
     pic_nama: str | None = Field(None, max_length=200)
@@ -86,15 +118,6 @@ class _ProyekKlien(BaseModel):
         if v and not PHONE_RE.match(v):
             raise ValueError("Format No HP PIC: 08xxxxxxxxxx atau +628xxxxxxxxxx")
         return v
-
-    @model_validator(mode="after")
-    def _pic_wajib_bila_ada_customer(self) -> _ProyekKlien:
-        # BATASAN: customer boleh kosong (unit jalan kosongan). Bila customer
-        # diisi, PIC lapangan & No HP-nya wajib — driver dan admin selalu
-        # punya kontak di titik muat/bongkar. Form juga menjaganya.
-        if self.customer_id and not (self.pic_nama and self.pic_no_hp):
-            raise ValueError("PIC lapangan dan No HP PIC wajib diisi bila customer dipilih")
-        return self
 
 
 class ProyekCreate(_ProyekKlien):

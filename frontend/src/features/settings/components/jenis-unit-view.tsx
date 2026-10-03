@@ -153,7 +153,7 @@ export function JenisUnitView({ list, trailer }: Props) {
     .map((j) => ({ value: j.id, label: j.nama }));
 
   return (
-    <div className="flex flex-col gap-4 max-w-[760px]">
+    <div className="flex flex-col gap-4">
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="text-h1">Jenis unit</h1>

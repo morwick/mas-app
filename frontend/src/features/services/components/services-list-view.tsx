@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { TZ_WIB } from "@/lib/utils";
-import { ChevronRight, RefreshCw, Search, Truck, Wrench } from "lucide-react";
+import { RefreshCw, Search, Truck, Wrench } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { ServiceStatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -11,6 +11,7 @@ import { sinkronOdometer } from "@/features/services/api";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { Combobox } from "@/components/ui/combobox";
 import { PageHeader } from "@/components/ui/page-header";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 const MILEAGE_POLL_MS = 5 * 60 * 1000; // 5 menit
 
@@ -37,6 +38,7 @@ const STATUS_RANK: Record<ServiceStatus, number> = {
 };
 
 export function ServicesListView({ units, jenisUnitList, initialStatus }: Props) {
+  const barisDetail = useBarisDetail();
   const [q, setQ] = useState("");
   const [jenis, setJenis] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | ServiceStatus>(
@@ -222,21 +224,23 @@ export function ServicesListView({ units, jenisUnitList, initialStatus }: Props)
               <table className="table">
               <thead>
                 <tr>
+                  <KepalaKolomLihat />
                   <th style={{ width: 140 }}>Kode</th>
                   <th>Jenis</th>
                   <th style={{ width: 130 }}>Sejak servis</th>
                   <th style={{ minWidth: 220 }}>Progress</th>
                   <th style={{ width: 130 }}>Sisa menuju</th>
                   <th style={{ width: 110 }}>Status</th>
-                  <th style={{ width: 50 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {pg.items.map((r) => (
-                  <tr key={r.unit.id} className="row-link">
+                  <tr key={r.unit.id} {...barisDetail(`/units/${r.unit.id}?tab=service`)}>
+                    <td style={{ width: 44 }}>
+                      <TombolLihat tujuan={`/units/${r.unit.id}?tab=service`} />
+                    </td>
                     <td>
-                      <Link
-                        to={`/units/${r.unit.id}?tab=service`}
+                      <span
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -279,7 +283,7 @@ export function ServicesListView({ units, jenisUnitList, initialStatus }: Props)
                             {r.unit.no_polisi}
                           </span>
                         </div>
-                      </Link>
+                      </span>
                     </td>
                     <td>{r.unit.jenis_unit_nama}</td>
                     <td className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
@@ -310,17 +314,6 @@ export function ServicesListView({ units, jenisUnitList, initialStatus }: Props)
                     </td>
                     <td>
                       <ServiceStatusBadge status={r.status} />
-                    </td>
-                    <td>
-                      <Link
-                        to={`/units/${r.unit.id}?tab=service`}
-                        style={{
-                          color: "var(--text-tertiary)",
-                          display: "inline-flex"
-                        }}
-                      >
-                        <ChevronRight style={{ width: 16, height: 16 }} />
-                      </Link>
                     </td>
                   </tr>
                 ))}

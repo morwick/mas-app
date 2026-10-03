@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { ChevronRight, Plus, Receipt, Search } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Plus, Receipt, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,17 +10,52 @@ import { InvoiceStatusBadge, StatusBayarBadge } from "./invoice-status-badge";
 import { statusBayarLabel, type InvoiceListRow, type InvoiceTampilStatus, type StatusBayar } from "@/types";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 interface Props {
   invoices: InvoiceListRow[];
 }
 
-type FilterKey = "all" | InvoiceTampilStatus;
+/** "aktif" = semua kecuali batal. */
+type FilterKey = "all" | "aktif" | InvoiceTampilStatus;
+const FILTER_KEYS: FilterKey[] = ["all", "aktif", "draft", "terkirim", "jatuh_tempo", "lunas", "batal"];
+
+const NAMA_BULAN = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+];
+
+/** Angka bulan (1–12) / tahun dari query URL; selain itu = semua. */
+function angkaParam(nilai: string | null, min: number, max: number): number | null {
+  const n = Number(nilai);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+}
 
 export function InvoicesListView({ invoices }: Props) {
+  const barisDetail = useBarisDetail();
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<FilterKey>("all");
   const [filterBayar, setFilterBayar] = useState<"all" | StatusBayar>("all");
+  // Status, bulan & tahun tanggal tagihan disimpan di URL supaya bisa dibuka
+  // langsung (mis. dari angka omset di laporan Laba tahunan: status=aktif).
+  const [sp, setSp] = useSearchParams();
+  const statusParam = sp.get("status") as FilterKey | null;
+  // Default "aktif" (tagihan batal disembunyikan); "Semua" tersimpan sebagai status=all.
+  const filter: FilterKey = statusParam && FILTER_KEYS.includes(statusParam) ? statusParam : "aktif";
+  const bulan = angkaParam(sp.get("bulan"), 1, 12);
+  const tahun = angkaParam(sp.get("tahun"), 2000, 2100);
+
+  function ubahParam(kunci: "status" | "bulan" | "tahun", nilai: string) {
+    const next = new URLSearchParams(sp);
+    if (nilai && !(kunci === "status" && nilai === "aktif")) next.set(kunci, nilai);
+    else next.delete(kunci);
+    setSp(next, { replace: true });
+  }
+
+  const pilihanTahun = useMemo(() => {
+    const set = new Set(invoices.map((r) => Number(r.tanggal.slice(0, 4))));
+    if (tahun) set.add(tahun);
+    return [...set].filter(Boolean).sort((a, b) => b - a);
+  }, [invoices, tahun]);
 
   // Dihitung dari baris yang sudah dipetakan, bukan lewat query terpisah —
   // status jatuh tempo diturunkan saat baca, jadi COUNT di database akan
@@ -40,7 +75,10 @@ export function InvoicesListView({ invoices }: Props) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return invoices.filter((row) => {
-      if (filter !== "all" && row.status_tampil !== filter) return false;
+      if (tahun && Number(row.tanggal.slice(0, 4)) !== tahun) return false;
+      if (bulan && Number(row.tanggal.slice(5, 7)) !== bulan) return false;
+      if (filter === "aktif" && row.status_tampil === "batal") return false;
+      if (filter !== "all" && filter !== "aktif" && row.status_tampil !== filter) return false;
       if (filterBayar !== "all" && row.status_bayar !== filterBayar) return false;
       if (!needle) return true;
       return (
@@ -50,19 +88,28 @@ export function InvoicesListView({ invoices }: Props) {
         (row.pic_nama ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [invoices, q, filter, filterBayar]);
+  }, [invoices, q, filter, filterBayar, bulan, tahun]);
 
-  // Yang menarik dari daftar tagihan bukan total nilainya, melainkan berapa
-  // yang belum masuk. Tagihan batal tidak ikut — itu bukan piutang.
-  const sisaTertagih = useMemo(
+  // Total semua tagihan yang lolos filter (bukan hanya halaman ini): sebelum
+  // PPN & PPh, total tagihan (+ PPN − PPh 23), dan sisa yang belum masuk.
+  // Tagihan batal tidak ikut — itu bukan tagihan / piutang.
+  const total = useMemo(
     () =>
       filtered
         .filter((r) => r.status !== "batal")
-        .reduce((sum, r) => sum + r.sisa, 0),
+        .reduce(
+          (acc, r) => ({
+            sebelum: acc.sebelum + r.subtotal,
+            total: acc.total + r.total,
+            sisa: acc.sisa + r.sisa
+          }),
+          { sebelum: 0, total: 0, sisa: 0 }
+        ),
     [filtered]
   );
 
-  const pg = usePagination(filtered, { resetKey: `${q}|${filter}|${filterBayar}` });
+
+  const pg = usePagination(filtered, { resetKey: `${q}|${filter}|${filterBayar}|${bulan}|${tahun}` });
 
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
@@ -74,6 +121,26 @@ export function InvoicesListView({ invoices }: Props) {
             placeholder="Cari nomor tagihan atau customer…"
             leftIcon={<Search style={{ width: 15, height: 15 }} />}
           />
+        </div>
+        <div style={{ width: 140 }}>
+          <Select value={bulan ?? ""} onChange={(e) => ubahParam("bulan", e.target.value)} aria-label="Filter bulan">
+            <option value="">Semua bulan</option>
+            {NAMA_BULAN.map((nama, i) => (
+              <option key={nama} value={i + 1}>
+                {nama}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div style={{ width: 120 }}>
+          <Select value={tahun ?? ""} onChange={(e) => ubahParam("tahun", e.target.value)} aria-label="Filter tahun">
+            <option value="">Semua tahun</option>
+            {pilihanTahun.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
         </div>
         <div style={{ width: 180 }}>
           <Select
@@ -98,9 +165,10 @@ export function InvoicesListView({ invoices }: Props) {
 
       <FilterChips
         value={filter}
-        onChange={(k) => setFilter(k as FilterKey)}
+        onChange={(k) => ubahParam("status", k)}
         items={[
           { key: "all", label: "Semua", count: invoices.length },
+          { key: "aktif", label: "Aktif", count: invoices.length - counts.batal },
           { key: "draft", label: "Draft", count: counts.draft },
           { key: "terkirim", label: "Terkirim", count: counts.terkirim },
           { key: "jatuh_tempo", label: "Jatuh tempo", count: counts.jatuh_tempo },
@@ -138,24 +206,26 @@ export function InvoicesListView({ invoices }: Props) {
               <table className="table">
                 <thead>
                   <tr>
+                    <KepalaKolomLihat />
                     <th style={{ width: 180 }}>Nomor tagihan</th>
                     <th>Customer</th>
-                    <th style={{ width: 170 }}>Proyek</th>
                     <th style={{ width: 110 }}>Tanggal</th>
                     <th style={{ width: 110 }}>Jatuh tempo</th>
+                    <th style={{ width: 150, textAlign: "right" }}>Sebelum PPN & PPh</th>
                     <th style={{ width: 140, textAlign: "right" }}>Total</th>
                     <th style={{ width: 140, textAlign: "right" }}>Sisa</th>
                     <th style={{ width: 150 }}>Status</th>
                     <th style={{ width: 130 }}>Status bayar</th>
-                    <th style={{ width: 44 }} />
                   </tr>
                 </thead>
                 <tbody>
                   {pg.items.map((row) => (
-                    <tr key={row.id} className="row-link">
+                    <tr key={row.id} {...barisDetail(`/invoices/${row.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/invoices/${row.id}`} />
+                      </td>
                       <td>
-                        <Link
-                          to={`/invoices/${row.id}`}
+                        <span
                           className="mono"
                           style={{
                             textDecoration: "none",
@@ -165,35 +235,22 @@ export function InvoicesListView({ invoices }: Props) {
                           }}
                         >
                           {row.invoice_number}
-                        </Link>
+                        </span>
                       </td>
                       <td>
                         <div style={{ fontWeight: 600, fontSize: 13.5 }}>
                           {row.customer_nama}
                         </div>
-                        <div
-                          style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}
-                        >
-                          {row.jumlah_item} baris rincian
-                        </div>
-                      </td>
-                      <td>
-                        {/* Satu tagihan boleh berisi banyak proyek. */}
-                        {(row.proyek_nomor ?? []).length > 0 ? (
-                          (row.proyek_nomor ?? []).map((n) => (
-                            <div key={n} className="mono" style={{ fontSize: 11.5 }}>
-                              {n}
-                            </div>
-                          ))
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
                       </td>
                       <td className="muted" style={{ fontSize: 12.5 }}>
                         {formatDate(row.tanggal)}
                       </td>
                       <td className="muted" style={{ fontSize: 12.5 }}>
                         {row.jatuh_tempo ? formatDate(row.jatuh_tempo) : "—"}
+                      </td>
+                      {/* Subtotal = jumlah rincian, belum ditambah PPN & belum dipotong PPh 23. */}
+                      <td className="mono muted" style={{ textAlign: "right", fontSize: 12.5 }}>
+                        {formatRupiah(row.subtotal)}
                       </td>
                       <td
                         className="mono"
@@ -203,6 +260,7 @@ export function InvoicesListView({ invoices }: Props) {
                           fontWeight: 600
                         }}
                       >
+                        {/* Total tagihan = subtotal + PPN − PPh 23 (yang dibayar customer). */}
                         {formatRupiah(row.total)}
                       </td>
                       <td
@@ -230,39 +288,25 @@ export function InvoicesListView({ invoices }: Props) {
                       <td>
                         <StatusBayarBadge status={row.status_bayar} />
                       </td>
-                      <td>
-                        <Link
-                          to={`/invoices/${row.id}`}
-                          style={{
-                            color: "var(--text-tertiary)",
-                            display: "inline-flex"
-                          }}
-                        >
-                          <ChevronRight style={{ width: 16, height: 16 }} />
-                        </Link>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td
-                      colSpan={6}
-                      style={{ fontSize: 12, color: "var(--text-tertiary)" }}
-                    >
-                      {filtered.length} tagihan ditampilkan · sisa belum masuk
+                    <td colSpan={5} style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                      <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>Total</span> ·{" "}
+                      {filtered.length} tagihan ditampilkan · tagihan batal tidak dijumlah
                     </td>
-                    <td
-                      className="mono"
-                      style={{
-                        textAlign: "right",
-                        fontWeight: 700,
-                        fontSize: 13
-                      }}
-                    >
-                      {formatRupiah(sisaTertagih)}
+                    <td className="mono" style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
+                      {formatRupiah(total.sebelum)}
                     </td>
-                    <td colSpan={3} />
+                    <td className="mono" style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
+                      {formatRupiah(total.total)}
+                    </td>
+                    <td className="mono" style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
+                      {formatRupiah(total.sisa)}
+                    </td>
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               </table>
@@ -292,9 +336,6 @@ export function InvoicesListView({ invoices }: Props) {
                 <div style={{ fontWeight: 600, fontSize: 14, paddingTop: 2 }}>
                   {row.customer_nama}
                 </div>
-                {(row.proyek_nomor ?? []).length > 0 && (
-                  <div className="caption mono">Proyek {(row.proyek_nomor ?? []).join(", ")}</div>
-                )}
                 <div
                   style={{
                     display: "flex",
@@ -309,11 +350,11 @@ export function InvoicesListView({ invoices }: Props) {
                       ? `Jatuh tempo ${formatDate(row.jatuh_tempo)}`
                       : formatDate(row.tanggal)}
                   </span>
-                  <span
-                    className="mono"
-                    style={{ fontWeight: 700, color: "var(--text-primary)" }}
-                  >
-                    {formatRupiah(row.total)}
+                  <span className="mono" style={{ textAlign: "right" }}>
+                    <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{formatRupiah(row.total)}</span>
+                    <span style={{ display: "block", fontSize: 11, color: "var(--text-tertiary)" }}>
+                      sebelum PPN & PPh {formatRupiah(row.subtotal)}
+                    </span>
                   </span>
                 </div>
                 {row.status !== "batal" && row.sisa > 0 && row.dibayar > 0 && (

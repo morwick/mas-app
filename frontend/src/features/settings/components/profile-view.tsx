@@ -51,7 +51,7 @@ export function ProfileView({ user }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-4 max-w-[640px]">
+    <div className="flex flex-col gap-4">
       <form onSubmit={saveProfile}>
         <Card>
           <CardHeader title="Profil" description="Data identitas akun admin" />

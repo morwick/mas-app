@@ -114,7 +114,7 @@ export function PolisFields({
         <p className="field-helper">
           Belum ada di daftar? Tambahkan dulu lewat menu{" "}
           <Link to="/asuransi/new" target="_blank" style={{ textDecoration: "underline" }}>
-            Master → Asuransi
+            Master Data → Asuransi
           </Link>
           .
         </p>

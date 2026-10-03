@@ -24,8 +24,10 @@ from app.modules.incidents.schemas import (
     IncidentUpdate,
 )
 
+PESAN_DARI_GANTI_UNIT = "Insiden ini tercatat dari pergantian unit di job dan tidak bisa dihapus."
+
 INCIDENT_SELECT = """
-  id, unit_id, unit_trailer_id, job_id, tipe, tanggal, lokasi, deskripsi,
+  id, unit_id, unit_trailer_id, job_id, ganti_unit_id, tipe, tanggal, lokasi, deskripsi,
   biaya_repair, vendor_repair, status_penanganan, resolved_at, created_at,
   ditutup_karena, status_sebelum_ditutup,
   unit:units(kode_unit),
@@ -49,6 +51,7 @@ def to_incident(row: dict[str, Any]) -> Incident:
         unit_trailer_kode=(first(row.get("unit_trailer")) or {}).get("kode_trailer"),
         job_id=row.get("job_id"),
         job_number=(first(row.get("job")) or {}).get("job_number"),
+        dari_ganti_unit=bool(row.get("ganti_unit_id")),
         tipe=row["tipe"],
         tanggal=row["tanggal"],
         lokasi=row.get("lokasi"),
@@ -111,13 +114,16 @@ class IncidentService:
     async def create(self, payload: IncidentCreate, *, created_by: str | None) -> Incident:
         if not payload.deskripsi.strip():
             raise ValidationError("Deskripsi wajib diisi")
+        # Unit sedang bertugas → insiden dikaitkan ke job aktifnya (database
+        # juga mengisinya — trigger incident_isi_job_aktif).
+        job_id = await self._job_aktif_unit(payload.unit_id) if payload.unit_id else None
         res = await (
             self._db.table("incident_logs")
             .insert(
                 {
                     "unit_id": payload.unit_id or None,
                     "unit_trailer_id": payload.unit_trailer_id or None,
-                    "job_id": payload.job_id or None,
+                    "job_id": job_id,
                     "tipe": payload.tipe,
                     "tanggal": iso_utc(parse_iso(payload.tanggal)),
                     "lokasi": clean_text(payload.lokasi),
@@ -130,6 +136,20 @@ class IncidentService:
             .execute()
         )
         return await self.get(rows(res)[0]["id"])
+
+    async def _job_aktif_unit(self, unit_id: str) -> str | None:
+        """Job aktif (belum Selesai / Dibatalkan) yang sedang memakai unit ini."""
+        res = await (
+            self._db.table("jobs")
+            .select("id")
+            .eq("unit_id", unit_id)
+            .not_.in_("status_job", ["selesai", "cancelled"])
+            .order("etd")
+            .limit(1)
+            .execute()
+        )
+        aktif = rows(res)
+        return str(aktif[0]["id"]) if aktif else None
 
     async def update(self, incident_id: str, payload: IncidentUpdate) -> None:
         fields = payload.model_dump(exclude_unset=True)
@@ -146,8 +166,6 @@ class IncidentService:
             data["biaya_repair"] = fields["biaya_repair"]
         if "vendor_repair" in fields:
             data["vendor_repair"] = clean_text(fields["vendor_repair"])
-        if "job_id" in fields:
-            data["job_id"] = fields["job_id"] or None
         if data:
             await self._db.table("incident_logs").update(data).eq("id", incident_id).execute()
 
@@ -169,6 +187,16 @@ class IncidentService:
         await self._db.rpc("selesaikan_insiden_tanpa_perbaikan", {"p_incident_id": incident_id}).execute()
 
     async def delete(self, incident_id: str) -> None:
+        # BATASAN: insiden dari pergantian unit di job tidak bisa dihapus —
+        # database juga menolak (trigger incident_kunci_ganti_unit). Insiden
+        # operator yang hanya terkait job (tanpa ganti unit) boleh dihapus.
+        row = single(
+            await self._db.table("incident_logs").select("ganti_unit_id").eq("id", incident_id).maybe_single().execute()
+        )
+        if row is None:
+            raise NotFoundError("Insiden tidak ditemukan")
+        if row.get("ganti_unit_id"):
+            raise ValidationError(PESAN_DARI_GANTI_UNIT)
         # Soft delete — foto insiden ikut ditandai terhapus oleh DB (dulu ON DELETE CASCADE).
         # Insiden yang sudah dalam penanganan ditolak DB.
         await self._db.table("incident_logs").update({STATUS: DIHAPUS}).eq("id", incident_id).execute()

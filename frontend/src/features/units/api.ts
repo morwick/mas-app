@@ -96,7 +96,6 @@ export interface IncidentInput {
   /** Tepat satu terisi: insiden unit atau insiden unit trailer. */
   unit_id?: string;
   unit_trailer_id?: string;
-  job_id?: string | null;
   tipe: IncidentType;
   tanggal: string;
   lokasi?: string | null;

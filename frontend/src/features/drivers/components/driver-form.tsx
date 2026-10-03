@@ -109,7 +109,7 @@ export function DriverForm({ mode, initial }: Props) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-[640px]">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Card>
         <CardHeader
           title={mode === "new" ? "Tambah driver" : readOnly ? "Detail driver" : "Edit driver"}

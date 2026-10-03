@@ -7,14 +7,13 @@ import { Input, Textarea, Field } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { DateTimeInput } from "@/components/ui/datetime-input";
 import { useToast } from "@/components/ui/toast";
-import { Combobox } from "@/components/ui/combobox";
 import {
   createIncident,
   updateIncident,
   uploadIncidentPhoto
 } from "@/features/units/api";
 import { incidentTypeLabel } from "@/types";
-import type { Incident, IncidentType, Job } from "@/types";
+import type { Incident, IncidentType } from "@/types";
 import { cn, isoToLocalInput } from "@/lib/utils";
 
 /** Aset pemilik insiden: unit atau unit trailer. */
@@ -24,7 +23,6 @@ interface Props {
   open: boolean;
   onClose: () => void;
   aset: AsetInsiden;
-  activeJobs: Job[];
   /** Diisi = mode edit insiden ini; kosong = tambah insiden baru. */
   incident?: Incident | null;
 }
@@ -49,12 +47,11 @@ function initialForm(incident?: Incident | null) {
     deskripsi: incident?.deskripsi ?? "",
     biaya_repair:
       incident?.biaya_repair != null ? String(Math.round(incident.biaya_repair)) : "",
-    vendor_repair: incident?.vendor_repair ?? "",
-    job_id: incident?.job_id ?? ""
+    vendor_repair: incident?.vendor_repair ?? ""
   };
 }
 
-export function IncidentFormModal({ open, onClose, aset, activeJobs, incident }: Props) {
+export function IncidentFormModal({ open, onClose, aset, incident }: Props) {
   const toast = useToast();
   const labelAset = "unit_trailer_id" in aset ? "unit trailer" : "unit";
   const inputRef = useRef<HTMLInputElement>(null);
@@ -109,8 +106,7 @@ export function IncidentFormModal({ open, onClose, aset, activeJobs, incident }:
       lokasi: form.lokasi,
       deskripsi: form.deskripsi,
       biaya_repair: form.biaya_repair ? Number(form.biaya_repair) : null,
-      vendor_repair: form.vendor_repair,
-      job_id: form.job_id || null
+      vendor_repair: form.vendor_repair
     };
     let incidentId: string;
     if (incident) {
@@ -165,20 +161,6 @@ export function IncidentFormModal({ open, onClose, aset, activeJobs, incident }:
     setSubmitting(false);
     toast.success(isEdit ? "Insiden berhasil diperbarui" : "Insiden berhasil dicatat");
     onClose();
-  }
-
-  // Job insiden yang diedit mungkin sudah selesai — tetap tampilkan sebagai pilihan.
-  const jobOptions = activeJobs.map((j) => ({
-    value: j.id,
-    label: j.job_number,
-    hint: j.customer_nama
-  }));
-  if (incident?.job_id && !jobOptions.some((o) => o.value === incident.job_id)) {
-    jobOptions.unshift({
-      value: incident.job_id,
-      label: incident.job_number ?? "Job terkait",
-      hint: ""
-    });
   }
 
   return (
@@ -242,21 +224,6 @@ export function IncidentFormModal({ open, onClose, aset, activeJobs, incident }:
             />
           </Field>
         </div>
-        {jobOptions.length > 0 && (
-          <Field
-            label="Job terkait (opsional)"
-            hint="Pilih job aktif kalau insiden terjadi saat job berlangsung"
-          >
-            <Combobox
-              value={form.job_id}
-              onChange={(v) => set("job_id", v)}
-              options={jobOptions}
-              placeholder="— Tidak terkait job —"
-              searchPlaceholder="Cari nomor job atau customer…"
-              clearable
-            />
-          </Field>
-        )}
         <Field label="Deskripsi insiden" required>
           <Textarea
             rows={4}

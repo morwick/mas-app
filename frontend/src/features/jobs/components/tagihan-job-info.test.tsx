@@ -33,11 +33,12 @@ describe("info tagihan di detail job", () => {
     role = "admin";
   });
 
-  it("admin: nomor tagihan tidak bisa diklik, status bayar tampil, tanpa nominal", () => {
+  it("admin: seperti superadmin (status & sisa tampil), tapi nomor tagihan tidak bisa diklik", () => {
     tampil(JOB);
+    // Admin tidak punya akses menu Tagihan → nomor berupa teks.
     expect(screen.getByText("0001/INV/MAS/IX/2026").closest("a")).toBeNull();
     expect(screen.getByText("Partial Paid")).toBeTruthy();
-    expect(screen.queryByText(/Sisa/)).toBeNull();
+    expect(screen.getByText(/Sisa/)).toBeTruthy();
   });
 
   it("superadmin: nomor tagihan tertaut ke detail tagihan, sisa tampil", () => {

@@ -7,17 +7,19 @@ import { formatRupiah } from "@/lib/utils";
 
 /**
  * Tagihan sebuah job — supaya admin bisa mengingatkan finance di luar sistem.
- * - Admin: nomor tagihan (teks) + status bayar, tanpa nominal.
- * - Superadmin & finance: nomor bisa diklik ke tagihan, plus status
- *   tagihan & sisa.
+ * - Superadmin, admin & finance: status tagihan, status bayar & sisa.
+ * - Nomor bisa diklik ke tagihan hanya untuk superadmin & finance (admin tidak
+ *   punya akses menu Tagihan — nomornya berupa teks).
  * - Operator: backend tidak mengirim info tagihan → tidak tampil apa pun.
  * `ringkas` untuk daftar job.
  */
 export function TagihanJobInfo({ job, ringkas = false }: { job: Job; ringkas?: boolean }) {
   const navigate = useNavigate();
-  // Superadmin & finance: akses tagihan lengkap.
   const role = useCurrentUser().role;
-  const lengkap = role === "superadmin" || role === "finance";
+  // Status tagihan & nominal sisa: superadmin, admin, finance.
+  const lengkap = role === "superadmin" || role === "admin" || role === "finance";
+  // Nomor bisa diklik ke halaman tagihan hanya bila punya akses menu Tagihan.
+  const bisaBuka = role === "superadmin" || role === "finance";
 
   if (!job.invoice_id || !job.invoice_number) {
     // info_tagihan false = backend tidak mengirim info tagihan (operator).
@@ -36,7 +38,7 @@ export function TagihanJobInfo({ job, ringkas = false }: { job: Job; ringkas?: b
     return (
       <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
         <StatusBayarBadge status={statusBayar} />
-        {lengkap ? (
+        {bisaBuka ? (
           // Tombol, bukan <a>: kartu mobile sendiri sudah berupa tautan.
           <button
             type="button"
@@ -62,7 +64,7 @@ export function TagihanJobInfo({ job, ringkas = false }: { job: Job; ringkas?: b
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
       <Receipt style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} />
       <span className="caption">Tagihan</span>
-      {lengkap ? (
+      {bisaBuka ? (
         <Link
           to={keTagihan}
           className="mono"

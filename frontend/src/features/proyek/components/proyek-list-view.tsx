@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, FolderKanban, Plus, Search, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { FolderKanban, Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
@@ -21,6 +21,7 @@ import { useProyekPage } from "../queries";
 import { ProyekMenuHeader } from "./proyek-menu-header";
 import { StatusBadge } from "@/components/ui/badge";
 import { proyekDibatalkan } from "../status";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 export const NAMA_BULAN = [
   "Januari",
@@ -70,8 +71,13 @@ function CustomerProyek({ p }: { p: ProyekRingkas }) {
   return p.customer_nama ? <>{p.customer_nama}</> : <span style={{ color: "var(--status-pickup-text)", fontWeight: 700 }}>KOSONGAN</span>;
 }
 
-/** Tombol "Tambah job": membuka form proyek dengan 1 job baru siap diisi. */
+/**
+ * Tombol "Tambah job": membuka form proyek dengan 1 job baru siap diisi.
+ * BATASAN: proyek yang sudah masuk tagihan tidak bisa ditambah job (database
+ * juga menolak — trg_jobs_tolak_tambah_proyek_ditagih), jadi tombolnya disembunyikan.
+ */
 function TombolTambahJob({ p }: { p: ProyekRingkas }) {
+  if (p.invoice_id) return null;
   return (
     <Link
       to={`/proyek/${p.id}/tambah-job`}
@@ -87,7 +93,7 @@ function TombolTambahJob({ p }: { p: ProyekRingkas }) {
 }
 
 export function ProyekListView({ customers }: { customers: Customer[] }) {
-  const navigate = useNavigate();
+  const barisDetail = useBarisDetail();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [q, setQ] = useState("");
@@ -288,6 +294,7 @@ export function ProyekListView({ customers }: { customers: Customer[] }) {
               <table className="table">
                 <thead>
                   <tr>
+                    <KepalaKolomLihat />
                     <th style={{ width: 200 }}>No. Proyek</th>
                     <th>Customer</th>
                     <th>PIC lapangan</th>
@@ -299,7 +306,10 @@ export function ProyekListView({ customers }: { customers: Customer[] }) {
                 </thead>
                 <tbody>
                   {items.map((p) => (
-                    <tr key={p.id} className="row-link" onClick={() => navigate(`/proyek/${p.id}`)}>
+                    <tr key={p.id} {...barisDetail(`/proyek/${p.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/proyek/${p.id}`} />
+                      </td>
                       <td>
                         <div className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>
                           {p.nomor_proyek}
@@ -326,13 +336,6 @@ export function ProyekListView({ customers }: { customers: Customer[] }) {
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
                           <TombolTambahJob p={p} />
-                          <Link
-                            to={`/proyek/${p.id}`}
-                            style={{ color: "var(--text-tertiary)", display: "inline-flex" }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ChevronRight style={{ width: 16, height: 16 }} />
-                          </Link>
                         </div>
                       </td>
                     </tr>
@@ -387,9 +390,11 @@ export function ProyekListView({ customers }: { customers: Customer[] }) {
                   <span className="caption mono">{formatDate(p.created_at)}</span>
                   <TagihanProyek p={p} />
                 </div>
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <TombolTambahJob p={p} />
-                </div>
+                {!p.invoice_id && (
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <TombolTambahJob p={p} />
+                  </div>
+                )}
               </Link>
             ))}
             <Pagination state={pg} label="proyek" />

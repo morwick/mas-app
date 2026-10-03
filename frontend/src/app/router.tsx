@@ -35,6 +35,8 @@ import { EditDriverPage, NewDriverPage } from "@/features/drivers/pages/DriverFo
 import { DriverDetailPage } from "@/features/drivers/pages/DriverDetailPage";
 import { CustomersPage } from "@/features/customers/pages/CustomersPage";
 import { EditCustomerPage, NewCustomerPage } from "@/features/customers/pages/CustomerFormPage";
+import { VendorsPage } from "@/features/vendors/pages/VendorsPage";
+import { EditVendorPage, NewVendorPage } from "@/features/vendors/pages/VendorFormPage";
 import { JobsPage } from "@/features/jobs/pages/JobsPage";
 import { JobDetailPage } from "@/features/jobs/pages/JobDetailPage";
 import { EditJobPage } from "@/features/jobs/pages/JobFormPages";
@@ -42,6 +44,8 @@ import { JobConfirmationPage } from "@/features/jobs/pages/JobConfirmationPage";
 import { JadwalPage } from "@/features/jobs/pages/JadwalPage";
 import { SuratJalanPage } from "@/features/jobs/pages/SuratJalanPage";
 import { ProyekDetailPage, ProyekPage, ProyekPerUnitPage } from "@/features/proyek/pages/ProyekPages";
+import { TAMPILKAN_PROYEK_PER_UNIT } from "@/features/proyek/components/proyek-menu-header";
+import { JenisBiayaPage } from "@/features/biaya-lain/pages/JenisBiayaPage";
 import { EditProyekPage, NewProyekPage, TambahJobProyekPage } from "@/features/proyek/pages/ProyekFormPages";
 import {
   FleetMapPage,
@@ -87,7 +91,9 @@ import { UnitTrailerDetailPage } from "@/features/unit-trailer/pages/UnitTrailer
 import {
   CustomersReportPage,
   LabaReportPage,
+  LabaTahunanReportPage,
   ReportsIndexPage,
+  TAMPILKAN_LAPORAN_LABA,
   UtilisasiReportPage
 } from "@/features/reports/pages/ReportsPages";
 import {
@@ -164,7 +170,11 @@ export const router = createBrowserRouter([
             children: [
               { path: "/customers", element: <CustomersPage /> },
               { path: "/customers/new", element: <NewCustomerPage /> },
-              { path: "/customers/:id/edit", element: <EditCustomerPage /> }
+              { path: "/customers/:id/edit", element: <EditCustomerPage /> },
+              // Vendor: hak akses sama dengan Customer.
+              { path: "/vendors", element: <VendorsPage /> },
+              { path: "/vendors/new", element: <NewVendorPage /> },
+              { path: "/vendors/:id/edit", element: <EditVendorPage /> }
             ]
           },
 
@@ -247,7 +257,10 @@ export const router = createBrowserRouter([
               // Menu Proyek: Tab Proyek (/proyek) & Tab Proyek Detail (Job) (/jobs).
               { path: "/proyek", element: <ProyekPage /> },
               // Tab Proyek per unit (rute statis — didahulukan dari /proyek/:id).
-              { path: "/proyek/per-unit", element: <ProyekPerUnitPage /> },
+              {
+                path: "/proyek/per-unit",
+                element: TAMPILKAN_PROYEK_PER_UNIT ? <ProyekPerUnitPage /> : <Navigate to="/proyek" replace />
+              },
               { path: "/jobs", element: <JobsPage /> },
               // Proyek baru + job-jobnya. /jobs/new dipertahankan untuk tautan
               // lama (dashboard, penawaran "Buat job").
@@ -264,6 +277,7 @@ export const router = createBrowserRouter([
               { path: "/quotations/:id/edit", element: <EditQuotationPage /> },
 
               { path: "/jenis-unit", element: <JenisUnitPage /> },
+              { path: "/jenis-biaya", element: <JenisBiayaPage /> },
               // Alamat lama sebelum Jenis Unit pindah ke menu Master.
               {
                 path: "/settings/jenis-unit",
@@ -276,7 +290,11 @@ export const router = createBrowserRouter([
             // Sub-laporan Laba & Customers: bukan untuk operator.
             element: <RequireRole roles={["superadmin", "admin", "finance"]} />,
             children: [
-              { path: "/reports/laba", element: <LabaReportPage /> },
+              {
+                path: "/reports/laba",
+                element: TAMPILKAN_LAPORAN_LABA ? <LabaReportPage /> : <Navigate to="/reports" replace />
+              },
+              { path: "/reports/laba-tahunan", element: <LabaTahunanReportPage /> },
               { path: "/reports/customers", element: <CustomersReportPage /> },
               { path: "/reports/perawatan", element: <LaporanPerawatan /> }
             ]

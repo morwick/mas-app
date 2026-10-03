@@ -40,6 +40,8 @@ _INTERNAL_COLUMNS = """,
   quotation_id,
   quotation_item_id,
   quotation:quotations(quote_number),
+  sales_id, sales:sales(nama, no_hp),
+  muat_at, bongkar_at,
   uang_jalan_requests(status_pengajuan, nominal, requested_at),
   uang_jalan(jenis, jumlah)"""
 
@@ -128,6 +130,7 @@ def to_job(row: dict[str, Any]) -> Job:
     trailer = first(row.get("trailer"))
     validator = first(row.get("validator"))
     pembuat = first(row.get("pembuat"))
+    sales = first(row.get("sales"))
     signature_path = row.get("pod_signature_path")
 
     return Job(
@@ -175,6 +178,11 @@ def to_job(row: dict[str, Any]) -> Job:
         quotation_id=row.get("quotation_id"),
         quotation_item_id=row.get("quotation_item_id"),
         quotation_number=(quotation or {}).get("quote_number"),
+        sales_id=row.get("sales_id"),
+        sales_nama=(sales or {}).get("nama"),
+        sales_no_hp=(sales or {}).get("no_hp"),
+        muat_at=row.get("muat_at"),
+        bongkar_at=row.get("bongkar_at"),
         proyek_id=row.get("proyek_id"),
         proyek_nomor=proyek.get("nomor_proyek"),
         menggantikan_job_id=row.get("menggantikan_job_id"),

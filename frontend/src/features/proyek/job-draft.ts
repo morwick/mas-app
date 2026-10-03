@@ -5,11 +5,12 @@
 
 import type { JobInput } from "@/features/jobs/api";
 import { ETA_TIDAK_TERHITUNG_MESSAGE } from "@/features/jobs/components/estimasi-rute";
+import { keSalesInput, validasiSales, type IsianSales } from "@/features/sales/components/sales-field";
 import { validateSchedule } from "@/lib/job-schedule";
 import { localInputToIso } from "@/lib/utils";
 import type { Job } from "@/types";
 
-export interface JobDraft {
+export interface JobDraft extends IsianSales {
   /** Kunci lokal item accordion (bukan id database). */
   key: string;
   alat_diangkut: string;
@@ -71,6 +72,9 @@ export function jobDraftBaru(isi?: Partial<JobDraft>): JobDraft {
     catatan: "",
     quotation_id: null,
     quotation_item_id: null,
+    sales_id: "",
+    sales_nama: "",
+    sales_no_hp: "",
     ...isi
   };
 }
@@ -81,6 +85,7 @@ const BAGIAN_FIELD: Record<string, BagianJob> = {
   alat_diangkut: "pengiriman",
   asal: "pengiriman",
   tujuan: "pengiriman",
+  sales_no_hp: "pengiriman",
   unit_id: "unit",
   unit_trailer_id: "unit",
   driver_id: "unit",
@@ -116,6 +121,7 @@ export function validasiJob(d: JobDraft, meta: JobDraftMeta): Record<string, str
   // ETA kosong hanya boleh bila sistem bisa menghitungnya dari rute.
   if (!d.eta && meta.etaTidakTerhitung) errs.eta = ETA_TIDAK_TERHITUNG_MESSAGE;
   if (!(Number(d.uang_jalan_awal) > 0)) errs.uang_jalan_awal = "Uang jalan wajib diisi";
+  Object.assign(errs, validasiSales(d));
   return errs;
 }
 
@@ -137,7 +143,8 @@ export function keJobInput(d: JobDraft, meta: JobDraftMeta): JobInput {
     uang_jalan_awal: Math.round(Number(d.uang_jalan_awal)),
     catatan: d.catatan,
     quotation_id: d.quotation_id,
-    quotation_item_id: d.quotation_item_id
+    quotation_item_id: d.quotation_item_id,
+    ...keSalesInput(d)
   };
 }
 
@@ -158,4 +165,33 @@ export function draftSebagaiJob(d: JobDraft, nomor: number): Job | null {
     eta: d.eta ? localInputToIso(d.eta) : null,
     status: "ditugaskan"
   } as Job;
+}
+
+/** Job terakhir yang dibuat di proyek (job dibatalkan dilewati) — sumber "Duplikat job sebelumnya". */
+export function jobTerakhir(jobs: Job[]): Job | null {
+  const aktif = jobs.filter((j) => j.status !== "cancelled");
+  if (aktif.length === 0) return null;
+  return aktif.reduce((a, b) => (b.created_at > a.created_at ? b : a));
+}
+
+/**
+ * Isian yang disalin dari job lain (tombol "Duplikat job sebelumnya"): alat,
+ * rute asal–tujuan beserta koordinatnya, driver, uang jalan, serta sales &
+ * No HP sales. Jadwal, unit trailer, dan catatan tetap diisi baru.
+ */
+export function isiDariJob(job: Job): Partial<JobDraft> {
+  return {
+    alat_diangkut: job.alat_diangkut,
+    asal: job.asal,
+    tujuan: job.tujuan,
+    asal_lat: job.asal_lat ?? null,
+    asal_lng: job.asal_lng ?? null,
+    tujuan_lat: job.tujuan_lat ?? null,
+    tujuan_lng: job.tujuan_lng ?? null,
+    driver_id: job.driver_id,
+    uang_jalan_awal: job.uang_jalan_awal ? String(Math.round(job.uang_jalan_awal)) : "",
+    sales_id: job.sales_id ?? "",
+    sales_nama: job.sales_nama ?? "",
+    sales_no_hp: job.sales_no_hp ?? ""
+  };
 }

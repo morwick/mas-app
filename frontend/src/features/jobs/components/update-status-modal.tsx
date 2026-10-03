@@ -12,6 +12,11 @@ interface Props {
   current: JobStatus;
   /** Uang jalan sudah dicairkan — pembatalan tidak lagi ditawarkan. */
   uangJalanCair?: boolean;
+  /**
+   * BATASAN: job pengganti (ganti unit, menggantikan_job_id terisi) tidak
+   * bisa dibatalkan — dijaga juga backend & database.
+   */
+  jobPengganti?: boolean;
   onConfirm: (next: JobStatus, notes?: string) => void | Promise<void>;
 }
 
@@ -20,6 +25,7 @@ export function UpdateStatusModal({
   onClose,
   current,
   uangJalanCair,
+  jobPengganti,
   onConfirm
 }: Props) {
   const currentKey: JobStatus = current === "menunggu_pickup" ? "ditugaskan" : current;
@@ -43,7 +49,8 @@ export function UpdateStatusModal({
   }
   // Uang sudah di tangan driver — job itu jadi catatan keuangan yang harus
   // ditutup lewat alur normal, bukan dibatalkan.
-  if (current !== "cancelled" && current !== "selesai" && !uangJalanCair) {
+  const masihJalan = current !== "cancelled" && current !== "selesai";
+  if (masihJalan && !uangJalanCair && !jobPengganti) {
     options.push({ key: "cancelled", label: "Batalkan job", danger: true });
   }
 
@@ -196,6 +203,9 @@ export function UpdateStatusModal({
               </label>
             );
           })
+        )}
+        {masihJalan && jobPengganti && (
+          <p className="caption">Job pengganti (ganti unit) tidak bisa dibatalkan.</p>
         )}
       </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, ChevronRight, FileText, Handshake, Hourglass, Plus, Search, XCircle } from "lucide-react";
+import { CheckCircle2, FileText, Handshake, Hourglass, Plus, Search, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
@@ -13,6 +13,7 @@ import { formatDate, formatRupiah, hariIniWIB, tambahHari } from "@/lib/utils";
 import { Pagination, usePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/features/dashboard/components/stat-card";
+import { KepalaKolomLihat, TombolLihat, useBarisDetail } from "@/components/ui/baris-detail";
 
 interface Props {
   quotations: QuotationListRow[];
@@ -197,6 +198,7 @@ export function QuotationsListView({
   initialFilter,
   hanyaLihat = false
 }: Props) {
+  const barisDetail = useBarisDetail();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<FilterKey>(
     FILTER_LAMA[initialFilter ?? ""] ??
@@ -517,6 +519,7 @@ export function QuotationsListView({
               <table className="table">
                 <thead>
                   <tr>
+                    <KepalaKolomLihat />
                     <th style={{ width: 180 }}>Nomor surat</th>
                     <th>Customer</th>
                     <th style={{ width: 110 }}>Tanggal</th>
@@ -524,15 +527,16 @@ export function QuotationsListView({
                     <th style={{ width: 150, textAlign: "right" }}>Nilai</th>
                     <th style={{ width: 120 }}>Status</th>
                     <th style={{ width: 170 }}>Pelaksanaan</th>
-                    <th style={{ width: 44 }} />
                   </tr>
                 </thead>
                 <tbody>
                   {pg.items.map((row) => (
-                    <tr key={row.id} className="row-link">
+                    <tr key={row.id} {...barisDetail(`/quotations/${row.id}`)}>
+                      <td style={{ width: 44 }}>
+                        <TombolLihat tujuan={`/quotations/${row.id}`} />
+                      </td>
                       <td>
-                        <Link
-                          to={`/quotations/${row.id}`}
+                        <span
                           className="mono"
                           style={{
                             textDecoration: "none",
@@ -542,7 +546,7 @@ export function QuotationsListView({
                           }}
                         >
                           {row.quote_number}
-                        </Link>
+                        </span>
                       </td>
                       <td>
                         <div style={{ fontWeight: 600, fontSize: 13.5 }} title={row.objek ?? undefined}>
@@ -592,23 +596,12 @@ export function QuotationsListView({
                           );
                         })()}
                       </td>
-                      <td>
-                        <Link
-                          to={`/quotations/${row.id}`}
-                          style={{
-                            color: "var(--text-tertiary)",
-                            display: "inline-flex"
-                          }}
-                        >
-                          <ChevronRight style={{ width: 16, height: 16 }} />
-                        </Link>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={4} style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                    <td colSpan={5} style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
                       {filtered.length} penawaran ditampilkan
                     </td>
                     <td
@@ -617,7 +610,7 @@ export function QuotationsListView({
                     >
                       {formatRupiah(totalNilai)}
                     </td>
-                    <td colSpan={3} />
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               </table>

@@ -21,6 +21,8 @@ export function JobDetailPage() {
   // Finance (dari tagihan) & operator (dari Pantau): hanya melihat, tanpa tombol.
   const role = useCurrentUser().role;
   const hanyaLihat = role === "finance" || role === "operator";
+  // BATASAN: sales, No HP sales, catatan internal & biaya lain tidak untuk operator.
+  const tampilInfoInternal = role !== "operator";
   const job = useJob(id);
   const unit = useUnit(job.data?.unit_id);
   const driver = useDriver(job.data?.driver_id);
@@ -42,6 +44,7 @@ export function JobDetailPage() {
       uangJalanPengajuan={uangJalan.data?.pengajuan ?? []}
       uangJalanDibatalkan={uangJalan.data?.dibatalkan ?? []}
       hanyaLihat={hanyaLihat}
+      tampilInfoInternal={tampilInfoInternal}
     />
   );
 }

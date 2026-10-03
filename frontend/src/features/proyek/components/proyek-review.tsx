@@ -86,6 +86,11 @@ export function ProyekReview({ gabungKe, kosongan, customerNama, picNama, picNoH
               <div style={{ display: "grid", gap: 6, alignContent: "start" }}>
                 <div className="eyebrow">Detail Pengiriman</div>
                 <Baris label="Alat">{d.alat_diangkut}</Baris>
+                <Baris label="Sales">
+                  {d.sales_nama.trim()
+                    ? `${d.sales_nama.trim()}${d.sales_no_hp.trim() ? ` · ${d.sales_no_hp.trim()}` : ""}${d.sales_id ? "" : " (baru)"}`
+                    : "—"}
+                </Baris>
                 <Baris label="Asal">{d.asal}</Baris>
                 <Baris label="Tujuan">{d.tujuan}</Baris>
               </div>

@@ -15,6 +15,7 @@ from app.modules.asuransi.router import polis_router as polis_asuransi_router
 from app.modules.asuransi.router import router as asuransi_router
 from app.modules.auth.router import router as auth_router
 from app.modules.bengkel.router import router as bengkel_router
+from app.modules.biaya_lain.router import router as biaya_lain_router
 from app.modules.cron.router import router as cron_router
 from app.modules.customers.router import router as customers_router
 from app.modules.dashboard.router import router as dashboard_router
@@ -23,6 +24,7 @@ from app.modules.drivers.router import router as drivers_router
 from app.modules.geo.router import router as geo_router
 from app.modules.incidents.router import router as incidents_router
 from app.modules.invoices.router import router as invoices_router
+from app.modules.jenis_biaya.router import router as jenis_biaya_router
 from app.modules.jenis_unit.router import router as jenis_unit_router
 from app.modules.jobs.router import router as jobs_router
 from app.modules.karyawan.router import router as karyawan_router
@@ -37,6 +39,7 @@ from app.modules.perintah_kerja.router import router as perintah_kerja_router
 from app.modules.proyek.router import router as proyek_router
 from app.modules.quotations.router import router as quotations_router
 from app.modules.reports.router import router as reports_router
+from app.modules.sales.router import router as sales_router
 from app.modules.search.router import router as search_router
 from app.modules.tracking.router import router as tracking_router
 from app.modules.tracksolid_login.router import router as tracksolid_login_router
@@ -44,6 +47,7 @@ from app.modules.uang_jalan.router import router as uang_jalan_router
 from app.modules.unit_trailer.router import router as unit_trailer_router
 from app.modules.units.router import router as units_router
 from app.modules.users.router import router as users_router
+from app.modules.vendors.router import router as vendors_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -62,6 +66,10 @@ def build_api_router() -> APIRouter:
         drivers_router,
         customers_router,
         proyek_router,
+        sales_router,
+        jenis_biaya_router,
+        biaya_lain_router,
+        vendors_router,
         jobs_router,
         incidents_router,
         maintenance_router,

@@ -7,7 +7,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import type { Customer, Job } from "@/types";
-import { JobsListView } from "./jobs-list-view";
+import { JobsListView, dibuatDalamPeriode } from "./jobs-list-view";
 
 vi.mock("@/lib/auth/AuthContext", () => ({
   useCurrentUser: () => ({ role: "admin" })
@@ -25,10 +25,10 @@ function job(id: string, customerId: string, status: string): Job {
     tujuan: "Proyek B",
     unit_id: "u1",
     driver_id: "d1",
-    // Bulan berjalan: daftar job default memfilter periode ETD bulan ini.
     etd: new Date().toISOString(),
     status,
-    created_at: "2026-09-01T00:00:00Z",
+    // Bulan berjalan: daftar job default memfilter periode job DIBUAT bulan ini.
+    created_at: new Date().toISOString(),
     eta_is_estimated: false,
     photos: []
   } as unknown as Job;
@@ -131,13 +131,13 @@ describe("daftar job", () => {
     expect(screen.queryByText("JOB-1")).toBeNull();
   });
 
-  it("default periode bulan ini: job ETD bulan lalu disembunyikan sampai filter bulan dikosongkan", () => {
+  it("default periode bulan ini: job yang DIBUAT 2 bulan lalu disembunyikan (walau ETD-nya bulan ini)", () => {
     const lama = new Date();
     lama.setMonth(lama.getMonth() - 2);
     render(
       <MemoryRouter>
         <JobsListView
-          jobs={[job("1", "c1", "ditugaskan"), { ...job("2", "c1", "ditugaskan"), etd: lama.toISOString() }]}
+          jobs={[job("1", "c1", "ditugaskan"), { ...job("2", "c1", "ditugaskan"), created_at: lama.toISOString() }]}
           customers={CUSTOMERS}
           unitMap={{}}
           driverMap={{}}
@@ -154,7 +154,7 @@ describe("daftar job", () => {
     render(
       <MemoryRouter>
         <JobsListView
-          jobs={[{ ...job("2", "c1", "ditugaskan"), etd: lama.toISOString() }]}
+          jobs={[{ ...job("2", "c1", "ditugaskan"), created_at: lama.toISOString() }]}
           customers={CUSTOMERS}
           unitMap={{}}
           driverMap={{}}
@@ -220,5 +220,22 @@ describe("tab dari tautan", () => {
     expect(screen.getAllByText("JOB-9").length).toBeGreaterThan(0);
     expect(screen.queryByText("JOB-8")).toBeNull();
     expect(screen.queryByText("JOB-10")).toBeNull();
+  });
+});
+
+describe("dibuatDalamPeriode", () => {
+  it("memakai tanggal dibuat dalam WIB, bukan ETD", () => {
+    // 31 Okt 2026 18:00 UTC = 1 Nov 2026 01:00 WIB → November.
+    const j = { created_at: "2026-10-31T18:00:00Z" };
+    expect(dibuatDalamPeriode(j, 11, 2026)).toBe(true);
+    expect(dibuatDalamPeriode(j, 10, 2026)).toBe(false);
+  });
+
+  it("0 = semua bulan / semua tahun", () => {
+    const j = { created_at: "2025-03-10T03:00:00Z" };
+    expect(dibuatDalamPeriode(j, 0, 0)).toBe(true);
+    expect(dibuatDalamPeriode(j, 0, 2025)).toBe(true);
+    expect(dibuatDalamPeriode(j, 3, 0)).toBe(true);
+    expect(dibuatDalamPeriode(j, 0, 2026)).toBe(false);
   });
 });

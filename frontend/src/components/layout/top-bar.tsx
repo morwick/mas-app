@@ -1,52 +1,11 @@
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
-import { ChevronRight, Menu } from "lucide-react";
-import { navItems } from "./nav-items";
+import { Menu } from "lucide-react";
+import { bacaJejakAsal, susunJudul } from "./judul-halaman";
 import { GlobalSearch } from "./global-search";
 import { NotificationBell } from "./notification-bell";
 import { ProfileMenu } from "./profile-menu";
 import type { AppNotification } from "@/lib/notifications";
-
-function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
-  const root = navItems.find((n) => n.match?.(pathname));
-  const segments = pathname.split("/").filter(Boolean);
-  const crumbs: { label: string; href?: string }[] = [];
-  if (root) crumbs.push({ label: root.label, href: root.href });
-
-  // /approval/:fitur — kode fitur bagian dari menu, bukan halaman detail.
-  const sub = segments[0] === "approval" ? segments.slice(2) : segments.slice(1);
-  for (let i = 0; i < sub.length; i++) {
-    const seg = sub[i];
-    if (seg === "new") crumbs.push({ label: "Baru" });
-    else if (seg === "edit") crumbs.push({ label: "Edit" });
-    else if (seg === "confirmation") crumbs.push({ label: "Konfirmasi" });
-    else if (seg === "utilisasi") crumbs.push({ label: "Utilisasi armada" });
-    else if (seg === "per-unit" && segments[0] === "proyek") crumbs.push({ label: "Proyek per unit" });
-    else if (seg === "customers" && segments[0] === "reports")
-      crumbs.push({ label: "Riwayat customer" });
-    // Halaman job di bawah menu Job: /jobs/:id → "Job › Detail job" (tautan ke
-    // detail job itu, dipakai halaman edit job).
-    else if (seg.length > 8 && /[0-9a-f-]/i.test(seg) && segments[0] === "jobs")
-      crumbs.push({ label: "Detail job", href: `/jobs/${seg}` });
-    else if (seg.length > 8 && /[0-9a-f-]/i.test(seg))
-      crumbs.push({ label: "Detail" });
-  }
-  return crumbs;
-}
-
-function getPageTitle(pathname: string): string {
-  const crumbs = getBreadcrumb(pathname);
-  if (crumbs.length === 0) return "MAS";
-  const last = crumbs[crumbs.length - 1];
-  if (crumbs.length === 1) return last.label;
-  const root = crumbs[0].label;
-  if (last.label === "Baru") return `${root} baru`;
-  if (last.label === "Edit")
-    return crumbs[crumbs.length - 2]?.label === "Detail job" ? "Edit job" : `Edit ${root.toLowerCase()}`;
-  if (last.label === "Konfirmasi") return "Konfirmasi job";
-  if (last.label === "Detail") return `Detail ${root.toLowerCase()}`;
-  return last.label;
-}
 
 export function TopBar({
   notifications,
@@ -58,10 +17,9 @@ export function TopBar({
   /** Tombol lipat (hanya ikon) / buka menu kiri. */
   onToggleSidebar?: () => void;
 }) {
-  const { pathname } = useLocation();
-  const crumbs = getBreadcrumb(pathname);
-  const title = getPageTitle(pathname);
-  const breadcrumbTrail = crumbs.length > 1 ? crumbs.slice(0, -1) : [];
+  const { pathname, state } = useLocation();
+  // Asal halaman dari link (mis. job dibuka dari detail proyek).
+  const { jejak, judul } = susunJudul(pathname, bacaJejakAsal(state));
 
   return (
     <header
@@ -85,43 +43,26 @@ export function TopBar({
           <Menu style={{ width: 18, height: 18 }} />
         </button>
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {breadcrumbTrail.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "var(--text-tertiary)",
-              marginBottom: 2
-            }}
-          >
-            {breadcrumbTrail.map((c, i) => (
-              <span
-                key={i}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                {i > 0 && <ChevronRight style={{ width: 12, height: 12 }} />}
-                {c.href ? (
-                  <Link
-                    to={c.href}
-                    style={{
-                      color: "var(--text-tertiary)",
-                      textDecoration: "none"
-                    }}
-                  >
-                    {c.label}
-                  </Link>
-                ) : (
-                  <span style={{ color: "var(--text-secondary)" }}>{c.label}</span>
-                )}
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="h2">{title}</div>
-      </div>
+      {/* Judul halaman: "Menu / Halaman" — jejak kecil (bisa diklik), judul besar. */}
+      <nav aria-label="Judul halaman" style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 6 }}>
+        {jejak.map((j) => (
+          <span key={j.label} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, flexShrink: 0, fontSize: 14 }}>
+            {j.href ? (
+              <Link to={j.href} state={state} className="judul-jejak">
+                {j.label}
+              </Link>
+            ) : (
+              <span style={{ color: "var(--text-tertiary)" }}>{j.label}</span>
+            )}
+            <span aria-hidden style={{ color: "var(--text-tertiary)" }}>
+              /
+            </span>
+          </span>
+        ))}
+        <div className="h2" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {judul}
+        </div>
+      </nav>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <GlobalSearch />
         <NotificationBell variant="desktop" notifications={notifications} />

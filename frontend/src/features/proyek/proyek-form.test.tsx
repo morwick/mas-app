@@ -1,7 +1,7 @@
 /**
  * Form proyek (menggantikan form tambah job):
- * - Customer boleh kosong (unit jalan kosongan); PIC & No HP wajib bila
- *   customer dipilih, terisi otomatis dari master tapi bisa ditimpa;
+ * - Customer boleh kosong (unit jalan kosongan); PIC & No HP opsional,
+ *   terisi otomatis dari master tapi bisa ditimpa;
  * - job diisi lewat accordion (Detail Pengiriman, Assign Unit & Driver,
  *   Catatan Internal) dan bisa ditambah; proyek baru minimal 1 job.
  * Form edit job tidak lagi memuat customer / PIC (milik proyek).
@@ -168,7 +168,7 @@ describe("Customer & PIC proyek", () => {
     expect(postProyek()).toHaveLength(0);
   });
 
-  it("centang Jalan kosongan menyembunyikan customer & tombol customer baru, PIC jadi opsional", () => {
+  it("centang Jalan kosongan menyembunyikan customer & tombol customer baru", () => {
     renderBaru();
     expect(screen.getByRole("button", { name: /Customer baru/ })).toBeTruthy();
     fireEvent.click(screen.getByLabelText(/Jalan kosongan/));
@@ -205,13 +205,12 @@ describe("Customer & PIC proyek", () => {
     expect(picInputs().nama.value).toBe("Pak Joko (mandor)");
   });
 
-  it("PIC & No HP wajib bila customer dipilih", () => {
+  it("PIC & No HP opsional walau customer dipilih", () => {
     renderBaru();
     pilihCustomer("CV Karya Mandiri");
     submit();
-    expect(screen.getByText("PIC wajib diisi")).toBeTruthy();
-    expect(screen.getByText("No HP PIC wajib diisi")).toBeTruthy();
-    expect(postProyek()).toHaveLength(0);
+    expect(screen.queryByText(/PIC wajib diisi/)).toBeNull();
+    expect(screen.queryByText(/No HP PIC wajib diisi/)).toBeNull();
   });
 
   it("menolak No HP PIC dengan format salah", () => {
@@ -224,11 +223,12 @@ describe("Customer & PIC proyek", () => {
 
   it("customer baru dari form langsung jadi customer & PIC proyek", async () => {
     fetchMock.mockImplementation(
-      async () =>
-        new Response(JSON.stringify({ id: "cbaru", nama_perusahaan: "PT Baru Jaya" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        })
+      async (url: string | URL | Request) =>
+        // Daftar sales ikut dimuat ulang setelah customer baru tersimpan.
+        new Response(
+          JSON.stringify(String(url).includes("/sales") ? [] : { id: "cbaru", nama_perusahaan: "PT Baru Jaya" }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
     );
     renderBaru();
     fireEvent.click(screen.getByRole("button", { name: /Customer baru/ }));
@@ -423,5 +423,82 @@ describe("Form edit job", () => {
   it("belum ada pencairan → unit & driver masih bisa diubah", () => {
     bungkus(<EditJobView job={JOB} drivers={DRIVERS} units={UNITS} activeJobs={[]} />);
     expect(screen.queryByText(/Terkunci — uang jalan sudah dicairkan/)).toBeNull();
+  });
+});
+
+describe("Tambah job: Duplikat job sebelumnya", () => {
+  // Job terakhir proyek (dibuat paling akhir) dengan sales; job dibatalkan yang lebih baru dilewati.
+  const TERAKHIR = {
+    ...JOB,
+    id: "j2",
+    job_number: "JOB-002",
+    alat_diangkut: "Crane 50 ton",
+    asal: "Pelabuhan C",
+    tujuan: "Pabrik D",
+    asal_lat: -6.1,
+    asal_lng: 106.8,
+    tujuan_lat: -6.9,
+    tujuan_lng: 107.6,
+    uang_jalan_awal: 3_000_000,
+    sales_id: "s1",
+    sales_nama: "Rina Sales",
+    sales_no_hp: "081277778888",
+    created_at: "2026-09-05T00:00:00Z"
+  } as Job;
+  const BATAL = { ...JOB, id: "j3", job_number: "JOB-003", status: "cancelled", created_at: "2026-09-09T00:00:00Z" } as Job;
+
+  function tampilTambahJob(jobs: Job[]) {
+    bungkus(
+      <ProyekFormView
+        proyek={{ ...PROYEK, jobs }}
+        customers={CUSTOMERS}
+        drivers={DRIVERS}
+        units={UNITS}
+        activeJobs={[]}
+        tambahJob
+      />
+    );
+  }
+
+  const alatInputs = () =>
+    screen.getAllByPlaceholderText("Contoh: Excavator Komatsu PC200-8") as HTMLInputElement[];
+
+  it("sukses: tombol ada di kartu job baru; diklik → kartu itu terisi dari job terakhir (termasuk sales & No HP sales)", async () => {
+    tampilTambahJob([JOB, TERAKHIR, BATAL]);
+    expect(screen.getByText("Mirip job sebelumnya?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Duplikat job sebelumnya/ }));
+    expect(alatInputs()).toHaveLength(1);
+    expect(alatInputs()[0].value).toBe("Crane 50 ton");
+    expect(screen.getByDisplayValue("3.000.000")).toBeTruthy();
+    expect(screen.getByText("Rina Sales")).toBeTruthy();
+    expect(screen.getByDisplayValue("081277778888")).toBeTruthy();
+    expect(await screen.findByText("Isian disalin dari JOB-002")).toBeTruthy();
+  });
+
+  it("edge: dua kartu job baru → hanya kartu yang tombolnya diklik yang terisi", () => {
+    tampilTambahJob([JOB, TERAKHIR]);
+    fireEvent.change(alatInputs()[0], { target: { value: "Forklift" } });
+    // Kartu baru terbuka (yang lama tertutup — satu kartu terbuka sekaligus).
+    fireEvent.click(screen.getByRole("button", { name: /^Tambah job$/ }));
+    // Tombol yang terlihat = milik kartu kedua (kartu pertama tertutup).
+    fireEvent.click(screen.getByRole("button", { name: /Duplikat job sebelumnya/ }));
+    expect(alatInputs().map((i) => i.value)).toEqual(["Forklift", "Crane 50 ton"]);
+  });
+
+  it("edge: kartu yang sudah diisi → isian alat ditimpa dari job terakhir", () => {
+    tampilTambahJob([JOB, TERAKHIR]);
+    fireEvent.change(alatInputs()[0], { target: { value: "Forklift" } });
+    fireEvent.click(screen.getByRole("button", { name: /Duplikat job sebelumnya/ }));
+    expect(alatInputs()[0].value).toBe("Crane 50 ton");
+  });
+
+  it("gagal: semua job proyek dibatalkan → tombol duplikat tidak muncul", () => {
+    tampilTambahJob([BATAL]);
+    expect(screen.queryByRole("button", { name: /Duplikat job sebelumnya/ })).toBeNull();
+  });
+
+  it("edge: halaman edit proyek (bukan tambah job) tidak punya tombol duplikat", () => {
+    bungkus(<ProyekFormView proyek={PROYEK} customers={CUSTOMERS} drivers={DRIVERS} units={UNITS} activeJobs={[]} />);
+    expect(screen.queryByRole("button", { name: /Duplikat job sebelumnya/ })).toBeNull();
   });
 });

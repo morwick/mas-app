@@ -15,6 +15,7 @@ import { NewCustomerInline } from "@/features/jobs/components/new-customer-inlin
 import { buildPrefill, type JobPrefill } from "@/features/jobs/quotation-prefill";
 import { fleetLocations } from "@/features/tracking/api";
 import { BENTROK_JADWAL_MESSAGE, findJobConflicts } from "@/lib/job-conflicts";
+import { jejakDariProyek } from "@/components/layout/judul-halaman";
 import { formatDate, formatTime } from "@/lib/utils";
 import type { Customer, Driver, Job, ProyekDetail, Quotation, QuotationItem, Unit } from "@/types";
 import { cariProyekPenawaran, createProyek, updateProyek } from "../api";
@@ -22,7 +23,9 @@ import { useProyek } from "../queries";
 import {
   META_AWAL,
   draftSebagaiJob,
+  isiDariJob,
   jobDraftBaru,
+  jobTerakhir,
   keJobInput,
   validasiJob,
   type JobDraft,
@@ -201,8 +204,8 @@ function JobTersimpan({ job, drivers, units }: { job: Job; drivers: Driver[]; un
 /**
  * Form proyek (buat & edit):
  * - bagian Proyek: checkbox "Jalan kosongan". Dicentang = tanpa customer
- *   (dropdown & tombol customer baru disembunyikan, PIC opsional); tidak
- *   dicentang = customer, PIC lapangan, dan No HP PIC wajib;
+ *   (dropdown & tombol customer baru disembunyikan); tidak dicentang =
+ *   customer wajib. PIC lapangan & No HP PIC selalu opsional;
  * - bagian Job: tiap job satu accordion berisi Detail Pengiriman, Assign Unit &
  *   Driver, dan Catatan Internal; tombol "Tambah job" menambah item baru.
  * Proyek baru diisi dalam 2 langkah: (1) isi data, (2) review lalu simpan.
@@ -408,12 +411,10 @@ export function ProyekFormView({
   function validasiKlien(): Record<string, string> {
     const errs: Record<string, string> = {};
     if (dariPenawaran && !unitPenawaran) errs.unit = "Unit wajib dipilih";
-    // BATASAN: tanpa centang "Jalan kosongan", customer wajib dipilih dan
-    // PIC & No HP wajib diisi (backend juga mewajibkan PIC bila ada customer).
+    // BATASAN: tanpa centang "Jalan kosongan", customer wajib dipilih. PIC &
+    // No HP PIC opsional; No HP yang diisi tetap harus berformat benar.
     if (!kosongan && !klien.customer_id) errs.customer_id = "Customer wajib dipilih — atau centang Jalan kosongan";
-    if (!kosongan && !klien.pic_nama.trim()) errs.pic_nama = "PIC wajib diisi";
-    if (!kosongan && !klien.pic_no_hp.trim()) errs.pic_no_hp = "No HP PIC wajib diisi";
-    else if (klien.pic_no_hp.trim() && !FORMAT_HP.test(klien.pic_no_hp.trim()))
+    if (klien.pic_no_hp.trim() && !FORMAT_HP.test(klien.pic_no_hp.trim()))
       errs.pic_no_hp = "Format: 08xxxxxxxxxx atau +628xxxxxxxxxx";
     return errs;
   }
@@ -492,6 +493,16 @@ export function ProyekFormView({
     });
     setDrafts((ds) => [...ds, baru]);
     setJobTerbuka(baru.key);
+  }
+
+  // Sumber tombol "Duplikat job sebelumnya": job terakhir proyek ini.
+  const sumberDuplikat = modeTambahJob ? jobTerakhir(proyek?.jobs ?? []) : null;
+
+  /** Isi kartu job baru `key` dari job terakhir proyek (alat, rute, driver, uang jalan, sales). */
+  function duplikatJobSebelumnya(key: string) {
+    if (!sumberDuplikat) return;
+    ubahDraft(key, isiDariJob(sumberDuplikat));
+    toast.success(`Isian disalin dari ${sumberDuplikat.job_number}`);
   }
 
   function hapusDraft(key: string) {
@@ -606,7 +617,10 @@ export function ProyekFormView({
             ? `Proyek diperbarui, ${n} job ditambahkan`
             : "Proyek diperbarui"
       );
-      navigate(n === 1 ? `/jobs/${res.data.jobs_baru[0].id}/confirmation` : `/proyek/${tujuan.id}`);
+      // Halaman bagikan job tetap berjejak "Proyek / Detail Proyek / …".
+      navigate(n === 1 ? `/jobs/${res.data.jobs_baru[0].id}/confirmation` : `/proyek/${tujuan.id}`, {
+        state: jejakDariProyek(tujuan.id)
+      });
       return;
     }
     const res = await createProyek({ ...isianKlien, jobs });
@@ -617,11 +631,13 @@ export function ProyekFormView({
     }
     toast.success(`Proyek ${res.data.nomor_proyek} dengan ${res.data.jobs.length} job berhasil dibuat`);
     // Satu job → halaman konfirmasi (template WhatsApp & link tracking) seperti dulu.
-    navigate(res.data.jobs.length === 1 ? `/jobs/${res.data.jobs[0].id}/confirmation` : `/proyek/${res.data.id}`);
+    navigate(res.data.jobs.length === 1 ? `/jobs/${res.data.jobs[0].id}/confirmation` : `/proyek/${res.data.id}`, {
+      state: jejakDariProyek(res.data.id)
+    });
   }
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto flex flex-col" style={{ maxWidth: 960, gap: 16 }}>
+    <form onSubmit={onSubmit} className="flex flex-col" style={{ gap: 16 }}>
       {!edit && (
         <div className="card card-pad">
           <Stepper
@@ -741,7 +757,6 @@ export function ProyekFormView({
           <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12, marginTop: 12 }}>
             <Field
               label="PIC di lapangan"
-              required={!kosongan}
               hint="Boleh disesuaikan dengan yang standby di lapangan."
             >
               <Input
@@ -752,7 +767,7 @@ export function ProyekFormView({
                 disabled={modeTambahJob}
               />
             </Field>
-            <Field label="No HP PIC" required={!kosongan}>
+            <Field label="No HP PIC">
               <Input
                 type="tel"
                 placeholder="0812xxxxxxxx"
@@ -859,6 +874,11 @@ export function ProyekFormView({
                 submitKe={submitKe}
                 // Tambah proyek cukup 1 job → tanpa judul "Job 1" & tanpa accordion.
                 tunggal={!edit}
+                duplikat={
+                  sumberDuplikat
+                    ? { sumber: sumberDuplikat.job_number, onClick: () => duplikatJobSebelumnya(d.key) }
+                    : undefined
+                }
               />
             ))}
             {modeTambahJob && drafts.length === 0 && (

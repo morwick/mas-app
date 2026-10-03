@@ -27,7 +27,8 @@ import {
   setInvoiceStatus,
   uploadFakturPajak
 } from "@/features/invoices/api";
-import type { Invoice, SumberDana } from "@/types";
+import type { Invoice, InvoiceItem, SumberDana } from "@/types";
+import { susunRincian } from "../rincian-tagihan";
 import { formatDate, formatRupiah, hariIniWIB } from "@/lib/utils";
 
 interface Props {
@@ -364,58 +365,44 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
               </tr>
             </thead>
             <tbody>
-              {inv.items.map((it, idx) => (
-                <tr key={it.id}>
-                  <td className="muted">{idx + 1}</td>
-                  <td>
-                    <div style={{ fontSize: 13.5 }}>{it.deskripsi}</div>
-                    {(it.dari || it.tujuan) && (
-                      <div
-                        style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}
-                      >
-                        {it.dari} → {it.tujuan}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    {it.proyek_nomor && (
-                      <div className="mono caption" style={{ fontSize: 11 }}>
-                        {it.proyek_nomor}
-                      </div>
-                    )}
-                    {it.job_id && it.job_number ? (
+              {susunRincian(inv).map((baris, idx) =>
+                baris.jenis === "proyek" ? (
+                  <tr key={baris.key}>
+                    <td className="muted" style={{ verticalAlign: "top" }}>{idx + 1}</td>
+                    <td colSpan={2} style={{ verticalAlign: "top" }}>
+                      <div style={{ fontSize: 13.5, whiteSpace: "pre-line" }}>{baris.uraian}</div>
+                      {/* Job proyek tidak dirinci di sini — buka detail proyek. */}
+                      {/* Dibuka di tab baru supaya tagihan tetap terbuka. */}
                       <Link
-                        to={`/jobs/${it.job_id}`}
+                        to={`/proyek/${baris.proyekId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="mono"
-                        title="Buka detail job"
+                        title="Buka detail proyek (tab baru)"
                         style={{
+                          display: "inline-block",
+                          marginTop: 4,
                           fontSize: 11.5,
                           color: "var(--brand-primary-dark)",
                           textDecoration: "underline"
                         }}
                       >
-                        {it.job_number}
+                        {baris.proyekNomor ?? "Proyek"}
                       </Link>
-                    ) : (
-                      <span className="muted" style={{ fontSize: 12 }}>
-                        —
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ fontSize: 12.5 }}>
-                    {it.qty} {it.satuan}
-                  </td>
-                  <td className="mono" style={{ textAlign: "right", fontSize: 12.5 }}>
-                    {formatRupiah(it.harga_satuan)}
-                  </td>
-                  <td
-                    className="mono"
-                    style={{ textAlign: "right", fontSize: 12.5, fontWeight: 600 }}
-                  >
-                    {formatRupiah(it.subtotal)}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td style={{ fontSize: 12.5, verticalAlign: "top" }}>{baris.jobs.length} job</td>
+                    <td />
+                    <td
+                      className="mono"
+                      style={{ textAlign: "right", fontSize: 12.5, fontWeight: 600, verticalAlign: "top" }}
+                    >
+                      {formatRupiah(baris.nominal)}
+                    </td>
+                  </tr>
+                ) : (
+                  <BarisItem key={baris.key} it={baris.item} no={idx + 1} />
+                )
+              )}
             </tbody>
           </table>
         </div>
@@ -433,6 +420,7 @@ export function InvoiceDetailView({ invoice: inv, sumberDana }: Props) {
           {inv.ppn_aktif && (
             <TotalRow label={`PPN ${inv.ppn_persen}%`} value={inv.ppn_nominal} />
           )}
+          {inv.pph23_aktif && <TotalRow label={`Pot. PPh 23 (${inv.pph23_persen}%)`} value={-inv.pph23_nominal} />}
           <TotalRow label="Total tagihan" value={inv.total} strong />
           <TotalRow label="Sudah dibayar" value={inv.dibayar} />
           <TotalRow label="Sisa" value={inv.sisa} strong />
@@ -763,5 +751,61 @@ function TotalRow({
       <span>{label}</span>
       <span className="mono">{formatRupiah(value)}</span>
     </div>
+  );
+}
+
+/** Baris rincian biasa (di luar proyek, atau tagihan lama per job). */
+function BarisItem({ it, no }: { it: InvoiceItem; no: number }) {
+  return (
+    <tr>
+      <td className="muted">{no}</td>
+      <td>
+        <div style={{ fontSize: 13.5 }}>{it.deskripsi}</div>
+        {(it.dari || it.tujuan) && (
+          <div
+            style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}
+          >
+            {it.dari} → {it.tujuan}
+          </div>
+        )}
+      </td>
+      <td>
+        {it.proyek_nomor && (
+          <div className="mono caption" style={{ fontSize: 11 }}>
+            {it.proyek_nomor}
+          </div>
+        )}
+        {it.job_id && it.job_number ? (
+          <Link
+            to={`/jobs/${it.job_id}`}
+            className="mono"
+            title="Buka detail job"
+            style={{
+              fontSize: 11.5,
+              color: "var(--brand-primary-dark)",
+              textDecoration: "underline"
+            }}
+          >
+            {it.job_number}
+          </Link>
+        ) : (
+          <span className="muted" style={{ fontSize: 12 }}>
+            —
+          </span>
+        )}
+      </td>
+      <td style={{ fontSize: 12.5 }}>
+        {it.qty} {it.satuan}
+      </td>
+      <td className="mono" style={{ textAlign: "right", fontSize: 12.5 }}>
+        {formatRupiah(it.harga_satuan)}
+      </td>
+      <td
+        className="mono"
+        style={{ textAlign: "right", fontSize: 12.5, fontWeight: 600 }}
+      >
+        {formatRupiah(it.subtotal)}
+      </td>
+    </tr>
   );
 }

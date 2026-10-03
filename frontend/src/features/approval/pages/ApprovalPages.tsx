@@ -24,7 +24,7 @@ export function PengajuanApprovalPage() {
       <EmptyState
         icon={ClipboardCheck}
         title="Anda bukan approver fitur ini"
-        description="Menu Approval hanya untuk karyawan yang ditunjuk di Master → Approver."
+        description="Menu Approval hanya untuk karyawan yang ditunjuk di Master Data → Approver."
       />
     );
   }
@@ -56,7 +56,7 @@ export function PengajuanApprovalDetailPage() {
       <EmptyState
         icon={ClipboardCheck}
         title="Anda bukan approver fitur ini"
-        description="Menu Approval hanya untuk karyawan yang ditunjuk di Master → Approver."
+        description="Menu Approval hanya untuk karyawan yang ditunjuk di Master Data → Approver."
       />
     );
   }

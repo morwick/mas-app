@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWaktuWIB } from "@/lib/utils";
+import { formatRupiah, formatWaktuWIB } from "@/lib/utils";
 
 describe("formatWaktuWIB", () => {
   it("format Y-m-d H:i:s di WIB (UTC+7), dari waktu UTC server", () => {
@@ -63,5 +63,18 @@ describe("hariIniWIB & tambahHari", () => {
     const { tambahHari } = await import("@/lib/utils");
     expect(tambahHari("2026-09-30", 1)).toBe("2026-10-01");
     expect(tambahHari("2026-01-01", -1)).toBe("2025-12-31");
+  });
+});
+
+describe("formatRupiah", () => {
+  const rapi = (s: string) => s.replace(/\s/g, " ");
+
+  it("nol negatif (-0) tampil Rp 0 tanpa tanda minus", () => {
+    expect(rapi(formatRupiah(-0))).toBe(rapi(formatRupiah(0)));
+    expect(formatRupiah(-0)).not.toContain("-");
+  });
+
+  it("angka negatif biasa tetap bertanda minus", () => {
+    expect(formatRupiah(-50000)).toContain("-");
   });
 });

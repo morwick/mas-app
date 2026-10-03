@@ -327,9 +327,12 @@ export function UangJalanCard({
           alignItems: "center",
           justifyContent: "space-between",
           width: "100%",
-          background: "none",
+          // Header buka/tutup biru muda, sama dengan accordion lain.
+          background: "var(--accordion-head-bg)",
           border: 0,
-          padding: "4px 0 8px",
+          borderRadius: 8,
+          padding: "8px 12px",
+          marginBottom: 8,
           cursor: "pointer",
           font: "inherit",
           color: "inherit"

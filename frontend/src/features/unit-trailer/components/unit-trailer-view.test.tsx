@@ -142,14 +142,17 @@ describe("UnitTrailerView", () => {
     });
   });
 
-  it("baris bisa diklik ke halaman detail; tanpa tombol edit/hapus di tabel (seperti unit)", async () => {
+  it("baris diklik 2 kali ke halaman detail; tanpa tombol edit/hapus di tabel (seperti unit)", async () => {
     renderView();
     const sel = (await screen.findAllByText("TR-01"))[0];
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Hapus TR-01" })).toBeNull();
     const baris = sel.closest("tr") as HTMLElement;
     expect(baris.className).toContain("row-link");
+    // Klik 1 kali tidak pindah halaman (supaya isi tabel bisa disalin).
     fireEvent.click(baris);
+    expect(lokasi()).not.toBe("/unit-trailer/t1");
+    fireEvent.doubleClick(baris);
     await waitFor(() => expect(lokasi()).toBe("/unit-trailer/t1"));
   });
 

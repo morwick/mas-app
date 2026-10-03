@@ -300,7 +300,7 @@ export function PerintahKerjaForm({ mode, initial, awal }: Props) {
   const mekanikBelumDipilih = (mekanikList.data ?? []).filter((m) => !mekanik.some((x) => x.mekanik_id === m.id));
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 max-w-[960px]">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <Card>
         <CardHeader
           title={mode === "new" ? "Buat perintah kerja" : `Edit perintah kerja ${initial?.nomor ?? ""}`}
@@ -507,7 +507,7 @@ export function PerintahKerjaForm({ mode, initial, awal }: Props) {
             </div>
             <Field
               label="Tambah mekanik"
-              hint="Klik bintang untuk menandai penanggung jawab. Belum ada? Tambahkan di menu Master → Mekanik."
+              hint="Klik bintang untuk menandai penanggung jawab. Belum ada? Tambahkan di menu Master Data → Mekanik."
             >
               <Combobox
                 value=""
@@ -527,7 +527,7 @@ export function PerintahKerjaForm({ mode, initial, awal }: Props) {
 
         {pelaksana === "bengkel" && (
           <div className="grid gap-4 sm:grid-cols-2" style={{ marginTop: 16 }}>
-            <Field label="Bengkel" required hint="Belum ada? Tambahkan di menu Master → Bengkel Luar.">
+            <Field label="Bengkel" required hint="Belum ada? Tambahkan di menu Master Data → Bengkel Luar.">
               <Combobox
                 value={bengkelId}
                 onChange={(v) => {

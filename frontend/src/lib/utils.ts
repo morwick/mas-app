@@ -58,11 +58,12 @@ export function localInputToDate(value: string): Date | null {
 }
 
 export function formatRupiah(value: number) {
+  // -0 (mis. biaya nol yang ditampilkan negatif) jangan tercetak "-Rp 0".
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0
-  }).format(value);
+  }).format(value === 0 ? 0 : value);
 }
 
 export function formatNumber(value: number) {

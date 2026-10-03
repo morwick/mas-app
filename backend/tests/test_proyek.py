@@ -69,9 +69,9 @@ def test_customer_boleh_kosong_untuk_unit_jalan_kosongan() -> None:
     assert proyek.customer_id is None and proyek.pic_nama is None
 
 
-def test_pic_wajib_bila_customer_dipilih() -> None:
-    with pytest.raises(ValueError, match="PIC lapangan dan No HP PIC wajib diisi"):
-        ProyekCreate(customer_id="c1", pic_nama="Budi", jobs=[_job()])
+def test_pic_opsional_walau_customer_dipilih() -> None:
+    proyek = ProyekCreate(customer_id="c1", pic_nama=" ", jobs=[_job()])
+    assert proyek.pic_nama is None and proyek.pic_no_hp is None
     with pytest.raises(ValueError, match="Format No HP PIC"):
         ProyekCreate(customer_id="c1", pic_nama="Budi", pic_no_hp="12345", jobs=[_job()])
 

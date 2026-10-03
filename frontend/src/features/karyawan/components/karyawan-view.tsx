@@ -28,6 +28,7 @@ import {
   type Karyawan
 } from "../api";
 import { useKaryawanList } from "../queries";
+import { AvatarInisial } from "@/components/ui/avatar-inisial";
 
 const LABEL_ROLE = {
   superadmin: "Super Admin",
@@ -353,8 +354,13 @@ export function KaryawanView() {
                   {items.map((k) => (
                     <tr key={k.id}>
                       <td>
-                        <div style={{ fontWeight: 500 }}>{k.nama}</div>
-                        <InfoBlacklist k={k} />
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <AvatarInisial nama={k.nama} redup={!k.is_active || k.is_blacklist} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 500 }}>{k.nama}</div>
+                            <InfoBlacklist k={k} />
+                          </div>
+                        </div>
                       </td>
                       <td>{k.tanggal_lahir ? formatDate(k.tanggal_lahir) : "—"}</td>
                       <td style={{ wordBreak: "break-word" }}>{k.alamat ?? "—"}</td>
@@ -375,7 +381,10 @@ export function KaryawanView() {
             {items.map((k) => (
               <div key={k.id} className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontWeight: 600 }}>{k.nama}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <AvatarInisial nama={k.nama} redup={!k.is_active || k.is_blacklist} />
+                    <span style={{ fontWeight: 600 }}>{k.nama}</span>
+                  </span>
                   <StatusBadge aktif={k.is_active} blacklist={k.is_blacklist} />
                 </div>
                 <InfoBlacklist k={k} />

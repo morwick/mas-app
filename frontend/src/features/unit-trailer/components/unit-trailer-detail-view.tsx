@@ -200,7 +200,6 @@ export function UnitTrailerDetailView({ trailer, jobs, history, incidents }: Pro
                 labelAset="unit trailer"
                 status={trailer.status}
                 incidents={incidents}
-                activeJobs={jobs.filter(isJobAktif)}
               />
             )}
           </div>
